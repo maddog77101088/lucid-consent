@@ -5,9 +5,8 @@
 
 <section class="card">
   <h2>① 차트 내용 붙여넣기</h2>
-  <label>차트 본문 (진료 기록, 검사 결과, 처치 내용 등)
-    <textarea id="chart-text" rows="28" placeholder="예: 샤미 / 고양이 / 좌측 신장 종양 의심 / Creatinine 2.3 / 피하수액 진행 / AMC, Metro, Famo, Cerenia 3일분 처방 ..." style="font-family:monospace;min-height:420px;line-height:1.5;font-size:14px;"></textarea>
-  </label>
+  <textarea id="chart-text" placeholder="여기에 PMS365 차트 내용을 Ctrl+V로 붙여넣으세요 (진료 기록, 검사 결과, 처치 내용 등)" style="display:block;width:100%;box-sizing:border-box;font-family:monospace;min-height:70vh;line-height:1.5;font-size:14px;padding:10px;border:1px solid #d1d5db;border-radius:6px;resize:vertical;"></textarea>
+  <p class="muted" style="margin:6px 0 0;font-size:12px;">차트 본문 (진료 기록, 검사 결과, 처치 내용 등)</p>
 </section>
 
 <section class="card">
@@ -40,7 +39,8 @@
 
 <section class="card" id="result-card" style="display:none;">
   <h2>③ 생성 결과</h2>
-  <textarea id="ce-result" rows="32" style="font-family:monospace;white-space:pre-wrap;min-height:500px;line-height:1.5;font-size:14px;"></textarea>
+  <textarea id="ce-result" style="display:block;width:100%;box-sizing:border-box;font-family:monospace;white-space:pre-wrap;min-height:75vh;line-height:1.5;font-size:14px;padding:10px;border:1px solid #d1d5db;border-radius:6px;resize:vertical;"></textarea>
+  <p class="muted" style="margin:6px 0 0;font-size:12px;">생성 결과 (수동 편집 가능)</p>
   <div class="actions" style="margin-top:8px;">
     <button id="btn-ce-copy" type="button" class="btn-ghost">📋 복사</button>
     <button id="btn-ce-regen" type="button" class="btn-ghost">🔄 다시 생성</button>
