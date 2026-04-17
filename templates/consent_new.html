@@ -1,12 +1,35 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>수술 및 입원 동의서 작성</h1>
-<p class="muted">보호자·환자 정보는 직접 입력하고, 수술을 선택하면 DB에 저장된 수술방법·합병증·비용·입원기간이 자동으로 채워집니다. DB에 없는 수술이면 직접 입력 후 DB에 저장해서 재활용하세요.</p>
+<h1>동의서 작성</h1>
+<p class="muted">① 환자 유형을 선택하면 ② 아래 필요한 섹션만 나타납니다. 수술 또는 입원 선택 시 DB에 저장된 내용이 자동으로 채워지며, 없는 경우 AI 자동채움으로 즉석 생성해 DB에 저장할 수 있습니다.</p>
 
 <form method="post" action="{{ url_for('consent_preview') }}" target="_blank" class="form-stack">
 
+  <!-- 환자 유형 선택 (최상단) -->
+  <section class="card" style="border-left:4px solid #2563eb; background:#f8faff;">
+    <h2>⓪ 환자 유형 선택</h2>
+    <div class="row-3" id="patient-type-row">
+      <label class="pt-option">
+        <input type="radio" name="patient_type" value="surgery_daycare" checked>
+        <strong>수술 + 당일 퇴원</strong>
+        <span class="muted" style="font-size:12px;">수술 당일 귀가 (중성화, 간단 연부조직수술 등)</span>
+      </label>
+      <label class="pt-option">
+        <input type="radio" name="patient_type" value="surgery_hospital">
+        <strong>수술 + 입원</strong>
+        <span class="muted" style="font-size:12px;">수술 후 1일 이상 입원 (정형외과, 개복수술 등)</span>
+      </label>
+      <label class="pt-option">
+        <input type="radio" name="patient_type" value="hospital_only">
+        <strong>입원만</strong>
+        <span class="muted" style="font-size:12px;">수술 없이 내과적 치료·모니터링 입원</span>
+      </label>
+    </div>
+  </section>
+
+  <!-- 차트 OCR -->
   <section class="card" style="border-left:3px solid #2563eb;">
-    <h2>⓪ 차트 스크린샷 업로드 (선택) <span class="muted" style="font-weight:normal;font-size:12px;">우리엔 PMS365 등 차트 캡처 이미지 업로드 시 보호자·동물 정보 자동 추출</span></h2>
+    <h2>① 차트 스크린샷 업로드 (선택) <span class="muted" style="font-weight:normal;font-size:12px;">우리엔 PMS365 등 차트 캡처 이미지 업로드 시 보호자·동물 정보 자동 추출</span></h2>
     <div class="row-2">
       <label>이미지 파일 선택 <span class="muted" style="font-weight:normal;font-size:11px;">(또는 Print Screen 후 아무 곳에나 Ctrl+V)</span>
         <input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp">
@@ -18,8 +41,9 @@
     <p id="chart-ocr-status" class="muted" style="margin-top:4px;">💡 <strong>팁</strong>: PMS365 차트 화면에서 <kbd>PrtSc</kbd> (또는 <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) 로 캡처 후 이 페이지 아무 곳에서나 <kbd>Ctrl+V</kbd> 하면 자동 OCR 실행됩니다.</p>
   </section>
 
+  <!-- 보호자 정보 -->
   <section class="card">
-    <h2>① 보호자 정보</h2>
+    <h2>② 보호자 정보</h2>
     <div class="row-3">
       <label>보호자 ID (차트)<input name="guardian_id" placeholder="예: 4247"></label>
       <label>보호자 성명 *<input name="guardian_name" required></label>
@@ -37,8 +61,9 @@
     <label>주소<input name="guardian_address"></label>
   </section>
 
+  <!-- 동물 정보 -->
   <section class="card">
-    <h2>② 동물(환자) 정보</h2>
+    <h2>③ 동물(환자) 정보</h2>
     <div class="row-3">
       <label>동물 ID (차트)<input name="animal_id"></label>
       <label>RFID (마이크로칩)<input name="rfid"></label>
@@ -68,15 +93,18 @@
     </label>
   </section>
 
+  <!-- 집도의/주치의 -->
   <section class="card">
-    <h2>③ 집도의</h2>
-    <label>집도의 성명 <span class="muted">(수술을 집도하는 수의사 이름을 직접 입력)</span>
+    <h2>④ <span class="vet-label-surgery">집도의</span><span class="vet-label-hosp" style="display:none;">주치의</span></h2>
+    <label><span class="vet-label-surgery">집도의 성명</span><span class="vet-label-hosp" style="display:none;">주치의 성명</span>
+      <span class="muted"> (수의사 이름 직접 입력)</span>
       <input name="vet_name" placeholder="예: 설원장" required>
     </label>
   </section>
 
-  <section class="card">
-    <h2>④ 수술 선택 <span class="muted" style="font-weight:normal;font-size:12px;">(검색 또는 직접 입력 → DB에 있으면 자동 채움, 없으면 [AI 자동채움])</span></h2>
+  <!-- [수술] 섹션: surgery_daycare / surgery_hospital일 때 표시 -->
+  <section class="card section-surgery">
+    <h2>⑤ 수술 선택 <span class="muted" style="font-weight:normal;font-size:12px;">(검색 또는 직접 입력 → DB에 있으면 자동 채움, 없으면 [AI 자동채움])</span></h2>
     <div class="row-2">
       <label>수술명 검색 / 직접 입력
         <input type="text" id="surgery-search" list="surgery-datalist"
@@ -138,7 +166,21 @@
     <label>예상 비용
       <textarea name="estimated_cost" id="estimated_cost" rows="2"></textarea>
     </label>
-    <label>입원기간, 통원치료 및 재진 여부, 모니터링 방법
+
+    <!-- 입원/당일퇴원 분기 -->
+    <div class="row-2" id="discharge-block">
+      <label>수술 후 처치
+        <select name="discharge_type" id="discharge_type">
+          <option value="당일퇴원">당일 퇴원</option>
+          <option value="입원">수술 후 입원</option>
+        </select>
+      </label>
+      <label id="hospital-days-label" style="display:none;">수술 후 예상 입원 일수
+        <input name="hospital_days" id="hospital_days_input" type="number" min="1" max="60" placeholder="예: 3">
+      </label>
+    </div>
+
+    <label>입원기간 / 통원치료 / 재진 여부 / 모니터링 방법
       <textarea name="hospitalization" id="hospitalization" rows="3"></textarea>
     </label>
     <div class="row-3">
@@ -161,20 +203,117 @@
     </div>
   </section>
 
+  <!-- [입원만] 섹션: hospital_only일 때만 표시 -->
+  <section class="card section-hospital" style="display:none;">
+    <h2>⑤ 입원 케이스 선택 <span class="muted" style="font-weight:normal;font-size:12px;">(검색 또는 직접 입력 → 입원 DB에 있으면 자동 채움, 없으면 [AI 자동채움])</span></h2>
+    <div class="row-2">
+      <label>병증/입원 사유 검색 / 직접 입력
+        <input type="text" id="hosp-search" list="hosp-datalist"
+               placeholder="병증 또는 입원 사유 (예: 급성 췌장염, 파보바이러스, DKA...)"
+               autocomplete="off">
+        <datalist id="hosp-datalist">
+          {% for h in hospitalizations %}
+          <option value="{{ h.name }}">{{ h.category }}</option>
+          {% endfor %}
+        </datalist>
+      </label>
+      <label>분류
+        <select id="hospital_category_display">
+          {% for c in hosp_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+    </div>
+    <div class="actions left" style="margin-top:-6px;">
+      <button type="button" id="btn-hosp-ai" class="btn-ghost">🤖 AI로 자동채움 (웹검색 + DB 자동저장)</button>
+      <span id="hosp-ai-status" class="muted"></span>
+    </div>
+
+    <input type="hidden" name="hospital_name" id="hospital_name">
+    <input type="hidden" name="hospital_category" id="hospital_category">
+
+    <label>병증명(최종)
+      <input id="hospital_name_display" readonly>
+    </label>
+
+    <label>입원 목적 및 기대효과
+      <textarea name="h_purpose_effect" id="h_purpose_effect" rows="3"></textarea>
+    </label>
+    <label>예상 합병증 및 예후
+      <textarea name="h_complications" id="h_complications" rows="4"></textarea>
+    </label>
+    <label>예상 비용
+      <textarea name="h_estimated_cost" id="h_estimated_cost" rows="2"></textarea>
+    </label>
+    <label>예상 입원기간 <span class="muted">(예: "3~5일", "7일 내외", "1주")</span>
+      <input name="h_expected_duration" id="h_expected_duration" placeholder="예: 3~5일">
+    </label>
+    <label>통원치료 / 재진 여부 / 모니터링 방법
+      <textarea name="h_hospitalization" id="h_hospitalization" rows="3"></textarea>
+    </label>
+    <div class="row-2">
+      <label>입원 시작일
+        <input name="h_admit_date" type="date">
+      </label>
+      <label>개별 특이사항 / 추가 설명
+        <input name="h_extra_note" placeholder="기저질환·약물·주의사항 등">
+      </label>
+    </div>
+
+    <div class="actions left">
+      <button type="button" id="btn-hosp-save" class="btn-ghost">현재 내용을 입원DB에 저장</button>
+      <span id="hosp-save-status" class="muted"></span>
+    </div>
+  </section>
+
   <div class="actions">
     <a class="btn-ghost" href="{{ url_for('dashboard') }}">취소</a>
     <button class="btn-primary" type="submit">🖨 인쇄용 미리보기 생성</button>
   </div>
 </form>
+
+<style>
+  .pt-option { display:flex; flex-direction:column; gap:4px; padding:10px 12px; border:1.5px solid #d1d5db; border-radius:6px; cursor:pointer; }
+  .pt-option:hover { border-color:#2563eb; background:white; }
+  .pt-option input[type=radio] { margin-right:6px; }
+  .pt-option:has(input:checked) { border-color:#2563eb; background:white; box-shadow:0 0 0 2px #dbeafe; }
+</style>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// ----- 환자 유형 라디오 처리 -----
+function applyPatientType() {
+  const type = document.querySelector('input[name=patient_type]:checked').value;
+  const isSurgery = type === 'surgery_daycare' || type === 'surgery_hospital';
+  const isHospOnly = type === 'hospital_only';
+
+  document.querySelectorAll('.section-surgery').forEach(s => s.style.display = isSurgery ? '' : 'none');
+  document.querySelectorAll('.section-hospital').forEach(s => s.style.display = isHospOnly ? '' : 'none');
+  document.querySelectorAll('.vet-label-surgery').forEach(s => s.style.display = isSurgery ? '' : 'none');
+  document.querySelectorAll('.vet-label-hosp').forEach(s => s.style.display = isHospOnly ? '' : 'none');
+
+  // 수술+당일퇴원: discharge_type 자동 = 당일퇴원
+  if (type === 'surgery_daycare') {
+    document.getElementById('discharge_type').value = '당일퇴원';
+    document.getElementById('hospital-days-label').style.display = 'none';
+    document.getElementById('hospital_days_input').value = '';
+  } else if (type === 'surgery_hospital') {
+    document.getElementById('discharge_type').value = '입원';
+    document.getElementById('hospital-days-label').style.display = '';
+  }
+}
+document.querySelectorAll('input[name=patient_type]').forEach(r => r.addEventListener('change', applyPatientType));
+
+// discharge_type 수동 변경 시에도 hospital_days_label 토글
+document.getElementById('discharge_type').addEventListener('change', e => {
+  document.getElementById('hospital-days-label').style.display = (e.target.value === '입원') ? '' : 'none';
+});
+
+// ----- 기존 수술 로직 -----
 const searchInput = document.getElementById('surgery-search');
 const fields = ['purpose_effect','procedure','complications','estimated_cost',
                 'hospitalization','anesthesia_risk','expected_duration'];
 
-// 모든 textarea를 내용량만큼 자동 확장
 function autosize(el) {
   el.style.height = 'auto';
   el.style.height = (el.scrollHeight + 4) + 'px';
@@ -182,21 +321,17 @@ function autosize(el) {
 function wireAutosize() {
   document.querySelectorAll('textarea').forEach(t => {
     t.addEventListener('input', () => autosize(t));
-    // 페이지 로드 직후에 한번, 그리고 값 변경 시마다 호출
     autosize(t);
   });
 }
-// DOM 준비되면 실행
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', wireAutosize);
 } else {
   wireAutosize();
 }
-// 프로그래매틱으로 value 설정 후에도 호출 가능하도록 전역 함수로 노출
 window.__autosize = autosize;
 window.__autosizeAll = () => document.querySelectorAll('textarea').forEach(autosize);
 
-// 전체 수술 목록 (서버 시드)
 const ALL_SURGERIES = [
 {% for s in surgeries %}{ id: {{ s.id }}, name: "{{ s.name|replace('"','\\"') }}", category: "{{ s.category }}" },
 {% endfor %}
@@ -225,7 +360,6 @@ async function loadSurgeryById(id) {
   window.__autosizeAll && window.__autosizeAll();
 }
 
-// 검색 입력 처리: 이름 완전일치 → DB 로드, 아니면 직접입력 모드
 searchInput.addEventListener('input', async () => {
   const val = searchInput.value.trim();
   if (!val) { setName(''); clearFields(); return; }
@@ -235,7 +369,6 @@ searchInput.addEventListener('input', async () => {
     document.getElementById('ai-status').textContent = '✓ DB에서 불러옴';
     document.getElementById('ai-status').style.color = '#0a7';
   } else {
-    // 직접 입력 모드
     setName(val);
     document.getElementById('ai-status').textContent = '📝 직접 입력 중 — [AI 자동채움]을 누르면 웹검색으로 자동 작성됩니다';
     document.getElementById('ai-status').style.color = '#666';
@@ -265,7 +398,7 @@ document.getElementById('btn-ai-generate').addEventListener('click', async () =>
   const status = document.getElementById('ai-status');
   const btn = document.getElementById('btn-ai-generate');
   btn.disabled = true;
-  status.textContent = '🤖 Claude에게 문의 중 (웹검색 포함)... 10~30초';
+  status.textContent = '🤖 Claude에게 문의 중 (웹검색 포함)... 10~60초';
   status.style.color = '#666';
   try {
     const r = await fetch('/api/surgery/ai-generate', {
@@ -279,7 +412,6 @@ document.getElementById('btn-ai-generate').addEventListener('click', async () =>
     fields.forEach(f => { if (d.data[f]) document.getElementById(f).value = d.data[f]; });
     window.__autosizeAll && window.__autosizeAll();
 
-    // AI 결과를 수술DB에 자동 저장
     const saveBody = { name, category: d.data.category || '응급·기타' };
     fields.forEach(f => saveBody[f] = d.data[f] || '');
     try {
@@ -309,13 +441,144 @@ document.getElementById('btn-ai-generate').addEventListener('click', async () =>
 });
 
 document.querySelector('input[name=surgery_date]').value = new Date().toISOString().slice(0,10);
+const admitDateEl = document.querySelector('input[name=h_admit_date]');
+if (admitDateEl) admitDateEl.value = new Date().toISOString().slice(0,10);
 
-// 페이지 전체에서 Ctrl+V 이미지 붙여넣기 지원 → 자동 OCR 실행
+// ----- 입원 케이스(hospital_only) 로직 -----
+const hospSearch = document.getElementById('hosp-search');
+const hospFields = ['h_purpose_effect','h_complications','h_estimated_cost',
+                    'h_hospitalization','h_expected_duration'];
+const hospFieldMap = {
+  h_purpose_effect: 'purpose_effect',
+  h_complications: 'complications',
+  h_estimated_cost: 'estimated_cost',
+  h_hospitalization: 'hospitalization',
+  h_expected_duration: 'expected_duration',
+};
+const ALL_HOSPITALIZATIONS = [
+{% for h in hospitalizations %}{ id: {{ h.id }}, name: "{{ h.name|replace('"','\\"') }}", category: "{{ h.category }}" },
+{% endfor %}
+];
+
+function setHospName(v) {
+  document.getElementById('hospital_name').value = v;
+  document.getElementById('hospital_name_display').value = v;
+}
+function setHospCat(v) {
+  document.getElementById('hospital_category').value = v;
+  document.getElementById('hospital_category_display').value = v;
+}
+function clearHospFields() {
+  hospFields.forEach(f => { const el = document.getElementById(f); if (el) el.value = ''; });
+}
+document.getElementById('hospital_category_display').addEventListener('change', e => {
+  document.getElementById('hospital_category').value = e.target.value;
+});
+
+async function loadHospById(id) {
+  const r = await fetch('/api/hospitalization/' + id);
+  const d = await r.json();
+  setHospName(d.name); setHospCat(d.category);
+  for (const [formField, apiField] of Object.entries(hospFieldMap)) {
+    const el = document.getElementById(formField);
+    if (el) el.value = d[apiField] || '';
+  }
+  window.__autosizeAll && window.__autosizeAll();
+}
+
+hospSearch.addEventListener('input', async () => {
+  const val = hospSearch.value.trim();
+  if (!val) { setHospName(''); clearHospFields(); return; }
+  const match = ALL_HOSPITALIZATIONS.find(h => h.name === val);
+  if (match) {
+    await loadHospById(match.id);
+    document.getElementById('hosp-ai-status').textContent = '✓ 입원DB에서 불러옴';
+    document.getElementById('hosp-ai-status').style.color = '#0a7';
+  } else {
+    setHospName(val);
+    document.getElementById('hosp-ai-status').textContent = '📝 직접 입력 중 — [AI 자동채움]을 누르면 웹검색으로 자동 작성됩니다';
+    document.getElementById('hosp-ai-status').style.color = '#666';
+  }
+});
+
+document.getElementById('btn-hosp-save').addEventListener('click', async () => {
+  const name = document.getElementById('hospital_name').value.trim();
+  if (!name) { alert('병증명이 비어있습니다.'); return; }
+  const body = { name, category: document.getElementById('hospital_category').value || '기타' };
+  for (const [formField, apiField] of Object.entries(hospFieldMap)) {
+    const el = document.getElementById(formField);
+    body[apiField] = el ? el.value : '';
+  }
+  const r = await fetch('/api/hospitalization/quick-add', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  const status = document.getElementById('hosp-save-status');
+  if (d.updated) status.textContent = '✓ 기존 입원DB 항목 덮어쓰기 완료 (id=' + d.id + ')';
+  else if (d.existed) status.textContent = '✓ 이미 입원DB에 존재합니다.';
+  else status.textContent = '✓ 입원DB에 신규 추가되었습니다. (id=' + d.id + ')';
+  status.style.color = '#0a7';
+});
+
+document.getElementById('btn-hosp-ai').addEventListener('click', async () => {
+  const name = (hospSearch.value || document.getElementById('hospital_name').value).trim();
+  if (!name) { alert('위 "병증/입원 사유" 칸에 먼저 입력하세요.'); return; }
+  const status = document.getElementById('hosp-ai-status');
+  const btn = document.getElementById('btn-hosp-ai');
+  btn.disabled = true;
+  status.textContent = '🤖 Claude에게 문의 중 (웹검색 포함)... 10~60초';
+  status.style.color = '#666';
+  try {
+    const r = await fetch('/api/hospitalization/ai-generate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    setHospName(name);
+    if (d.data.category) setHospCat(d.data.category);
+    for (const [formField, apiField] of Object.entries(hospFieldMap)) {
+      const el = document.getElementById(formField);
+      if (el && d.data[apiField]) el.value = d.data[apiField];
+    }
+    window.__autosizeAll && window.__autosizeAll();
+
+    // DB 자동저장
+    const saveBody = { name, category: d.data.category || '기타' };
+    for (const [formField, apiField] of Object.entries(hospFieldMap)) {
+      saveBody[apiField] = d.data[apiField] || '';
+    }
+    try {
+      const sr = await fetch('/api/hospitalization/quick-add', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(saveBody)
+      });
+      const sd = await sr.json();
+      if (sd.existed && sd.updated) {
+        status.textContent = '✓ AI 자동채움 완료 + 기존 입원DB 항목 업데이트됨 (id=' + sd.id + ')';
+      } else if (sd.existed) {
+        status.textContent = '✓ AI 자동채움 완료 (입원DB에 이미 존재)';
+      } else {
+        status.textContent = '✓ AI 자동채움 완료 + 입원DB 신규 저장됨 (id=' + sd.id + ')';
+      }
+      status.style.color = '#0a7';
+    } catch (se) {
+      status.textContent = '✓ AI 자동채움 완료 (DB 저장 실패 — 수동 저장 버튼 사용)';
+      status.style.color = '#d97706';
+    }
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ----- 클립보드 붙여넣기 OCR -----
 document.addEventListener('paste', (e) => {
-  // 텍스트 input/textarea에 포커스 있으면 paste 방해 안 함
   const tag = (document.activeElement?.tagName || '').toUpperCase();
   if (tag === 'INPUT' || tag === 'TEXTAREA') {
-    // 단, 이미지가 있는 경우는 intercept
     const hasImg = Array.from(e.clipboardData?.items || []).some(i => i.type.startsWith('image/'));
     if (!hasImg) return;
   }
@@ -326,18 +589,14 @@ document.addEventListener('paste', (e) => {
       e.preventDefault();
       const blob = item.getAsFile();
       if (!blob) continue;
-      // 파일 이름 부여 (타입에서 확장자 유추)
       const ext = (blob.type.split('/')[1] || 'png').replace('jpeg','jpg');
       const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
-      // chart-image input에 설정
       const dt = new DataTransfer();
       dt.items.add(file);
       document.getElementById('chart-image').files = dt.files;
-      // 자동으로 OCR 버튼 클릭
       const status = document.getElementById('chart-ocr-status');
       status.textContent = '📋 클립보드 이미지 붙여넣기 감지 → 자동 OCR 실행...';
       status.style.color = '#2563eb';
-      // 페이지 상단으로 스크롤 (사용자가 결과 볼 수 있게)
       document.getElementById('chart-image').scrollIntoView({ behavior: 'smooth', block: 'start' });
       setTimeout(() => document.getElementById('btn-chart-ocr').click(), 100);
       return;
@@ -345,7 +604,6 @@ document.addEventListener('paste', (e) => {
   }
 });
 
-// 차트 스크린샷 → 보호자·환자 정보 자동 추출
 document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
   const fileEl = document.getElementById('chart-image');
   const file = fileEl.files[0];
@@ -376,6 +634,8 @@ document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+
+// 초기 상태 적용
+applyPatientType();
 </script>
 {% endblock %}
-  

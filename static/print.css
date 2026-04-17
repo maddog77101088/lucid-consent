@@ -1,12 +1,184 @@
-/* 인쇄 전용 스타일 */
+/* 인쇄 전용 스타일 — 종이 절약을 위해 공격적으로 축소 */
 @media print {
-  @page { size: A4; margin: 15mm; }
+  @page { size: A4; margin: 8mm 10mm; }
   .no-print { display: none !important; }
   body.print-body { background: #fff !important; margin: 0; }
+
+  /* 전체 문서 컨테이너 */
   .consent-doc {
-    max-width: 100%; margin: 0; padding: 0;
-    border: none; box-shadow: none;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    font-size: 9pt !important;
+    line-height: 1.15 !important;
+    color: #000 !important;
   }
-  .consent-doc h3 { page-break-after: avoid; }
-  .sign-box { page-break-inside: avoid; }
+
+  /* 헤더 양식 */
+  .consent-doc h1 {
+    font-size: 13pt !important;
+    margin: 0 0 2pt 0 !important;
+    letter-spacing: 1px !important;
+  }
+  .consent-doc h2 {
+    font-size: 11pt !important;
+    margin: 2pt 0 4pt !important;
+  }
+  .consent-doc h3 {
+    font-size: 10.5pt !important;
+    margin: 4pt 0 1pt !important;
+    padding-bottom: 1pt !important;
+    border-bottom-width: 0.5pt !important;
+  }
+  .consent-doc h4 {
+    font-size: 9.5pt !important;
+    margin: 2pt 0 0 !important;
+  }
+
+  /* 본문 p */
+  .consent-doc p { margin: 0.5pt 0 !important; }
+  .consent-doc .body-text {
+    margin: 0 0 2pt !important;
+    line-height: 1.15 !important;
+  }
+
+  /* 정보 테이블 */
+  .consent-doc table.info {
+    font-size: 8.5pt !important;
+    margin: 1pt 0 3pt !important;
+    table-layout: fixed !important;
+    width: 100% !important;
+  }
+  .consent-doc table.info th,
+  .consent-doc table.info td {
+    padding: 1pt 4pt !important;
+    line-height: 1.0 !important;
+    border-width: 0.5pt !important;
+  }
+  .consent-doc table.info td {
+    word-break: break-word !important;
+    overflow-wrap: anywhere !important;
+  }
+  .consent-doc table.info th {
+    white-space: nowrap !important;
+    overflow-wrap: normal !important;
+    word-break: keep-all !important;
+  }
+  .consent-doc table.info th.sec {
+    font-size: 9.5pt !important;
+    padding: 1.5pt 4pt !important;
+  }
+  /* 4컬럼/2컬럼 균형 배치 (인쇄 시 폰트 8.5pt에 맞춰 조정) */
+  .consent-doc table.info-4col col.lbl { width: 18% !important; }
+  .consent-doc table.info-4col col.val { width: 32% !important; }
+  .consent-doc table.info-2col col.lbl { width: 20% !important; }
+  .consent-doc table.info-2col col.val { width: 80% !important; }
+
+  /* 리스트 */
+  .consent-doc ol { padding-left: 12pt !important; margin: 0 !important; }
+  .consent-doc ol li {
+    margin-bottom: 0 !important;
+    font-size: 8pt !important;
+    line-height: 1.15 !important;
+  }
+  .consent-doc .promise-list li {
+    margin-bottom: 0 !important;
+    font-size: 8pt !important;
+    line-height: 1.15 !important;
+  }
+  .consent-doc .notice-list li {
+    margin-bottom: 0 !important;
+    font-size: 8pt !important;
+    line-height: 1.15 !important;
+  }
+
+  /* 체크박스 그룹 (Q1~Q3) */
+  .consent-doc .check-group {
+    padding: 2pt 5pt !important;
+    margin-top: 2pt !important;
+    background: #fafafa !important;
+  }
+  .consent-doc .check-group p {
+    margin: 0.5pt 0 !important;
+    font-size: 8pt !important;
+    line-height: 1.15 !important;
+  }
+
+  /* 검사 동의/거절 항목 - 가장 촘촘하게 */
+  .consent-doc .consent-items p {
+    margin: 0 !important;
+    font-size: 8pt !important;
+    line-height: 1.15 !important;
+  }
+
+  /* disclaimer/footer 블록 전체 */
+  .consent-doc .html-block h4 {
+    font-size: 9pt !important;
+    margin: 2pt 0 0 !important;
+  }
+  .consent-doc .html-block p {
+    font-size: 8pt !important;
+    line-height: 1.15 !important;
+    margin: 0 !important;
+  }
+
+  /* 법적/소 텍스트 */
+  .consent-doc .small {
+    font-size: 7.5pt !important;
+    line-height: 1.15 !important;
+    margin: 0 !important;
+  }
+  .consent-doc .legal {
+    font-size: 7.5pt !important;
+    line-height: 1.15 !important;
+    padding: 3pt 5pt !important;
+    margin-top: 2pt !important;
+    background: #fafafa !important;
+  }
+
+  /* ASA 테이블 */
+  .consent-doc .asa-table { font-size: 8pt !important; }
+  .consent-doc .asa-table th,
+  .consent-doc .asa-table td { padding: 1pt 3pt !important; }
+
+  /* QR 박스 */
+  .consent-doc .yt-qr-box {
+    padding: 3pt 5pt !important;
+    margin-top: 3pt !important;
+    gap: 7pt !important;
+  }
+  .consent-doc .yt-qr-box img {
+    width: 70pt !important;
+    height: 70pt !important;
+  }
+  .consent-doc .yt-qr-box .small { font-size: 7.5pt !important; }
+
+  /* 체크박스 아이콘 자체 */
+  .consent-doc .cb {
+    width: 8pt !important;
+    height: 8pt !important;
+    font-size: 6.5pt !important;
+    line-height: 7pt !important;
+    margin-right: 1pt !important;
+  }
+
+  /* 서명란 */
+  .consent-doc .sign-date { margin-top: 5pt !important; font-size: 9pt !important; }
+  .consent-doc .sign-target { margin-top: 4pt !important; font-size: 9pt !important; }
+
+  /* 하단 푸터 */
+  .footer-small { margin-top: 3pt !important; font-size: 7.5pt !important; }
+
+  /* 페이지 분할 힌트 */
+  .consent-doc h3, .consent-doc h4 { page-break-after: avoid; }
+  .consent-doc table { page-break-inside: avoid; }
+  .yt-qr-box, .check-group { page-break-inside: avoid; }
+  .sign-box, .sign-date, .sign-target { page-break-inside: avoid; }
+
+  /* 보호자의 약속 리스트 간격을 더 줄이기 */
+  .consent-doc .promise-list,
+  .consent-doc .notice-list,
+  .consent-doc .consent-items { margin: 0 !important; }
 }

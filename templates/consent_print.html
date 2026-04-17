@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<title>수술 및 입원 동의서 - {{ d.patient_name }}</title>
+{% set pt = d.patient_type or 'surgery_hospital' %}
+<title>{{ doc_title }} - {{ d.patient_name }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}">
 </head>
@@ -17,14 +18,20 @@
 <article class="consent-doc">
   {{ r.header|safe }}
 
-  <table class="info">
+  <table class="info info-4col">
+    <colgroup>
+      <col class="lbl"><col class="val"><col class="lbl"><col class="val">
+    </colgroup>
     <tr><th colspan="4" class="sec">보호자</th></tr>
     <tr><th>ID</th><td>{{ d.guardian_id }}</td><th>주민등록번호</th><td>{{ d.guardian_rrn }}</td></tr>
     <tr><th>이름</th><td>{{ d.guardian_name }}</td><th>전화</th><td>{{ d.guardian_phone }}</td></tr>
     <tr><th>휴대전화</th><td>{{ d.guardian_mobile }}</td><th>주소</th><td>{{ d.guardian_address }}</td></tr>
   </table>
 
-  <table class="info">
+  <table class="info info-4col">
+    <colgroup>
+      <col class="lbl"><col class="val"><col class="lbl"><col class="val">
+    </colgroup>
     <tr><th colspan="4" class="sec">동물</th></tr>
     <tr><th>ID</th><td>{{ d.animal_id }}</td><th>RFID</th><td>{{ d.rfid }}</td></tr>
     <tr><th>종</th><td>{{ d.species }}</td><th>품종</th><td>{{ d.breed }}</td></tr>
@@ -35,13 +42,31 @@
     {% endif %}
   </table>
 
-  <table class="info">
+  {% if pt != 'hospital_only' %}
+  <!-- ========== 수술 섹션 (surgery_daycare / surgery_hospital) ========== -->
+  <table class="info info-2col">
+    <colgroup>
+      <col class="lbl"><col class="val">
+    </colgroup>
     <tr><th colspan="2" class="sec">수술</th></tr>
     <tr><th>수술명</th><td>{{ d.surgery_name }} <span class="muted">({{ d.surgery_category }})</span></td></tr>
     {% if d.surgery_side and d.surgery_side != '해당없음' %}
     <tr><th>수술 부위</th><td><strong>{{ d.surgery_side }}</strong></td></tr>
     {% endif %}
-    <tr><th>일자·소요시간·집도의</th><td>{{ d.surgery_date }} / 예상 {{ d.expected_duration }} / 집도의 {{ d.vet_name }}</td></tr>
+    <tr><th>수술일자</th><td>{{ d.surgery_date }}</td></tr>
+    <tr><th>예상 소요시간</th><td>{{ d.expected_duration }}</td></tr>
+    <tr><th>집도의</th><td>{{ d.vet_name }}</td></tr>
+    <tr><th>수술 후 처치</th>
+      <td>
+        {% if d.discharge_type == '당일퇴원' or pt == 'surgery_daycare' %}
+          <strong>당일 퇴원</strong>
+        {% else %}
+          <strong>수술 후 입원
+          {% if d.hospital_days %} — 예상 {{ d.hospital_days }}일{% endif %}
+          </strong>
+        {% endif %}
+      </td>
+    </tr>
   </table>
 
   <p class="small" style="margin-top:12pt;">다음은 주치의가 작성하고 설명하며, 보호자님께 카카오톡으로 전송해드립니다.</p>
@@ -58,11 +83,11 @@
   <h4>예상 비용 <span class="muted small">[환자의 회복 속도에 따라 달라지며, 검사나 입원이 추가될 수 있습니다.]</span></h4>
   <p class="body-text">{{ d.estimated_cost }}</p>
 
-  <h4>입원기간, 통원 치료 및 재진 여부, 모니터링 방법</h4>
+  <h4>{% if pt == 'surgery_daycare' %}당일 퇴원 후 주의사항·재진 안내{% else %}입원기간·통원 치료·재진 여부·모니터링 방법{% endif %}</h4>
   <p class="body-text">{{ d.hospitalization }}</p>
 
   <div class="check-group" style="margin-top:12pt; padding:8pt 10pt; background:#fafafa; border-left:2pt solid #888;">
-    <p><strong>Q1.</strong> 보호자님께서는 수술 및 입원 안내장에 포함된 내용을 모두 주치의를 통해 직접 설명을 듣고 동의하십니까?
+    <p><strong>Q1.</strong> 보호자님께서는 수술{% if pt == 'surgery_hospital' %} 및 입원{% endif %} 안내장에 포함된 내용을 모두 주치의를 통해 직접 설명을 듣고 동의하십니까?
       &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
       &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
     <p><strong>Q2.</strong> 설명서의 내용 중 의문이 있는 부분에 대해 충분히 질문하고 설명을 들으셨습니까?
@@ -72,17 +97,6 @@
       &nbsp; <span class="cb">☐</span> 네, 대면하였습니다.
       &nbsp; <span class="cb">☐</span> 아니오, 대면하지 못했습니다.</p>
   </div>
-
-  {% if d.video_qr_b64 %}
-  <div class="yt-qr-box" style="margin-top:12pt; padding:10pt 12pt; border:1.5pt solid #2563eb; border-radius:4pt; display:flex; gap:14pt; align-items:center;">
-    <img src="data:image/png;base64,{{ d.video_qr_b64 }}" style="width:110px; height:110px; flex-shrink:0;">
-    <div style="flex:1;">
-      <strong>📺 입원 전 주의사항 영상 (필수 시청)</strong>
-      <p class="small" style="margin:4pt 0 0;">위 QR 코드를 스마트폰 카메라로 스캔하여 영상을 시청하신 후, 본 동의서 '보호자의 약속' 6번에 동의해주세요.</p>
-      <p class="small" style="margin:2pt 0 0; color:#666; word-break:break-all;">{{ d.youtube_url }}</p>
-    </div>
-  </div>
-  {% endif %}
 
   {% if d.asa_grade %}
   <h4>ASA 마취 위험도 분류 <span class="muted small">(American Society of Anesthesiologists)</span></h4>
@@ -105,11 +119,52 @@
   <p class="body-text">{{ d.extra_note }}</p>
   {% endif %}
 
-  <div class="body-text">{{ r.disclaimer|safe }}</div>
-  <div class="body-text">{{ r.footer|safe }}</div>
+  {% else %}
+  <!-- ========== 입원만 섹션 (hospital_only) ========== -->
+  <table class="info info-2col">
+    <colgroup>
+      <col class="lbl"><col class="val">
+    </colgroup>
+    <tr><th colspan="2" class="sec">입원</th></tr>
+    <tr><th>병증 / 입원 사유</th><td>{{ d.hospital_name }} <span class="muted">({{ d.hospital_category }})</span></td></tr>
+    <tr><th>입원 시작일 / 주치의</th><td>{{ d.h_admit_date or d.surgery_date }} / 주치의 {{ d.vet_name }}</td></tr>
+    <tr><th>예상 입원기간</th><td>{{ d.h_expected_duration or '-' }}</td></tr>
+  </table>
+
+  <p class="small" style="margin-top:12pt;">다음은 주치의가 작성하고 설명하며, 보호자님께 카카오톡으로 전송해드립니다.</p>
+
+  <h4>입원 목적 및 기대효과</h4>
+  <p class="body-text">{{ d.h_purpose_effect }}</p>
+
+  <h4>예상 합병증 및 예후</h4>
+  <p class="body-text">{{ d.h_complications }}</p>
+
+  <h4>예상 비용 <span class="muted small">[환자의 회복 속도에 따라 달라지며, 검사가 추가될 수 있습니다.]</span></h4>
+  <p class="body-text">{{ d.h_estimated_cost }}</p>
+
+  <h4>통원치료 / 재진 여부 / 모니터링 방법</h4>
+  <p class="body-text">{{ d.h_hospitalization }}</p>
+
+  <div class="check-group" style="margin-top:12pt; padding:8pt 10pt; background:#fafafa; border-left:2pt solid #888;">
+    <p><strong>Q1.</strong> 보호자님께서는 입원 안내장에 포함된 내용을 모두 주치의를 통해 직접 설명을 듣고 동의하십니까?
+      &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
+      &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
+    <p><strong>Q2.</strong> 설명서의 내용 중 의문이 있는 부분에 대해 충분히 질문하고 설명을 들으셨습니까?
+      &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
+      &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
+  </div>
+
+  {% if d.h_extra_note %}
+  <h4>개별 특이사항 / 추가 설명</h4>
+  <p class="body-text">{{ d.h_extra_note }}</p>
+  {% endif %}
+  {% endif %}
+
+  <div class="html-block">{{ r.disclaimer|safe }}</div>
+  <div class="html-block">{{ r.footer|safe }}</div>
 
   <div class="footer-small muted">
-    {{ hospital_name }} · 문서작성일시 {{ d.created_at }} · 집도의 {{ d.vet_name }}
+    {{ hospital_name }} · 문서작성일시 {{ d.created_at }} · {% if pt == 'hospital_only' %}주치의{% else %}집도의{% endif %} {{ d.vet_name }}
   </div>
 </article>
 

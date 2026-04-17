@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ '입원 케이스 수정' if item else '새 입원 케이스 추가' }}</h1>
+<p class="muted">각 항목은 동의서 작성 시 기본값으로 불러와지며, 환자별로 수정 가능합니다.</p>
+<form method="post" class="form-stack">
+  <div class="row-2">
+    <label>병증 / 입원 사유 *
+      <input name="name" required value="{{ item.name if item else '' }}" placeholder="예: 급성 췌장염, DKA, 파보바이러스 장염">
+    </label>
+    <label>분류 *
+      <select name="category" required>
+        {% for c in hosp_categories %}
+          <option value="{{ c }}" {% if item and item.category == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <label>입원 목적 및 기대효과
+    <textarea name="purpose_effect" rows="3">{{ item.purpose_effect if item else '' }}</textarea>
+  </label>
+  <label>예상 합병증 및 예후
+    <textarea name="complications" rows="4">{{ item.complications if item else '' }}</textarea>
+  </label>
+  <label>예상 비용
+    <textarea name="estimated_cost" rows="2">{{ item.estimated_cost if item else '' }}</textarea>
+  </label>
+  <label>통원치료 / 재진 여부 / 모니터링 방법
+    <textarea name="hospitalization" rows="3">{{ item.hospitalization if item else '' }}</textarea>
+  </label>
+  <label>예상 입원기간 (텍스트)
+    <input name="expected_duration" value="{{ item.expected_duration if item else '' }}" placeholder="예: 3~5일">
+  </label>
+  <label>비고
+    <input name="notes" value="{{ item.notes if item else '' }}">
+  </label>
+  <div class="actions">
+    <a class="btn-ghost" href="{{ url_for('hospitalization_list') }}">취소</a>
+    <button class="btn-primary" type="submit">저장</button>
+  </div>
+</form>
+{% endblock %}

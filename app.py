@@ -62,6 +62,7 @@ DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "lucid.db"))
 HOSPITAL_NAME = "24시루시드동물메디컬센터"
 HOSPITAL_SHORT = "루시드 동물병원"
 CATEGORIES = ["일반외과", "정형외과", "연부조직외과", "응급·기타"]
+HOSP_CATEGORIES = ["내과", "외과 회복", "중환자·응급", "감염·예방", "기타"]
 
 
 def get_db():
@@ -101,6 +102,18 @@ def init_db():
             expected_duration TEXT, notes TEXT,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS hospitalizations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL,
+            purpose_effect TEXT,
+            complications TEXT,
+            estimated_cost TEXT,
+            hospitalization TEXT,
+            expected_duration TEXT,
+            notes TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         CREATE TABLE IF NOT EXISTS hospital_template (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             header_html TEXT, disclaimer_html TEXT, footer_html TEXT,
@@ -130,6 +143,16 @@ def init_db():
     if cur.fetchone()[0] == 0:
         cur.execute("INSERT INTO hospital_template (id,header_html,disclaimer_html,footer_html,youtube_url) VALUES (1,?,?,?,?)",
             (DEFAULT_HEADER, DEFAULT_DISCLAIMER, DEFAULT_FOOTER, DEFAULT_YOUTUBE_URL))
+    else:
+        # 자동 마이그레이션: 기존에 저장된 구버전 헤더를 새 버전(doc_title 변수화)으로 교체
+        # 사용자가 직접 수정한 흔적이 없으면(기존 하드코딩 제목/안내문 그대로면) 덮어쓴다.
+        cur.execute("SELECT header_html FROM hospital_template WHERE id=1")
+        row = cur.fetchone()
+        if row and row[0]:
+            hh = row[0]
+            if ("수술 및 입원 동의서" in hh and "{{ doc_title }}" not in hh) or \
+               ("본 동의서는 차트에 저장되며" in hh):
+                cur.execute("UPDATE hospital_template SET header_html=? WHERE id=1", (DEFAULT_HEADER,))
     cur.execute("SELECT COUNT(*) FROM surgeries")
     if cur.fetchone()[0] == 0:
         from seed_data import SEED_SURGERIES
@@ -340,8 +363,12 @@ def surgery_delete(sid):
 @app.route("/consent/new")
 @login_required
 def consent_new():
-    surgeries = get_db().execute("SELECT id,name,category FROM surgeries ORDER BY category,name").fetchall()
-    return render_template("consent_new.html", surgeries=surgeries)
+    db = get_db()
+    surgeries = db.execute("SELECT id,name,category FROM surgeries ORDER BY category,name").fetchall()
+    hospitalizations = db.execute("SELECT id,name,category FROM hospitalizations ORDER BY category,name").fetchall()
+    return render_template("consent_new.html", surgeries=surgeries,
+                           hospitalizations=hospitalizations,
+                           hosp_categories=HOSP_CATEGORIES)
 
 
 @app.route("/api/surgery/<int:sid>")
@@ -566,7 +593,18 @@ CONSENT_FIELDS = ["guardian_id","guardian_name","guardian_phone","guardian_mobil
     "species","breed","patient_name","age","sex","coat_color","weight","underlying",
     "surgery_name","surgery_category","surgery_side","asa_grade","purpose_effect",
     "procedure","complications","estimated_cost","hospitalization","anesthesia_risk",
-    "expected_duration","extra_note"]
+    "expected_duration","extra_note",
+    # 입원/당일퇴원 분기용
+    "patient_type",       # surgery_daycare / surgery_hospital / hospital_only
+    "discharge_type",     # "당일퇴원" or "입원"
+    "hospital_days",      # 수술 후 입원 일수 (숫자 문자열)
+    "hospital_name",      # 입원만일 때 병증명
+    "hospital_category",  # 입원만일 때 분류
+    # 입원만(hospital_only) 전용 필드
+    "h_purpose_effect", "h_complications", "h_estimated_cost",
+    "h_hospitalization", "h_expected_duration",
+    "h_admit_date", "h_extra_note",
+    ]
 
 
 @app.route("/consent/preview", methods=["POST"])
@@ -587,12 +625,50 @@ def consent_preview():
         yt_url = DEFAULT_YOUTUBE_URL
     data["youtube_url"] = yt_url or ""
     data["video_qr_b64"] = _qr_base64(yt_url) if yt_url else ""
+    # 환자 유형별 문서 타이틀 (상단 h1 + 페이지 title 공용)
+    _pt = data.get("patient_type") or "surgery_hospital"
+    if _pt == "hospital_only":
+        doc_title = "입원 동의서"
+    elif _pt == "surgery_daycare":
+        doc_title = "수술 동의서"
+    else:
+        doc_title = "수술 및 입원 동의서"
     rendered = {
-        "header": render_template_string(tpl["header_html"] or "", d=data),
-        "disclaimer": render_template_string(tpl["disclaimer_html"] or "", d=data),
-        "footer": render_template_string(tpl["footer_html"] or "", d=data),
+        "header": render_template_string(tpl["header_html"] or "", d=data, doc_title=doc_title),
+        "disclaimer": render_template_string(tpl["disclaimer_html"] or "", d=data, doc_title=doc_title),
+        "footer": render_template_string(tpl["footer_html"] or "", d=data, doc_title=doc_title),
     }
-    return render_template("consent_print.html", d=data, r=rendered)
+    # 입원만 환자: disclaimer의 "알려드립니다!" 섹션(수술 관련 공지) 자동 제거
+    if data.get("patient_type") == "hospital_only":
+        import re as _re
+        rendered["disclaimer"] = _re.sub(
+            r'<h4[^>]*>\s*알려드립니다!?\s*</h4>\s*<ol[^>]*class="notice-list"[^>]*>.*?</ol>',
+            '', rendered["disclaimer"], flags=_re.DOTALL
+        )
+    # QR 박스를 '보호자의 약속' 6번 항목 직후(promise-list </ol> 다음)에 주입
+    # surgery_daycare(당일퇴원)는 입원 전 영상이 부적합이라 제외
+    if data.get("video_qr_b64") and data.get("patient_type") != "surgery_daycare":
+        import re as _re2
+        qr_html = (
+            '<div class="yt-qr-box" style="margin-top:8pt; padding:8pt 10pt;'
+            ' border:1.5pt solid #2563eb; border-radius:4pt; display:flex;'
+            ' gap:12pt; align-items:center;">'
+            f'<img src="data:image/png;base64,{data["video_qr_b64"]}"'
+            ' style="width:90px; height:90px; flex-shrink:0;">'
+            '<div style="flex:1;">'
+            '<strong>📺 입원 전 주의사항 영상 (필수 시청)</strong>'
+            '<p class="small" style="margin:3pt 0 0;">QR 코드를 스마트폰 카메라로'
+            ' 스캔하여 영상을 시청해주세요.</p>'
+            f'<p class="small" style="margin:2pt 0 0; color:#666; word-break:break-all;">{data.get("youtube_url","")}</p>'
+            '</div></div>'
+        )
+        # promise-list 닫는 </ol> 바로 뒤에 삽입
+        rendered["disclaimer"] = _re2.sub(
+            r'(<ol[^>]*class="promise-list"[^>]*>.*?</ol>)',
+            r'\1' + qr_html,
+            rendered["disclaimer"], count=1, flags=_re2.DOTALL
+        )
+    return render_template("consent_print.html", d=data, r=rendered, doc_title=doc_title)
 
 
 @app.route("/template", methods=["GET","POST"])
@@ -659,6 +735,197 @@ def users():
         return redirect(url_for("users"))
     rows = db.execute("SELECT * FROM users ORDER BY role, display_name").fetchall()
     return render_template("users.html", users=rows)
+
+
+# ===================== 입원 DB (hospitalizations) =====================
+
+HOSP_FIELDS = ["name","category","purpose_effect","complications",
+               "estimated_cost","hospitalization","expected_duration","notes"]
+
+
+@app.route("/hospitalizations")
+@login_required
+def hospitalization_list():
+    q = request.args.get("q","").strip()
+    category = request.args.get("category","").strip()
+    sql = "SELECT * FROM hospitalizations WHERE 1=1"; params = []
+    if q: sql += " AND (name LIKE ? OR purpose_effect LIKE ?)"; params += [f"%{q}%", f"%{q}%"]
+    if category: sql += " AND category = ?"; params.append(category)
+    sql += " ORDER BY category, name"
+    rows = get_db().execute(sql, params).fetchall()
+    return render_template("hospitalization_list.html", items=rows, q=q, category=category,
+                           hosp_categories=HOSP_CATEGORIES)
+
+
+def _form_to_hosp():
+    return {k: request.form.get(k,"").strip() for k in HOSP_FIELDS}
+
+
+@app.route("/hospitalizations/new", methods=["GET","POST"])
+@login_required
+def hospitalization_new():
+    if request.method == "POST":
+        d = _form_to_hosp()
+        try:
+            get_db().execute("""INSERT INTO hospitalizations
+                (name,category,purpose_effect,complications,
+                 estimated_cost,hospitalization,expected_duration,notes)
+                VALUES (?,?,?,?,?,?,?,?)""",
+                tuple(d[k] for k in HOSP_FIELDS))
+            get_db().commit()
+            flash("입원 케이스가 DB에 추가되었습니다.", "ok")
+            return redirect(url_for("hospitalization_list"))
+        except sqlite3.IntegrityError:
+            flash("이미 같은 이름의 입원 케이스가 있습니다.", "error")
+    return render_template("hospitalization_edit.html", item=None,
+                           hosp_categories=HOSP_CATEGORIES)
+
+
+@app.route("/hospitalizations/<int:hid>/edit", methods=["GET","POST"])
+@login_required
+def hospitalization_edit(hid):
+    db = get_db()
+    row = db.execute("SELECT * FROM hospitalizations WHERE id=?", (hid,)).fetchone()
+    if not row: abort(404)
+    if request.method == "POST":
+        d = _form_to_hosp()
+        db.execute("""UPDATE hospitalizations SET name=?,category=?,purpose_effect=?,
+            complications=?,estimated_cost=?,hospitalization=?,expected_duration=?,
+            notes=?,updated_at=datetime('now') WHERE id=?""",
+            tuple(d[k] for k in HOSP_FIELDS) + (hid,))
+        db.commit()
+        flash("수정되었습니다.", "ok")
+        return redirect(url_for("hospitalization_list"))
+    return render_template("hospitalization_edit.html", item=row,
+                           hosp_categories=HOSP_CATEGORIES)
+
+
+@app.route("/hospitalizations/<int:hid>/delete", methods=["POST"])
+@login_required
+@admin_required
+def hospitalization_delete(hid):
+    get_db().execute("DELETE FROM hospitalizations WHERE id=?", (hid,))
+    get_db().commit()
+    flash("삭제되었습니다.", "ok")
+    return redirect(url_for("hospitalization_list"))
+
+
+@app.route("/api/hospitalization/<int:hid>")
+@login_required
+def api_hospitalization_detail(hid):
+    row = get_db().execute("SELECT * FROM hospitalizations WHERE id=?", (hid,)).fetchone()
+    if not row: return jsonify({"error":"not found"}), 404
+    return jsonify(dict(row))
+
+
+@app.route("/api/hospitalization/quick-add", methods=["POST"])
+@login_required
+def api_hospitalization_quick_add():
+    """입원 케이스 upsert."""
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    if not name: return jsonify({"error":"병증명 필수"}), 400
+    db = get_db()
+    existing = db.execute("SELECT id FROM hospitalizations WHERE name=?", (name,)).fetchone()
+    if existing:
+        db.execute("""UPDATE hospitalizations SET category=?, purpose_effect=?,
+            complications=?, estimated_cost=?, hospitalization=?, expected_duration=?,
+            notes=?, updated_at=datetime('now') WHERE id=?""",
+            (data.get("category") or "기타",
+             data.get("purpose_effect",""), data.get("complications",""),
+             data.get("estimated_cost",""), data.get("hospitalization",""),
+             data.get("expected_duration",""),
+             data.get("notes","AI 자동채움으로 업데이트됨"),
+             existing["id"]))
+        db.commit()
+        return jsonify({"id": existing["id"], "existed": True, "updated": True})
+    cur = db.execute("""INSERT INTO hospitalizations
+        (name,category,purpose_effect,complications,
+         estimated_cost,hospitalization,expected_duration,notes)
+        VALUES (?,?,?,?,?,?,?,?)""",
+        (name, data.get("category") or "기타",
+         data.get("purpose_effect",""), data.get("complications",""),
+         data.get("estimated_cost",""), data.get("hospitalization",""),
+         data.get("expected_duration",""),
+         data.get("notes","AI 자동채움으로 추가됨")))
+    db.commit()
+    return jsonify({"id": cur.lastrowid, "existed": False, "updated": False})
+
+
+HOSP_AI_SYSTEM_PROMPT = """당신은 한국의 동물병원(소동물 수의학) 전문가입니다. 주어진 '입원 케이스(병증명)'에 대해 보호자에게 설명할 입원 동의서 내용을 작성합니다.
+
+**검색 절차**:
+1. web_search로 해당 병증의 주요 합병증·사망률·입원기간을 찾으세요.
+2. 수치가 있으면 반드시 포함하세요.
+
+**출력 규칙** (매우 중요):
+- 검색·추론이 끝나면 **최종 출력은 순수 JSON 객체 하나만**입니다.
+- 서두 문장·요약·마크다운·코드블록·설명·이모지 등을 포함하지 마세요.
+- 첫 문자는 반드시 '{' 이어야 하고, 마지막 문자는 '}' 이어야 합니다.
+- JSON 내부 텍스트에 줄바꿈이 필요하면 \\n 이스케이프를 쓰세요.
+
+**JSON 필드**:
+- purpose_effect: 입원의 목적 및 기대효과 (어떤 치료·모니터링을 왜 하는지)
+- complications: 예상 합병증 및 예후. 사망률·주요 합병증 수치를 구체적으로. 경미 → 중증 → 치명적 순.
+- estimated_cost: 대한민국 원화 범위 (예: "일 15~30만원, 총 80~200만원")
+- hospitalization: 통원치료·재진 여부, 퇴원 후 집에서의 모니터링 방법
+- expected_duration: 예시 "3~5일", "7~14일"
+- category: "내과" / "외과 회복" / "중환자·응급" / "감염·예방" / "기타" 중 하나
+
+보호자가 이해할 수 있는 평이한 한국어로, 그러나 치명적 위험은 명확히 고지하세요.
+다시 강조: 최종 응답은 JSON 객체 하나만. 검색 결과 요약·서두 설명 절대 금지."""
+
+
+@app.route("/api/hospitalization/ai-generate", methods=["POST"])
+@login_required
+def api_hospitalization_ai_generate():
+    """Claude API로 입원 케이스 정보 자동 생성."""
+    if requests is None:
+        return jsonify({"error": "'requests' 패키지가 설치되어 있지 않습니다."}), 500
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "병증명을 입력하세요."}), 400
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다."}), 400
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 8000,
+                "system": HOSP_AI_SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": f"병증/입원 사유: {name}\n\n웹검색으로 주요 합병증·입원기간·사망률을 확인하세요. 검색·추론이 끝나면 JSON 객체 하나만 출력하세요. 첫 문자는 '{{' 이어야 합니다."}],
+                "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
+            },
+            timeout=120,
+        )
+        if r.status_code != 200:
+            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
+        body = r.json()
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip().rstrip("`").strip()
+        if not text.startswith("{"):
+            s = text.find("{"); e = text.rfind("}")
+            if s >= 0 and e > s:
+                text = text[s:e+1]
+        result = json.loads(text)
+        return jsonify({"ok": True, "data": result})
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"AI 응답 파싱 실패: {e}. 원문: {text[:400]}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"AI 요청 실패: {e}"}), 500
 
 
 @app.cli.command("init-db")

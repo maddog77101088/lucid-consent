@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <h1>입원 DB</h1>
+  <a class="btn-primary" href="{{ url_for('hospitalization_new') }}">+ 새 입원 케이스 추가</a>
+</div>
+
+<form class="filter-bar" method="get">
+  <input type="text" name="q" value="{{ q }}" placeholder="병증명·개요 검색">
+  <select name="category">
+    <option value="">전체 카테고리</option>
+    {% for c in hosp_categories %}
+      <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select>
+  <button>검색</button>
+</form>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th>분류</th><th>병증 / 입원 사유</th><th>예상 입원기간</th><th>최종수정</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in items %}
+    <tr>
+      <td><span class="chip chip-{{ loop.index % 4 }}">{{ h.category }}</span></td>
+      <td><a href="{{ url_for('hospitalization_edit', hid=h.id) }}">{{ h.name }}</a></td>
+      <td>{{ h.expected_duration or '-' }}</td>
+      <td class="muted">{{ h.updated_at[:10] if h.updated_at else '' }}</td>
+      <td>
+        <a href="{{ url_for('hospitalization_edit', hid=h.id) }}">수정</a>
+        {% if current_user.role == 'admin' %}
+        <form class="inline" method="post" action="{{ url_for('hospitalization_delete', hid=h.id) }}"
+              onsubmit="return confirm('정말 삭제하시겠습니까?')">
+          <button class="danger">삭제</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted center">입원 DB가 비어있습니다. 동의서 작성에서 "입원만" 선택 후 AI 자동채움으로 추가하거나, 위 "+ 새 입원 케이스 추가" 버튼으로 직접 추가하세요.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

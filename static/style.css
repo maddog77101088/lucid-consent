@@ -200,16 +200,28 @@ code { background: #f3f4f6; padding: 1px 6px; border-radius: 3px; font-size: 12p
 }
 .consent-doc h4 { margin-top: 10pt; font-size: 11.5pt; }
 .consent-doc .body-text { white-space: pre-wrap; }
+.consent-doc .html-block { white-space: normal; }
 .consent-doc table.info {
   width: 100%; border-collapse: collapse; margin: 4pt 0 8pt;
-  font-size: 10.5pt;
+  font-size: 10.5pt; table-layout: fixed;
 }
 .consent-doc table.info th, .consent-doc table.info td {
-  border: 1pt solid #888; padding: 5pt 8pt; text-align: left;
+  border: 1pt solid #888; padding: 4pt 8pt; text-align: left;
+  line-height: 1.35;
+}
+.consent-doc table.info td {
+  word-break: break-word; overflow-wrap: anywhere;
 }
 .consent-doc table.info th {
-  background: #f3f4f6; width: 18%; font-weight: 600;
+  background: #f3f4f6; font-weight: 600;
+  white-space: nowrap; overflow-wrap: normal; word-break: keep-all;
 }
+/* 4컬럼 정보 표 (보호자/동물) — label/value/label/value 균형 배치 */
+.consent-doc table.info-4col col.lbl { width: 19%; }
+.consent-doc table.info-4col col.val { width: 31%; }
+/* 2컬럼 정보 표 (수술/입원) */
+.consent-doc table.info-2col col.lbl { width: 22%; }
+.consent-doc table.info-2col col.val { width: 78%; }
 .consent-doc ol { padding-left: 20pt; }
 .consent-doc ol li { margin-bottom: 4pt; }
 
