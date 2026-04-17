@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{% block title %}{{ hospital_short }} 수술동의서 시스템{% endblock %}</title>
+<title>{% block title %}{{ hospital_short }}{% endblock %}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -11,8 +11,7 @@
 <header class="topbar no-print">
   <div class="logo">
     <a href="{{ url_for('dashboard') }}">
-      <strong>{{ hospital_short }}</strong><br>
-      <span>수술동의서 시스템</span>
+      <strong>{{ hospital_short }}</strong>
     </a>
   </div>
   <nav>
