@@ -554,9 +554,9 @@ OCR_SYSTEM_PROMPT = """이미지는 한국 동물병원 PMS365(우리엔) 차트
 - 생년월일 괄호 안 나이(예: 15y1m2d) → "15년 1개월" 로 변환
 - 체중 "X.X Kg (BSA:...)" → weight="X.X" (숫자만)
 - RFID·주소·주민번호·피모색이 화면에 없으면 빈 문자열
-- 기저질환은 Problem List/차트에 보이면 기재, 없으면 빈 문자열
+- **기저질환(underlying)·복용약물은 절대 추출하지 마세요.** 주치의가 직접 기재합니다. 빈 문자열로 두세요.
 
-**JSON 필드 전체 목록**: guardian_id, guardian_name, guardian_phone, guardian_mobile, guardian_address, guardian_rrn, animal_id, rfid, patient_name, species, breed, age, sex, coat_color, weight, underlying
+**JSON 필드 전체 목록**: guardian_id, guardian_name, guardian_phone, guardian_mobile, guardian_address, guardian_rrn, animal_id, rfid, patient_name, species, breed, age, sex, coat_color, weight
 
 다시 강조: **patient_name과 guardian_name은 이미지의 실제 문자만 사용. 추측으로 "그럴듯한" 한국이름 생성 금지.**"""
 
@@ -612,6 +612,9 @@ def api_chart_ocr():
             if s >= 0 and e > s:
                 text = text[s:e+1]
         result = json.loads(text)
+        # 기저질환·복용약물은 OCR이 추출해도 절대 자동입력하지 않음 (주치의가 직접 기재)
+        if isinstance(result, dict):
+            result.pop("underlying", None)
         return jsonify({"ok": True, "data": result})
     except json.JSONDecodeError as e:
         return jsonify({"error": f"OCR 응답 파싱 실패: {e}. 원문: {text[:400]}"}), 500
