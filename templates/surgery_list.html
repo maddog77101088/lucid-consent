@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <h1>수술 DB</h1>
+  <a class="btn-primary" href="{{ url_for('surgery_new') }}">+ 새 수술 추가</a>
+</div>
+
+<form class="filter-bar" method="get">
+  <input type="text" name="q" value="{{ q }}" placeholder="수술명·개요 검색">
+  <select name="category">
+    <option value="">전체 카테고리</option>
+    {% for c in categories %}
+      <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select>
+  <button>검색</button>
+</form>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th>분류</th><th>수술명</th><th>예상시간</th><th>최종수정</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in surgeries %}
+    <tr>
+      <td><span class="chip chip-{{ loop.index % 4 }}">{{ s.category }}</span></td>
+      <td><a href="{{ url_for('surgery_edit', sid=s.id) }}">{{ s.name }}</a></td>
+      <td>{{ s.expected_duration or '-' }}</td>
+      <td class="muted">{{ s.updated_at[:10] if s.updated_at else '' }}</td>
+      <td>
+        <a href="{{ url_for('surgery_edit', sid=s.id) }}">수정</a>
+        {% if current_user.role == 'admin' %}
+        <form class="inline" method="post" action="{{ url_for('surgery_delete', sid=s.id) }}"
+              onsubmit="return confirm('정말 삭제하시겠습니까?')">
+          <button class="danger">삭제</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted center">검색 결과가 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

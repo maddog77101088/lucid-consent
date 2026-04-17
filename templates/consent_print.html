@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>수술 및 입원 동의서 - {{ d.patient_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}">
+</head>
+<body class="print-body">
+
+<div class="print-toolbar no-print">
+  <button onclick="window.print()">인쇄 / PDF 저장</button>
+  <button onclick="window.close()">닫기</button>
+  <span class="muted">인쇄 대화상자에서 "PDF로 저장"을 선택하면 PDF로 저장됩니다.</span>
+</div>
+
+<article class="consent-doc">
+  {{ r.header|safe }}
+
+  <table class="info">
+    <tr><th colspan="4" class="sec">보호자</th></tr>
+    <tr><th>ID</th><td>{{ d.guardian_id }}</td><th>주민등록번호</th><td>{{ d.guardian_rrn }}</td></tr>
+    <tr><th>이름</th><td>{{ d.guardian_name }}</td><th>전화</th><td>{{ d.guardian_phone }}</td></tr>
+    <tr><th>휴대전화</th><td>{{ d.guardian_mobile }}</td><th>주소</th><td>{{ d.guardian_address }}</td></tr>
+  </table>
+
+  <table class="info">
+    <tr><th colspan="4" class="sec">동물</th></tr>
+    <tr><th>ID</th><td>{{ d.animal_id }}</td><th>RFID</th><td>{{ d.rfid }}</td></tr>
+    <tr><th>종</th><td>{{ d.species }}</td><th>품종</th><td>{{ d.breed }}</td></tr>
+    <tr><th>이름</th><td>{{ d.patient_name }}</td><th>나이 / 체중</th><td>{{ d.age }} / {{ d.weight }} kg</td></tr>
+    <tr><th>성별</th><td>{{ d.sex }}</td><th>피모색</th><td>{{ d.coat_color }}</td></tr>
+    {% if d.underlying %}
+    <tr><th>기저질환 / 복용약물</th><td colspan="3">{{ d.underlying }}</td></tr>
+    {% endif %}
+  </table>
+
+  <table class="info">
+    <tr><th colspan="2" class="sec">수술</th></tr>
+    <tr><th>수술명</th><td>{{ d.surgery_name }} <span class="muted">({{ d.surgery_category }})</span></td></tr>
+    {% if d.surgery_side and d.surgery_side != '해당없음' %}
+    <tr><th>수술 부위</th><td><strong>{{ d.surgery_side }}</strong></td></tr>
+    {% endif %}
+    <tr><th>일자·소요시간·집도의</th><td>{{ d.surgery_date }} / 예상 {{ d.expected_duration }} / 집도의 {{ d.vet_name }}</td></tr>
+  </table>
+
+  <p class="small" style="margin-top:12pt;">다음은 주치의가 작성하고 설명하며, 보호자님께 카카오톡으로 전송해드립니다.</p>
+
+  <h4>수술 방법</h4>
+  <p class="body-text">{{ d.procedure }}</p>
+
+  <h4>예상 합병증 및 예후 <span class="muted small">[공통 사항은 안내장 내용이며, 환자 특이사항은 다시 설명드립니다.]</span></h4>
+  <p class="body-text">{{ d.complications }}</p>
+
+  <h4>수술의 목적 및 기대효과</h4>
+  <p class="body-text">{{ d.purpose_effect }}</p>
+
+  <h4>예상 비용 <span class="muted small">[환자의 회복 속도에 따라 달라지며, 검사나 입원이 추가될 수 있습니다.]</span></h4>
+  <p class="body-text">{{ d.estimated_cost }}</p>
+
+  <h4>입원기간, 통원 치료 및 재진 여부, 모니터링 방법</h4>
+  <p class="body-text">{{ d.hospitalization }}</p>
+
+  <div class="check-group" style="margin-top:12pt; padding:8pt 10pt; background:#fafafa; border-left:2pt solid #888;">
+    <p><strong>Q1.</strong> 보호자님께서는 수술 및 입원 안내장에 포함된 내용을 모두 주치의를 통해 직접 설명을 듣고 동의하십니까?
+      &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
+      &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
+    <p><strong>Q2.</strong> 설명서의 내용 중 의문이 있는 부분에 대해 충분히 질문하고 설명을 들으셨습니까?
+      &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
+      &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
+    <p><strong>Q3.</strong> 집도의(수의사 <u>{{ d.vet_name }}</u>)에게 수술에 대한 설명을 듣고 대면하였습니까?
+      &nbsp; <span class="cb">☐</span> 네, 대면하였습니다.
+      &nbsp; <span class="cb">☐</span> 아니오, 대면하지 못했습니다.</p>
+  </div>
+
+  {% if d.video_qr_b64 %}
+  <div class="yt-qr-box" style="margin-top:12pt; padding:10pt 12pt; border:1.5pt solid #2563eb; border-radius:4pt; display:flex; gap:14pt; align-items:center;">
+    <img src="data:image/png;base64,{{ d.video_qr_b64 }}" style="width:110px; height:110px; flex-shrink:0;">
+    <div style="flex:1;">
+      <strong>📺 입원 전 주의사항 영상 (필수 시청)</strong>
+      <p class="small" style="margin:4pt 0 0;">위 QR 코드를 스마트폰 카메라로 스캔하여 영상을 시청하신 후, 본 동의서 '보호자의 약속' 6번에 동의해주세요.</p>
+      <p class="small" style="margin:2pt 0 0; color:#666; word-break:break-all;">{{ d.youtube_url }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if d.asa_grade %}
+  <h4>ASA 마취 위험도 분류 <span class="muted small">(American Society of Anesthesiologists)</span></h4>
+  <p class="small">미국 마취학회(ASA)에서 분류한 마취 시 위험 정도를 나타내는 등급으로, 해당 환자의 사전 검사·현 질병 상태·연령을 고려한 평가 결과 아래와 같이 선택되었습니다.</p>
+  <table class="info asa-table">
+    <tr><th style="width:10%;">ASA</th><th>정 의</th><th style="width:12%;">사망률</th><th style="width:10%;">선택</th></tr>
+    <tr><td class="center"><strong>Ⅰ</strong></td><td>정상적이고 건강한 개체</td><td class="center">0.1%</td><td class="center">{% if d.asa_grade=='I' %}☑{% else %}☐{% endif %}</td></tr>
+    <tr><td class="center"><strong>Ⅱ</strong></td><td>활동을 제한하지 않는 가벼운 전신질환</td><td class="center">1%</td><td class="center">{% if d.asa_grade=='II' %}☑{% else %}☐{% endif %}</td></tr>
+    <tr><td class="center"><strong>Ⅲ</strong></td><td>활동이 가능한 중증의 전신적 질환</td><td class="center">10%</td><td class="center">{% if d.asa_grade=='III' %}☑{% else %}☐{% endif %}</td></tr>
+    <tr><td class="center"><strong>Ⅳ</strong></td><td>지속적으로 생명을 위협하며, 활동이 불가능한 전신적 질환</td><td class="center">30%</td><td class="center">{% if d.asa_grade=='IV' %}☑{% else %}☐{% endif %}</td></tr>
+    <tr><td class="center"><strong>Ⅴ</strong></td><td>수술과 관계없이 24시간 이내에 사망할 수 있는 빈사상태</td><td class="center">50%</td><td class="center">{% if d.asa_grade=='V' %}☑{% else %}☐{% endif %}</td></tr>
+  </table>
+  <p class="small" style="background:#fff3cd; padding:6pt 8pt; border-left:2pt solid #d97706; margin-top:6pt;">
+    본 환자의 ASA 등급은 <strong>Ⅰ~Ⅴ 중 {{ d.asa_grade }}등급</strong>이며, 해당 등급의 평균 마취 관련 사망률은 위 표와 같습니다. 최선의 마취 관리에도 불구하고 개별 환자 상태에 따라 실제 위험은 달라질 수 있습니다.
+  </p>
+  {% endif %}
+
+  {% if d.extra_note %}
+  <h4>개별 특이사항 / 추가 설명</h4>
+  <p class="body-text">{{ d.extra_note }}</p>
+  {% endif %}
+
+  <div class="body-text">{{ r.disclaimer|safe }}</div>
+  <div class="body-text">{{ r.footer|safe }}</div>
+
+  <div class="footer-small muted">
+    {{ hospital_name }} · 문서작성일시 {{ d.created_at }} · 집도의 {{ d.vet_name }}
+  </div>
+</article>
+
+</body>
+</html>

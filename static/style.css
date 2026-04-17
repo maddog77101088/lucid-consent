@@ -1,0 +1,238 @@
+/* ==============================
+   루시드 수술동의서 시스템 스타일
+   ============================== */
+:root {
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --bg: #f9fafb;
+  --card: #ffffff;
+  --border: #e5e7eb;
+  --danger: #dc2626;
+  --success: #059669;
+  --warning: #d97706;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Apple SD Gothic Neo", "Malgun Gothic", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+h1 { font-size: 22px; margin: 0 0 16px; }
+h2 { font-size: 17px; margin: 0 0 12px; color: var(--text); }
+h3 { font-size: 15px; margin: 16px 0 8px; }
+h4 { font-size: 14px; margin: 12px 0 4px; color: #374151; }
+
+.muted { color: var(--muted); font-size: 13px; }
+.center { text-align: center; }
+
+/* ---------- 상단바 ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  background: #0f172a;
+  color: #fff;
+}
+.topbar .logo a { color: #fff; line-height: 1.2; }
+.topbar .logo strong { font-size: 15px; }
+.topbar .logo span { font-size: 11px; color: #9ca3af; }
+.topbar nav { flex: 1; display: flex; gap: 20px; }
+.topbar nav a { color: #cbd5e1; font-size: 14px; }
+.topbar nav a:hover { color: #fff; text-decoration: none; }
+.topbar .userbox { font-size: 13px; color: #cbd5e1; }
+.topbar .userbox a { color: #fca5a5; margin-left: 12px; }
+
+/* ---------- 레이아웃 ---------- */
+.container {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 20px;
+}
+.container.center {
+  display: flex; justify-content: center; align-items: center;
+  min-height: 100vh; margin: 0;
+}
+
+/* ---------- 카드 ---------- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.login-card { max-width: 360px; width: 100%; text-align: center; }
+.login-card h1 { margin: 0; color: var(--primary); }
+.login-card h2 { color: var(--muted); margin: 4px 0 24px; font-weight: 400; }
+
+/* ---------- 대시보드 ---------- */
+.grid-2 {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+.big-action {
+  display: flex; gap: 20px; align-items: flex-start;
+  padding: 28px; border-left: 4px solid var(--primary);
+  color: var(--text);
+}
+.big-action:hover { background: #f3f4f6; text-decoration: none; }
+.big-action .big-icon { font-size: 40px; color: var(--primary); line-height: 1; }
+.big-action h2 { margin: 0 0 6px; }
+.big-action p { margin: 0; color: var(--muted); }
+
+/* ---------- 폼 ---------- */
+.form-stack label {
+  display: block; margin-bottom: 14px; font-size: 13px; color: #374151;
+}
+.form-stack input,
+.form-stack select,
+.form-stack textarea {
+  width: 100%; display: block; margin-top: 4px;
+  padding: 8px 10px; font-size: 14px;
+  border: 1px solid var(--border); border-radius: 6px;
+  font-family: inherit; background: #fff;
+}
+.form-stack textarea {
+  resize: vertical;
+  overflow: hidden;   /* auto-resize JS가 높이 조절 — 기본 스크롤 숨김 */
+  min-height: 70px;
+}
+.form-stack input:focus,
+.form-stack select:focus,
+.form-stack textarea:focus {
+  outline: none; border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.15);
+}
+
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+/* ---------- 버튼 ---------- */
+button, .btn-primary, .btn-ghost {
+  padding: 9px 18px; font-size: 14px; cursor: pointer;
+  border-radius: 6px; border: 1px solid transparent;
+  font-family: inherit;
+}
+button { background: #e5e7eb; color: #111; border-color: #d1d5db; }
+button:hover { background: #d1d5db; }
+button.danger { background: #fee2e2; color: var(--danger); border-color: #fecaca; }
+button.danger:hover { background: #fecaca; }
+
+.btn-primary {
+  background: var(--primary); color: #fff; border-color: var(--primary);
+}
+.btn-primary:hover { background: var(--primary-dark); border-color: var(--primary-dark); }
+.btn-ghost { background: #fff; color: var(--text); border-color: var(--border); }
+.btn-ghost:hover { background: #f3f4f6; }
+
+.actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.actions.left { justify-content: flex-start; }
+form.inline { display: inline-block; margin: 0; }
+form.inline input { display: inline-block; width: auto; margin-right: 4px; }
+
+/* ---------- 테이블 ---------- */
+table.data {
+  width: 100%; border-collapse: collapse; background: #fff;
+  border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+}
+table.data th, table.data td {
+  padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+table.data th {
+  background: #f3f4f6; font-weight: 600; color: #374151;
+}
+table.data tr:last-child td { border-bottom: none; }
+
+.chip {
+  display: inline-block; padding: 2px 8px; font-size: 11px; border-radius: 10px;
+  background: #e0e7ff; color: #3730a3;
+}
+.chip-1 { background: #dcfce7; color: #166534; }
+.chip-2 { background: #fef3c7; color: #92400e; }
+.chip-3 { background: #fee2e2; color: #991b1b; }
+
+/* ---------- 기타 ---------- */
+.page-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.filter-bar { display: flex; gap: 10px; margin-bottom: 12px; }
+.filter-bar input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+.filter-bar select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; }
+
+.flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; font-size: 13px; }
+.flash-ok { background: #d1fae5; color: #065f46; }
+.flash-error { background: #fee2e2; color: #991b1b; }
+.flash-message { background: #dbeafe; color: #1e3a8a; }
+
+code { background: #f3f4f6; padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+
+/* ---------- 인쇄 미리보기 ---------- */
+.print-toolbar {
+  position: sticky; top: 0; z-index: 10;
+  padding: 10px 20px; background: #1f2937; color: #fff;
+  display: flex; gap: 10px; align-items: center;
+}
+.print-toolbar button {
+  background: var(--primary); color: #fff; border: none;
+}
+.print-toolbar .muted { color: #cbd5e1; }
+
+.consent-doc {
+  max-width: 210mm; margin: 20px auto; padding: 20mm;
+  background: #fff; border: 1px solid var(--border);
+  font-size: 11pt; line-height: 1.6; color: #111;
+}
+.consent-doc h3 {
+  margin-top: 14pt; padding-bottom: 3pt;
+  border-bottom: 1.5pt solid #333; font-size: 13pt;
+}
+.consent-doc h4 { margin-top: 10pt; font-size: 11.5pt; }
+.consent-doc .body-text { white-space: pre-wrap; }
+.consent-doc table.info {
+  width: 100%; border-collapse: collapse; margin: 4pt 0 8pt;
+  font-size: 10.5pt;
+}
+.consent-doc table.info th, .consent-doc table.info td {
+  border: 1pt solid #888; padding: 5pt 8pt; text-align: left;
+}
+.consent-doc table.info th {
+  background: #f3f4f6; width: 18%; font-weight: 600;
+}
+.consent-doc ol { padding-left: 20pt; }
+.consent-doc ol li { margin-bottom: 4pt; }
+
+/* 루시드 양식 체크박스 / 섹션 헤더 */
+.consent-doc .cb {
+  display: inline-block; width: 11pt; height: 11pt;
+  border: 1pt solid #333; margin-right: 2pt;
+  vertical-align: middle; text-align: center; line-height: 10pt;
+  font-size: 8pt;
+}
+.consent-doc .check-group p { margin: 3pt 0; }
+.consent-doc .consent-items p { margin: 4pt 0; }
+.consent-doc .promise-list li { margin-bottom: 6pt; }
+.consent-doc .notice-list li { margin-bottom: 4pt; }
+.consent-doc .small { font-size: 9.5pt; color: #555; }
+.consent-doc .legal {
+  font-size: 10pt; line-height: 1.7; background: #fafafa;
+  padding: 8pt 10pt; border-left: 2pt solid #888;
+}
+.consent-doc table.info th.sec {
+  background: #e5e7eb; text-align: center; font-size: 11pt;
+}
+.consent-doc .asa-table th { background: #f9fafb; text-align: center; width: auto; }
+.consent-doc .asa-table td.center { text-align: center; width: auto; }
+.consent-doc .asa-table td { vertical-align: middle; }
+.footer-small { margin-top: 10pt; text-align: right; font-size: 9pt; }

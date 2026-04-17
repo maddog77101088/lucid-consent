@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}로그인 | {{ hospital_short }}{% endblock %}
+{% block main_class %}center{% endblock %}
+{% block content %}
+<div class="card login-card">
+  <h1>{{ hospital_short }}</h1>
+  <h2>수술동의서 시스템</h2>
+  <form method="post">
+    <label>아이디
+      <input name="username" autofocus required>
+    </label>
+    <label>비밀번호
+      <input name="password" type="password" required>
+    </label>
+    <button class="btn-primary" type="submit">로그인</button>
+  </form>
+  <p class="muted">계정 문의: 관리자(설원장)에게 요청해주세요.</p>
+</div>
+{% endblock %}

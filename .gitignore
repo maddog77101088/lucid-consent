@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.venv/
+data/*.db
+.DS_Store
+.env
+# .env.example 은 포함 (.env 는 제외 — 실제 API 키 보호)

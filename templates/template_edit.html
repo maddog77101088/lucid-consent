@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>병원 기본양식 편집</h1>
+<p class="muted">동의서 상단·본문·하단에 자동으로 들어가는 공통 문구입니다. HTML 태그 사용 가능.
+업로드해주신 기존 수술동의서 문구를 그대로 붙여넣으시면 됩니다.</p>
+<form method="post" class="form-stack">
+  <label>상단(병원명·서두)
+    <textarea name="header_html" rows="6">{{ tpl.header_html }}</textarea>
+  </label>
+  <label>공통 동의 본문 / 면책조항
+    <textarea name="disclaimer_html" rows="14">{{ tpl.disclaimer_html }}</textarea>
+  </label>
+  <label>하단 안내 / 서명란 위 문구
+    <textarea name="footer_html" rows="4">{{ tpl.footer_html }}</textarea>
+  </label>
+  <label>입원전 주의사항 영상 URL <span class="muted">(YouTube 링크. 입력 시 인쇄 동의서 중간에 QR 코드가 자동 삽입됨)</span>
+    <input type="url" name="youtube_url" placeholder="https://youtu.be/xxxxxxxxxxx" value="{{ tpl.youtube_url or '' }}">
+  </label>
+  <div class="actions">
+    <button class="btn-primary" type="submit">저장</button>
+  </div>
+</form>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ '수술 수정' if surgery else '새 수술 추가' }}</h1>
+<p class="muted">각 항목은 동의서 작성 시 기본값으로 불러와지며, 환자별로 수정 가능합니다.</p>
+<form method="post" class="form-stack">
+  <div class="row-2">
+    <label>수술명 *
+      <input name="name" required value="{{ surgery.name if surgery else '' }}">
+    </label>
+    <label>분류 *
+      <select name="category" required>
+        {% for c in categories %}
+          <option value="{{ c }}" {% if surgery and surgery.category == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+  <label>수술 방법
+    <textarea name="procedure" rows="3">{{ surgery.procedure if surgery else '' }}</textarea>
+  </label>
+  <label>예상 합병증 및 예후
+    <textarea name="complications" rows="4">{{ surgery.complications if surgery else '' }}</textarea>
+  </label>
+  <label>수술의 목적 및 기대효과
+    <textarea name="purpose_effect" rows="3">{{ surgery.purpose_effect if surgery else '' }}</textarea>
+  </label>
+  <label>예상 비용
+    <textarea name="estimated_cost" rows="2">{{ surgery.estimated_cost if surgery else '' }}</textarea>
+  </label>
+  <label>입원기간, 통원치료 및 재진 여부, 모니터링 방법
+    <textarea name="hospitalization" rows="3">{{ surgery.hospitalization if surgery else '' }}</textarea>
+  </label>
+  <div class="row-2">
+    <label>마취 관련 위험 (원내 참고용)
+      <textarea name="anesthesia_risk" rows="3">{{ surgery.anesthesia_risk if surgery else '' }}</textarea>
+    </label>
+    <label>예상 소요시간
+      <input name="expected_duration" value="{{ surgery.expected_duration if surgery else '' }}">
+    </label>
+  </div>
+  <label>비고
+    <input name="notes" value="{{ surgery.notes if surgery else '' }}">
+  </label>
+  <div class="actions">
+    <a class="btn-ghost" href="{{ url_for('surgery_list') }}">취소</a>
+    <button class="btn-primary" type="submit">저장</button>
+  </div>
+</form>
+{% endblock %}

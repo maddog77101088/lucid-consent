@@ -1,0 +1,12 @@
+/* 인쇄 전용 스타일 */
+@media print {
+  @page { size: A4; margin: 15mm; }
+  .no-print { display: none !important; }
+  body.print-body { background: #fff !important; margin: 0; }
+  .consent-doc {
+    max-width: 100%; margin: 0; padding: 0;
+    border: none; box-shadow: none;
+  }
+  .consent-doc h3 { page-break-after: avoid; }
+  .sign-box { page-break-inside: avoid; }
+}

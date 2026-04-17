@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: lucid-consent
+    env: python
+    # 영속 디스크(disk)를 쓰려면 starter 이상 필요. (월 $7 + 디스크 1GB $1 ≈ 월 $8)
+    plan: starter
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    healthCheckPath: /login
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DB_PATH
+        value: /var/data/lucid.db
+      - key: FLASK_DEBUG
+        value: "0"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      # ANTHROPIC_API_KEY 는 Render 대시보드에서 직접 등록 (sync: false)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+    disk:
+      name: data
+      mountPath: /var/data
+      sizeGB: 1

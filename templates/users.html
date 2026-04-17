@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>사용자 관리</h1>
+
+<section class="card">
+  <h2>현재 사용자</h2>
+  <table class="data">
+    <thead>
+      <tr><th>아이디</th><th>이름</th><th>역할</th><th>상태</th><th>가입일</th><th>비밀번호 재설정 (10자+, 3종 조합)</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td><code>{{ u.username }}</code></td>
+        <td>{{ u.display_name }}</td>
+        <td>{{ '관리자' if u.role == 'admin' else '수의사' }}</td>
+        <td>{% if u.must_change_password %}<span style="color:#c00;">변경 필요</span>{% else %}<span class="muted">정상</span>{% endif %}</td>
+        <td class="muted">{{ u.created_at[:10] }}</td>
+        <td>
+          <form method="post" class="inline">
+            <input type="hidden" name="action" value="reset_pw">
+            <input type="hidden" name="user_id" value="{{ u.id }}">
+            <input name="password" type="password" placeholder="새 비밀번호" minlength="10" required>
+            <button>재설정</button>
+          </form>
+        </td>
+        <td>
+          {% if u.id != current_user.id %}
+          <form method="post" class="inline" onsubmit="return confirm('삭제하시겠습니까?')">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="user_id" value="{{ u.id }}">
+            <button class="danger">삭제</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>새 사용자 추가</h2>
+  <form method="post" class="form-stack">
+    <input type="hidden" name="action" value="add">
+    <div class="row-2">
+      <label>아이디<input name="username" required></label>
+      <label>이름(표시명)<input name="display_name" required></label>
+    </div>
+    <div class="row-2">
+      <label>임시 비밀번호 (최소 10자, 영문대/소·숫자·특수문자 중 3종 조합)
+        <input name="password" type="password" minlength="10" required></label>
+      <label>역할
+        <select name="role">
+          <option value="vet">수의사</option>
+          <option value="admin">관리자</option>
+        </select>
+      </label>
+    </div>
+    <p class="muted" style="font-size:0.9em;">새 사용자는 첫 로그인 시 비밀번호를 직접 변경하게 됩니다.</p>
+    <div class="actions">
+      <button class="btn-primary" type="submit">추가</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{% block title %}{{ hospital_short }} 수술동의서 시스템{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+{% if current_user.id %}
+<header class="topbar no-print">
+  <div class="logo">
+    <a href="{{ url_for('dashboard') }}">
+      <strong>{{ hospital_short }}</strong><br>
+      <span>수술동의서 시스템</span>
+    </a>
+  </div>
+  <nav>
+    <a href="{{ url_for('consent_new') }}">+ 동의서 작성</a>
+    <a href="{{ url_for('surgery_list') }}">수술 DB</a>
+    {% if current_user.role == 'admin' %}
+      <a href="{{ url_for('template_edit') }}">기본양식 편집</a>
+      <a href="{{ url_for('users') }}">사용자 관리</a>
+    {% endif %}
+  </nav>
+  <div class="userbox">
+    <span>{{ current_user.name }}{% if current_user.role == 'admin' %} (관리자){% endif %}</span>
+    <a href="{{ url_for('change_password') }}">비밀번호 변경</a>
+    <a href="{{ url_for('logout') }}">로그아웃</a>
+  </div>
+</header>
+{% endif %}
+
+<main class="container {% block main_class %}{% endblock %}">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div class="flash flash-{{ cat }} no-print">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</main>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

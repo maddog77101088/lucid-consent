@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>대시보드</h1>
+<div class="grid-2">
+  <a class="card big-action" href="{{ url_for('consent_new') }}">
+    <div class="big-icon">＋</div>
+    <div>
+      <h2>새 수술동의서 작성</h2>
+      <p>환자·보호자 정보를 입력하고, 수술을 선택하면 기본양식과 DB 내용이 자동으로 채워집니다.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('surgery_list') }}">
+    <div class="big-icon">🗂</div>
+    <div>
+      <h2>수술 DB 관리</h2>
+      <p>현재 등록된 수술: <strong>{{ total }}건</strong><br>
+      카테고리별: {% for c in categories %}{{ c }} {{ counts[c] }}건{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    </div>
+  </a>
+</div>
+{% endblock %}
