@@ -181,4 +181,81 @@
   .consent-doc .promise-list,
   .consent-doc .notice-list,
   .consent-doc .consent-items { margin: 0 !important; }
+
+  /* ===== 확장 모드 (body.expand-print) =====
+     페이지에 여유가 남을 때 켜면 전체 스페이싱을 넉넉하게 키워 읽기 편하게 */
+  body.expand-print .consent-doc {
+    font-size: 10.5pt !important;
+    line-height: 1.45 !important;
+  }
+  body.expand-print .consent-doc h1 { font-size: 16pt !important; margin: 0 0 4pt !important; }
+  body.expand-print .consent-doc h2 { font-size: 13pt !important; margin: 6pt 0 4pt !important; }
+  body.expand-print .consent-doc h3 { font-size: 12.5pt !important; margin: 7pt 0 3pt !important; padding-bottom: 2pt !important; border-bottom-width: 1pt !important; }
+  body.expand-print .consent-doc h4 { font-size: 11pt !important; margin: 6pt 0 2pt !important; }
+  body.expand-print .consent-doc p { margin: 2pt 0 !important; }
+  body.expand-print .consent-doc .body-text { margin: 2pt 0 6pt !important; line-height: 1.45 !important; }
+  body.expand-print .consent-doc table.info {
+    margin: 4pt 0 8pt !important;
+    font-size: 10pt !important;
+  }
+  body.expand-print .consent-doc table.info th,
+  body.expand-print .consent-doc table.info td {
+    padding: 4pt 7pt !important;
+    line-height: 1.35 !important;
+    border-width: 0.8pt !important;
+  }
+  body.expand-print .consent-doc table.info th.sec {
+    font-size: 11pt !important;
+    padding: 4pt 6pt !important;
+  }
+  body.expand-print .consent-doc ol { padding-left: 18pt !important; margin: 2pt 0 !important; }
+  body.expand-print .consent-doc ol li,
+  body.expand-print .consent-doc .promise-list li,
+  body.expand-print .consent-doc .notice-list li {
+    font-size: 10pt !important;
+    line-height: 1.45 !important;
+    margin-bottom: 3pt !important;
+  }
+  body.expand-print .consent-doc .check-group {
+    padding: 6pt 10pt !important; margin-top: 6pt !important;
+  }
+  body.expand-print .consent-doc .check-group p {
+    font-size: 10pt !important; line-height: 1.4 !important;
+    margin: 3pt 0 !important;
+  }
+  body.expand-print .consent-doc .consent-items p {
+    font-size: 10pt !important; line-height: 1.4 !important;
+    margin: 3pt 0 !important;
+  }
+  body.expand-print .consent-doc .html-block h4 {
+    font-size: 11pt !important; margin: 6pt 0 3pt !important;
+  }
+  body.expand-print .consent-doc .html-block p {
+    font-size: 10pt !important; line-height: 1.45 !important;
+    margin: 2pt 0 !important;
+  }
+  body.expand-print .consent-doc .small {
+    font-size: 9pt !important; line-height: 1.4 !important;
+    margin: 2pt 0 !important;
+  }
+  body.expand-print .consent-doc .legal {
+    font-size: 9pt !important; line-height: 1.45 !important;
+    padding: 8pt 10pt !important; margin-top: 8pt !important;
+  }
+  body.expand-print .consent-doc .asa-table { font-size: 10pt !important; }
+  body.expand-print .consent-doc .asa-table th,
+  body.expand-print .consent-doc .asa-table td { padding: 3pt 5pt !important; }
+  body.expand-print .consent-doc .yt-qr-box {
+    padding: 8pt 10pt !important; margin-top: 8pt !important; gap: 12pt !important;
+  }
+  body.expand-print .consent-doc .yt-qr-box img {
+    width: 90pt !important; height: 90pt !important;
+  }
+  body.expand-print .consent-doc .cb {
+    width: 10pt !important; height: 10pt !important;
+    font-size: 8pt !important; line-height: 9pt !important;
+  }
+  body.expand-print .consent-doc .sign-date,
+  body.expand-print .consent-doc .sign-target { margin-top: 10pt !important; font-size: 11pt !important; }
+  body.expand-print .footer-small { margin-top: 8pt !important; font-size: 9pt !important; }
 }
