@@ -75,9 +75,31 @@ h4 { font-size: 14px; margin: 12px 0 4px; color: #374151; }
   margin-bottom: 16px;
 }
 
-.login-card { max-width: 360px; width: 100%; text-align: center; }
+.login-card { max-width: 720px; width: 100%; text-align: center; }
 .login-card h1 { margin: 0; color: var(--primary); }
 .login-card h2 { color: var(--muted); margin: 4px 0 24px; font-weight: 400; }
+.login-card form {
+  display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px;
+  align-items: end; text-align: left;
+}
+.login-card label {
+  display: block; font-size: 13px; color: #374151; font-weight: 600;
+  margin: 0;
+}
+.login-card label input {
+  display: block; width: 100%; margin-top: 4px;
+  padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 4px;
+  font-size: 14px; box-sizing: border-box;
+}
+.login-card button {
+  padding: 8px 22px; font-size: 14px; height: 38px; white-space: nowrap;
+}
+.login-card .muted { margin-top: 14px; font-size: 12px; }
+
+@media (max-width: 540px) {
+  .login-card form { grid-template-columns: 1fr; }
+  .login-card button { width: 100%; }
+}
 
 /* ---------- 대시보드 ---------- */
 .grid-2 {
