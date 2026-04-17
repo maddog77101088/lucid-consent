@@ -84,46 +84,34 @@
       <legend style="font-weight:600;padding:0 6pt;">검사 종류 (복수 선택 가능) *</legend>
       <div class="row-3">
         <label style="display:flex;align-items:center;gap:6pt;">
-          <input type="checkbox" name="imaging_modalities" value="CT"> CT
+          <input type="checkbox" name="imaging_modalities" value="CT(조영)"> CT(조영)
         </label>
         <label style="display:flex;align-items:center;gap:6pt;">
-          <input type="checkbox" name="imaging_modalities" value="MRI"> MRI
+          <input type="checkbox" name="imaging_modalities" value="MRI(조영)"> MRI(조영)
         </label>
         <label style="display:flex;align-items:center;gap:6pt;">
-          <input type="checkbox" name="imaging_modalities" value="초음파"> 초음파(함께)
+          <input type="checkbox" name="imaging_modalities" value="초음파"> 초음파
+        </label>
+      </div>
+      <div class="row-3">
+        <label style="display:flex;align-items:center;gap:6pt;">
+          <input type="checkbox" name="imaging_modalities" value="뇌척수액검사"> 뇌척수액검사
+        </label>
+        <label style="display:flex;align-items:center;gap:6pt;">
+          <input type="checkbox" name="imaging_modalities" value="정형CT(비조영)"> 정형CT(비조영)
+        </label>
+        <label style="display:flex;align-items:center;gap:6pt;">
+          <input type="checkbox" name="imaging_modalities" value="CT(림프관조영술)"> CT(림프관조영술)
         </label>
       </div>
     </fieldset>
 
     <div class="row-2">
-      <label>검사명 (선택 — DB 참조 또는 직접 입력)
-        <input type="text" name="exam_name" id="exam_name" list="exam-datalist"
-               placeholder="예: 복부 CT, 뇌 MRI, 척추 MRI" autocomplete="off">
-        <datalist id="exam-datalist">
-          {% for e in exams %}
-          <option value="{{ e.name }}">{{ e.category }} · {{ e.modality }}</option>
-          {% endfor %}
-        </datalist>
+      <label>검사일
+        <input name="exam_date" type="date" value="{{ today }}">
       </label>
-      <label>검사 부위 / 방향
-        <select name="exam_side">
-          <option value="해당없음">해당없음</option>
-          <option value="좌측">좌측 (Left)</option>
-          <option value="우측">우측 (Right)</option>
-          <option value="양측">양측 (Bilateral)</option>
-        </select>
-      </label>
-    </div>
-
-    <div class="row-2">
-      <label>검사 예정일
-        <input name="exam_date" type="date">
-      </label>
-      <label>분류 (선택)
-        <select name="exam_category">
-          <option value="">-- 미선택 --</option>
-          {% for c in img_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
-        </select>
+      <label>예상 비용
+        <input name="estimated_cost" placeholder="예: 60~120만원 (조영제·마취 포함)">
       </label>
     </div>
 

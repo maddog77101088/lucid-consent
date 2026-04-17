@@ -1169,6 +1169,7 @@ CONSENT_IMG_FIELDS = [
     # 영상 촬영 마취 동의서 필드 (본문은 고정, 입력만 받음)
     "imaging_modalities",     # "CT", "MRI", "CT,MRI" 등 체크박스 결합
     "exam_name","exam_category","exam_side","exam_date","vet_name",
+    "estimated_cost",
     "asa_grade","extra_note",
 ]
 
@@ -1179,7 +1180,8 @@ def imaging_consent_new():
     exams = get_db().execute("SELECT id,name,category,modality FROM imaging_exams ORDER BY category,name").fetchall()
     return render_template("imaging_new.html", exams=exams,
                            img_categories=IMG_CATEGORIES,
-                           vet_name=session.get("display_name",""))
+                           vet_name=session.get("display_name",""),
+                           today=datetime.now().strftime("%Y-%m-%d"))
 
 
 @app.route("/imaging/consent/preview", methods=["POST"])
