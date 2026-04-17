@@ -17,8 +17,10 @@
   </div>
   <nav>
     <a href="{{ url_for('consent_new') }}">+ 동의서 작성</a>
+    <a href="{{ url_for('imaging_consent_new') }}">+ 영상 촬영 마취 동의서</a>
     <a href="{{ url_for('surgery_list') }}">수술 DB</a>
     <a href="{{ url_for('hospitalization_list') }}">입원 DB</a>
+    <a href="{{ url_for('imaging_list') }}">영상검사 DB</a>
     {% if current_user.role == 'admin' %}
       <a href="{{ url_for('template_edit') }}">기본양식 편집</a>
       <a href="{{ url_for('users') }}">사용자 관리</a>

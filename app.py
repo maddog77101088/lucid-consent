@@ -114,6 +114,22 @@ def init_db():
             notes TEXT,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS imaging_exams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL,
+            modality TEXT,             -- "CT" / "MRI" / "CT,MRI"
+            purpose_effect TEXT,
+            procedure TEXT,
+            complications TEXT,
+            contrast_type TEXT,        -- "Iodine" / "Gadolinium" / "비사용"
+            sedation_note TEXT,
+            post_care TEXT,
+            expected_duration TEXT,
+            estimated_cost TEXT,
+            notes TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
         CREATE TABLE IF NOT EXISTS hospital_template (
             id INTEGER PRIMARY KEY CHECK (id = 1),
             header_html TEXT, disclaimer_html TEXT, footer_html TEXT,
@@ -164,6 +180,21 @@ def init_db():
                 (s["name"], s["category"], s.get("purpose_effect"), s.get("procedure"),
                  s.get("complications"), s.get("anesthesia_risk"), s.get("estimated_cost"),
                  s.get("hospitalization"), s.get("expected_duration"), s.get("notes")))
+    cur.execute("SELECT COUNT(*) FROM imaging_exams")
+    if cur.fetchone()[0] == 0:
+        try:
+            from seed_data import SEED_IMAGING
+        except ImportError:
+            SEED_IMAGING = []
+        for s in SEED_IMAGING:
+            cur.execute("""INSERT INTO imaging_exams
+                (name,category,modality,purpose_effect,procedure,complications,
+                 contrast_type,sedation_note,post_care,expected_duration,estimated_cost,notes)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (s["name"], s["category"], s.get("modality","CT"),
+                 s.get("purpose_effect"), s.get("procedure"), s.get("complications"),
+                 s.get("contrast_type"), s.get("sedation_note"), s.get("post_care"),
+                 s.get("expected_duration"), s.get("estimated_cost"), s.get("notes")))
     con.commit()
     con.close()
 
@@ -926,6 +957,256 @@ def api_hospitalization_ai_generate():
         return jsonify({"error": f"AI 응답 파싱 실패: {e}. 원문: {text[:400]}"}), 500
     except Exception as e:
         return jsonify({"error": f"AI 요청 실패: {e}"}), 500
+
+
+# ===================== 영상검사 DB (imaging_exams) =====================
+
+IMG_CATEGORIES = ["신경", "복부", "흉부", "근골격", "치과", "종양", "혈관", "기타"]
+IMG_FIELDS = ["name","category","modality","purpose_effect","procedure","complications",
+              "contrast_type","sedation_note","post_care",
+              "expected_duration","estimated_cost","notes"]
+
+
+@app.route("/imaging")
+@login_required
+def imaging_list():
+    q = request.args.get("q","").strip()
+    category = request.args.get("category","").strip()
+    sql = "SELECT * FROM imaging_exams WHERE 1=1"; params = []
+    if q: sql += " AND (name LIKE ? OR purpose_effect LIKE ?)"; params += [f"%{q}%", f"%{q}%"]
+    if category: sql += " AND category = ?"; params.append(category)
+    sql += " ORDER BY category, name"
+    rows = get_db().execute(sql, params).fetchall()
+    return render_template("imaging_list.html", items=rows, q=q, category=category,
+                           img_categories=IMG_CATEGORIES)
+
+
+def _form_to_img():
+    return {k: request.form.get(k,"").strip() for k in IMG_FIELDS}
+
+
+@app.route("/imaging/new", methods=["GET","POST"])
+@login_required
+def imaging_new_exam():
+    if request.method == "POST":
+        d = _form_to_img()
+        try:
+            get_db().execute("""INSERT INTO imaging_exams
+                (name,category,modality,purpose_effect,procedure,complications,
+                 contrast_type,sedation_note,post_care,expected_duration,estimated_cost,notes)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                tuple(d[k] for k in IMG_FIELDS))
+            get_db().commit()
+            flash("영상검사가 DB에 추가되었습니다.", "ok")
+            return redirect(url_for("imaging_list"))
+        except sqlite3.IntegrityError:
+            flash("이미 같은 이름의 영상검사가 있습니다.", "error")
+    return render_template("imaging_edit.html", item=None,
+                           img_categories=IMG_CATEGORIES)
+
+
+@app.route("/imaging/<int:iid>/edit", methods=["GET","POST"])
+@login_required
+def imaging_edit(iid):
+    db = get_db()
+    row = db.execute("SELECT * FROM imaging_exams WHERE id=?", (iid,)).fetchone()
+    if not row: abort(404)
+    if request.method == "POST":
+        d = _form_to_img()
+        db.execute("""UPDATE imaging_exams SET name=?,category=?,modality=?,purpose_effect=?,
+            procedure=?,complications=?,contrast_type=?,sedation_note=?,post_care=?,
+            expected_duration=?,estimated_cost=?,notes=?,updated_at=datetime('now')
+            WHERE id=?""",
+            tuple(d[k] for k in IMG_FIELDS) + (iid,))
+        db.commit()
+        flash("수정되었습니다.", "ok")
+        return redirect(url_for("imaging_list"))
+    return render_template("imaging_edit.html", item=row,
+                           img_categories=IMG_CATEGORIES)
+
+
+@app.route("/imaging/<int:iid>/delete", methods=["POST"])
+@login_required
+@admin_required
+def imaging_delete(iid):
+    get_db().execute("DELETE FROM imaging_exams WHERE id=?", (iid,))
+    get_db().commit()
+    flash("삭제되었습니다.", "ok")
+    return redirect(url_for("imaging_list"))
+
+
+@app.route("/api/imaging/<int:iid>")
+@login_required
+def api_imaging_detail(iid):
+    row = get_db().execute("SELECT * FROM imaging_exams WHERE id=?", (iid,)).fetchone()
+    if not row: return jsonify({"error":"not found"}), 404
+    return jsonify(dict(row))
+
+
+@app.route("/api/imaging/quick-add", methods=["POST"])
+@login_required
+def api_imaging_quick_add():
+    """영상검사 upsert."""
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    if not name: return jsonify({"error":"검사명 필수"}), 400
+    db = get_db()
+    existing = db.execute("SELECT id FROM imaging_exams WHERE name=?", (name,)).fetchone()
+    if existing:
+        db.execute("""UPDATE imaging_exams SET category=?, modality=?, purpose_effect=?,
+            procedure=?, complications=?, contrast_type=?, sedation_note=?, post_care=?,
+            expected_duration=?, estimated_cost=?, notes=?, updated_at=datetime('now')
+            WHERE id=?""",
+            (data.get("category") or "기타", data.get("modality") or "CT",
+             data.get("purpose_effect",""), data.get("procedure",""),
+             data.get("complications",""), data.get("contrast_type",""),
+             data.get("sedation_note",""), data.get("post_care",""),
+             data.get("expected_duration",""), data.get("estimated_cost",""),
+             data.get("notes","AI 자동채움으로 업데이트됨"),
+             existing["id"]))
+        db.commit()
+        return jsonify({"id": existing["id"], "existed": True, "updated": True})
+    cur = db.execute("""INSERT INTO imaging_exams
+        (name,category,modality,purpose_effect,procedure,complications,
+         contrast_type,sedation_note,post_care,expected_duration,estimated_cost,notes)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (name, data.get("category") or "기타", data.get("modality") or "CT",
+         data.get("purpose_effect",""), data.get("procedure",""),
+         data.get("complications",""), data.get("contrast_type",""),
+         data.get("sedation_note",""), data.get("post_care",""),
+         data.get("expected_duration",""), data.get("estimated_cost",""),
+         data.get("notes","AI 자동채움으로 추가됨")))
+    db.commit()
+    return jsonify({"id": cur.lastrowid, "existed": False, "updated": False})
+
+
+IMG_AI_SYSTEM_PROMPT = """당신은 한국의 동물병원(소동물 수의학) 전문가입니다. 주어진 '영상검사(CT/MRI 등)'에 대해 보호자에게 설명할 동의서 내용을 작성합니다.
+
+**검색 절차**:
+1. web_search로 해당 검사의 일반적 마취 위험, 조영제 부작용 빈도, 소요시간, 비용(수의영상학 기준)을 찾으세요.
+2. 수치가 있으면 반드시 포함하세요.
+
+**출력 규칙** (매우 중요):
+- 검색·추론이 끝나면 **최종 출력은 순수 JSON 객체 하나만**입니다.
+- 서두 문장·요약·마크다운·코드블록·설명·이모지 등을 포함하지 마세요.
+- 첫 문자는 반드시 '{' 이어야 하고, 마지막 문자는 '}' 이어야 합니다.
+- JSON 내부 텍스트에 줄바꿈이 필요하면 \\n 이스케이프를 쓰세요.
+
+**JSON 필드**:
+- modality: "CT" / "MRI" / "CT,MRI" 중 하나
+- purpose_effect: 검사의 목적·기대효과 (무엇을 평가하고 왜 하는지)
+- procedure: 검사 방법 (마취·조영제 사용·소요시간·자세)
+- complications: 예상 합병증 및 리스크. 마취 위험, 조영제 부작용, 방사선 피폭(CT) 또는 자기장 관련 금기(MRI, 체내 금속 이식물)
+- contrast_type: "Iodine" (CT 조영) / "Gadolinium" (MRI 조영) / "비사용" / "선택적"
+- sedation_note: 진정·마취 관련 주의사항 (금식 시간·사전 검사 필요성)
+- post_care: 검사 후 주의사항 (마취 회복, 조영제 배출을 위한 수분 섭취 등)
+- expected_duration: 예시 "15~30분", "30~60분"
+- estimated_cost: 대한민국 원화 범위 (예: "60~120만원")
+- category: "신경" / "복부" / "흉부" / "근골격" / "치과" / "종양" / "혈관" / "기타" 중 하나
+
+보호자가 이해할 수 있는 평이한 한국어로, 그러나 치명적 위험은 명확히 고지하세요.
+다시 강조: 최종 응답은 JSON 객체 하나만. 검색 결과 요약·서두 설명 절대 금지."""
+
+
+@app.route("/api/imaging/ai-generate", methods=["POST"])
+@login_required
+def api_imaging_ai_generate():
+    """Claude API로 영상검사 정보 자동 생성."""
+    if requests is None:
+        return jsonify({"error": "'requests' 패키지가 설치되어 있지 않습니다."}), 500
+    data = request.get_json() or {}
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"error": "검사명을 입력하세요."}), 400
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다."}), 400
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 8000,
+                "system": IMG_AI_SYSTEM_PROMPT,
+                "messages": [{"role": "user", "content": f"영상검사명: {name}\n\n웹검색으로 해당 검사의 마취 위험·조영제 부작용·소요시간·비용을 확인하세요. 검색·추론이 끝나면 JSON 객체 하나만 출력하세요. 첫 문자는 '{{' 이어야 합니다."}],
+                "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
+            },
+            timeout=120,
+        )
+        if r.status_code != 200:
+            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
+        body = r.json()
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip().rstrip("`").strip()
+        if not text.startswith("{"):
+            s = text.find("{"); e = text.rfind("}")
+            if s >= 0 and e > s:
+                text = text[s:e+1]
+        result = json.loads(text)
+        return jsonify({"ok": True, "data": result})
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"AI 응답 파싱 실패: {e}. 원문: {text[:400]}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"AI 요청 실패: {e}"}), 500
+
+
+# ===================== 영상검사 동의서 폼 / 미리보기 =====================
+
+CONSENT_IMG_FIELDS = [
+    "guardian_id","guardian_name","guardian_phone","guardian_mobile",
+    "guardian_address","guardian_rrn","guardian_relation",
+    "animal_id","rfid","species","breed","patient_name","age","sex","coat_color","weight",
+    # 영상 촬영 마취 동의서 필드 (본문은 고정, 입력만 받음)
+    "imaging_modalities",     # "CT", "MRI", "CT,MRI" 등 체크박스 결합
+    "exam_name","exam_category","exam_side","exam_date","vet_name",
+    "asa_grade","extra_note",
+]
+
+
+@app.route("/imaging/consent/new", methods=["GET"])
+@login_required
+def imaging_consent_new():
+    exams = get_db().execute("SELECT id,name,category,modality FROM imaging_exams ORDER BY category,name").fetchall()
+    return render_template("imaging_new.html", exams=exams,
+                           img_categories=IMG_CATEGORIES,
+                           vet_name=session.get("display_name",""))
+
+
+@app.route("/imaging/consent/preview", methods=["POST"])
+@login_required
+def imaging_consent_preview():
+    db = get_db()
+    tpl = db.execute("SELECT * FROM hospital_template WHERE id=1").fetchone()
+    # imaging_modalities는 체크박스 복수 선택이라 getlist
+    mods = request.form.getlist("imaging_modalities")
+    data = {k: request.form.get(k,"") for k in CONSENT_IMG_FIELDS}
+    data["imaging_modalities"] = ",".join(mods) if mods else request.form.get("imaging_modalities","")
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name","")
+    data["exam_date"] = request.form.get("exam_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # 문서 제목: "영상 촬영 마취 동의서" + 선택된 모달리티
+    mod_label = data["imaging_modalities"].replace(",", "·")
+    if mod_label:
+        doc_title = f"영상 촬영 마취 동의서 ({mod_label})"
+    else:
+        doc_title = "영상 촬영 마취 동의서"
+
+    rendered = {
+        "header": render_template_string(tpl["header_html"] or "", d=data, doc_title=doc_title),
+        "footer": render_template_string(tpl["footer_html"] or "", d=data, doc_title=doc_title),
+    }
+    return render_template("imaging_print.html", d=data, r=rendered, doc_title=doc_title)
 
 
 @app.cli.command("init-db")

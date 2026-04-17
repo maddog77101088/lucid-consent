@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-head">
+  <h1>영상검사 DB</h1>
+  <a class="btn-primary" href="{{ url_for('imaging_new_exam') }}">+ 새 영상검사 추가</a>
+</div>
+
+<form class="filter-bar" method="get">
+  <input type="text" name="q" value="{{ q }}" placeholder="검사명·목적 검색">
+  <select name="category">
+    <option value="">전체 카테고리</option>
+    {% for c in img_categories %}
+      <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+    {% endfor %}
+  </select>
+  <button>검색</button>
+</form>
+
+<table class="data">
+  <thead>
+    <tr>
+      <th>분류</th><th>검사명</th><th>모달리티</th><th>조영제</th><th>소요시간</th><th>최종수정</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in items %}
+    <tr>
+      <td><span class="chip chip-{{ loop.index % 4 }}">{{ h.category }}</span></td>
+      <td><a href="{{ url_for('imaging_edit', iid=h.id) }}">{{ h.name }}</a></td>
+      <td>{{ h.modality or '-' }}</td>
+      <td class="muted">{{ h.contrast_type or '-' }}</td>
+      <td>{{ h.expected_duration or '-' }}</td>
+      <td class="muted">{{ h.updated_at[:10] if h.updated_at else '' }}</td>
+      <td>
+        <a href="{{ url_for('imaging_edit', iid=h.id) }}">수정</a>
+        {% if current_user.role == 'admin' %}
+        <form class="inline" method="post" action="{{ url_for('imaging_delete', iid=h.id) }}"
+              onsubmit="return confirm('정말 삭제하시겠습니까?')">
+          <button class="danger">삭제</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted center">영상검사 DB가 비어있습니다. "+ 새 영상검사 추가"로 직접 추가하거나, 영상검사 동의서 작성 중 AI 자동채움으로 추가하세요.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

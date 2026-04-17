@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>{{ doc_title }} - {{ d.patient_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}">
+</head>
+<body class="print-body">
+
+<div class="print-toolbar no-print">
+  <button onclick="window.print()">인쇄 / PDF 저장</button>
+  <button onclick="window.close()">닫기</button>
+  <span class="muted">인쇄 대화상자에서 "PDF로 저장"을 선택하면 PDF로 저장됩니다.</span>
+</div>
+
+<article class="consent-doc">
+  {{ r.header|safe }}
+
+  <table class="info info-4col">
+    <colgroup>
+      <col class="lbl"><col class="val"><col class="lbl"><col class="val">
+    </colgroup>
+    <tr><th colspan="4" class="sec">보호자</th></tr>
+    <tr><th>ID</th><td>{{ d.guardian_id }}</td><th>주민등록번호</th><td>{{ d.guardian_rrn }}</td></tr>
+    <tr><th>이름</th><td>{{ d.guardian_name }}</td><th>전화</th><td>{{ d.guardian_phone }}</td></tr>
+    <tr><th>휴대전화</th><td>{{ d.guardian_mobile }}</td><th>주소</th><td>{{ d.guardian_address }}</td></tr>
+  </table>
+
+  <table class="info info-4col">
+    <colgroup>
+      <col class="lbl"><col class="val"><col class="lbl"><col class="val">
+    </colgroup>
+    <tr><th colspan="4" class="sec">동물</th></tr>
+    <tr><th>ID</th><td>{{ d.animal_id }}</td><th>RFID</th><td>{{ d.rfid }}</td></tr>
+    <tr><th>종</th><td>{{ d.species }}</td><th>품종</th><td>{{ d.breed }}</td></tr>
+    <tr><th>이름</th><td>{{ d.patient_name }}</td><th>나이 / 체중</th><td>{{ d.age }} / {{ d.weight }} kg</td></tr>
+    <tr><th>성별</th><td>{{ d.sex }}</td><th>피모색</th><td>{{ d.coat_color }}</td></tr>
+  </table>
+
+  <table class="info info-2col">
+    <colgroup>
+      <col class="lbl"><col class="val">
+    </colgroup>
+    <tr><th colspan="2" class="sec">영상 촬영 정보</th></tr>
+    <tr><th>검사 종류</th><td><strong>{{ d.imaging_modalities.replace(',', ' · ') if d.imaging_modalities else '-' }}</strong></td></tr>
+    {% if d.exam_name %}
+    <tr><th>검사명</th><td>{{ d.exam_name }}{% if d.exam_category %} <span class="muted">({{ d.exam_category }})</span>{% endif %}</td></tr>
+    {% endif %}
+    {% if d.exam_side and d.exam_side != '해당없음' %}
+    <tr><th>검사 부위</th><td><strong>{{ d.exam_side }}</strong></td></tr>
+    {% endif %}
+    <tr><th>검사 예정일 / 주치의</th><td>{{ d.exam_date }} / 주치의 {{ d.vet_name }}</td></tr>
+  </table>
+
+  <h4 style="margin-top:10pt;">촬영 및 검사와 관련한 설명입니다.</h4>
+  <ol class="promise-list">
+    <li>뇌종양과 같은 심각한 질환의 경우 마취 회복이 늦거나, 마취로 인해 질병이 악화될 수 있으며, 아주 심각한 경우 마취 후 깨어나지 못할 수도 있습니다.</li>
+    <li>마취가 완전히 깬 후 퇴원 가능하며, 회복이 늦는다면 입원이 필요합니다.</li>
+    <li>마취 후 원래 있던 증상과 관련이 있거나 관련이 없는 신경 증상이 발현되거나 악화될 수 있습니다.</li>
+    <li>MRI의 경우 촬영 시간이 길기 때문에 같은 자세로 장시간 있다 보면, 슬개골 탈구와 같은 질환이 있는 환자의 경우 질환이 더욱 악화될 수도 있습니다.</li>
+    <li>MRI 촬영 시 뇌척수액 채취는 매우 낮은 확률로 사경이 유발될 수 있으며, 이는 대부분 시간이 지나면 점차 회복됩니다. 영상의의 판단에 따라 뇌척수액 채취 위험도가 높다고 판단될 경우 채취하지 않을 수 있으며, 간혹 채취된 뇌척수액의 양이 적어 검사가 불가능할 수도 있습니다.</li>
+    <li>간혹 조영제에 과민 반응하는 환자가 있을 수 있으며, 신장 기능이 약한 환자는 신장 손상이 유발되어 입원이 필요할 수 있습니다.</li>
+    <li>마취 위험성에 대한 좀 더 정확한 환자 정보를 얻기 위해서는 검사 진행이 필수이며, 검사하지 않은 항목에 대해서는 위험성을 예측하기 어렵습니다.</li>
+  </ol>
+
+  <h4 style="margin-top:8pt;">진단 및 영상기록에 관한 설명입니다.</h4>
+  <ol class="promise-list">
+    <li>촬영 당일 가진단이 나옵니다. 가진단을 통해 몇 가지 가능한 질병 목록을 알려드리며, 24시간 이내에 가진단 목록 중에서 진단이 바뀔 수 있습니다. 여러 차례 판독하면서 안 보이던 질환 부분이 보이는 경우가 있기 때문입니다.</li>
+    <li>영상 촬영 결과는 CD로 저장해드리며 비용은 <strong>1만원</strong>입니다. 이는 CT·MRI 영상을 보기 위해서는 별도의 뷰어 프로그램이 필요하여 일반 컴퓨터에서 열리지 않기 때문입니다.</li>
+    <li>영상 촬영 후 소견서 작성을 요청하시는 경우, 영상 소견서 작성 비용 <strong>10만원</strong>이 청구됩니다.</li>
+  </ol>
+
+  {% if d.asa_grade %}
+  <h4 style="margin-top:8pt;">ASA 마취 위험도 분류 <span class="muted small">(American Society of Anesthesiologists)</span></h4>
+  <p class="small">미국 마취학회(ASA)에서 분류한 마취 시 위험 정도를 나타내는 등급으로, 해당 환자의 사전 검사·현 질병 상태·연령을 고려한 평가 결과 아래와 같이 선택되었습니다.</p>
+  <table class="info asa-table">
+    <tr><th style="width:10%;">ASA</th><th>정 의</th><th style="width:12%;">사망률</th><th style="width:10%;">선택</th></tr>
+    <tr><td class="center"><strong>Ⅰ</strong></td><td>정상적이고 건강한 개체</td><td class="center">0.1%</td><td class="center">{% if d.asa_grade=='I' %}☑{% else %}☐{% endif %}</td></tr>
+    <tr><td class="center"><strong>Ⅱ</strong></td><td>활동을 제한하지 않는 가벼운 전신질환</td><td class="center">1%</td><td class="center">{% if d.asa_grade=='II' %}☑{% else %}☐{% endif %}</td></tr>
+    <tr><td class="center"><strong>Ⅲ</strong></td><td>활동이 가능한 중증의 전신적 질환</td><td class="center">10%</td><td class="center">{% if d.asa_grade=='III' %}☑{% else %}☐{% endif %}</td></tr>
+    <tr><td class="center"><strong>Ⅳ</strong></td><td>지속적으로 생명을 위협하며, 활동이 불가능한 전신적 질환</td><td class="center">30%</td><td class="center">{% if d.asa_grade=='IV' %}☑{% else %}☐{% endif %}</td></tr>
+    <tr><td class="center"><strong>Ⅴ</strong></td><td>수술과 관계없이 24시간 이내에 사망할 수 있는 빈사상태</td><td class="center">50%</td><td class="center">{% if d.asa_grade=='V' %}☑{% else %}☐{% endif %}</td></tr>
+  </table>
+  <p class="small">
+    본 환자의 ASA 등급은 <strong>Ⅰ~Ⅴ 중 {{ d.asa_grade }}등급</strong>이며, 해당 등급의 평균 마취 관련 사망률은 위 표와 같습니다. 최선의 마취 관리에도 불구하고 개별 환자 상태에 따라 실제 위험은 달라질 수 있습니다.
+  </p>
+  {% endif %}
+
+  {% if d.extra_note %}
+  <h4 style="margin-top:8pt;">개별 특이사항 / 추가 설명</h4>
+  <p class="body-text">{{ d.extra_note }}</p>
+  {% endif %}
+
+  <h4 style="margin-top:10pt;">다음 검사 및 처치에 대해 동의나 거절 표시를 해주세요.</h4>
+  <div class="consent-items">
+    <p>1. 전염병 예방을 위한 항체가 검사 &nbsp; <span class="cb">☐</span> 거절 &nbsp; <span class="cb">☐</span> 동의</p>
+    <p>2. 무증상성 심장병을 파악하기 위한 심장초음파 또는 ProBNP &nbsp; <span class="cb">☐</span> 거절 &nbsp; <span class="cb">☐</span> 동의</p>
+  </div>
+
+  <p class="small" style="margin-top:6pt;">위의 내용은 주치의가 직접 설명하고 카카오톡으로 전송해 드립니다.</p>
+
+  <div style="margin-top:10pt; padding:8pt 10pt; background:#fafafa; border-left:2pt solid #888;">
+    <p class="small" style="margin:0 0 4pt;">보호자님께서는 위의 내용에 대한 설명을 듣고 이해하고 동의하시면, 괄호 안 글자와 똑같이 자필로 작성 부탁드립니다.</p>
+    <p style="margin:6pt 0;"><strong>[ 위의 내용을 설명 들었으며, 이해하고 동의합니다. ]</strong></p>
+    <p style="margin:6pt 0;">자필 확인자: ______________________________________  (인)</p>
+  </div>
+
+  <p class="legal" style="margin-top:8pt;">
+    수의사법 제13조의2 및 같은 법 시행규칙 제13조의2에 따라 위와 같이 수의사로부터 본 영상 촬영·마취 및 진료에 관한 설명을 들었으며 진료행위에 동의합니다. 설명 받은 후유증 또는 부작용의 발생, 동물의 소유자 또는 관리자가 준수사항을 지키지 않아 발생하는 문제, 설명드린 불가피한 문제에 대하여 추후 일체의 민·형사상을 포함하여 이의를 제기하지 않을 것을 서명하며, 본 영상 촬영·마취 및 관련 수의학적 처리를 담당 수의사에게 위임할 것을 서면으로 동의합니다.
+  </p>
+
+  {{ r.footer|safe }}
+
+  <div class="footer-small muted">
+    {{ hospital_name }} · 문서작성일시 {{ d.created_at }} · 주치의 {{ d.vet_name }}
+  </div>
+</article>
+
+</body>
+</html>
