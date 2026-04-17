@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>보호자안내 CE 생성</h1>
+<p class="muted">PMS365 차트 내용을 붙여넣고 유형을 선택하면, AI가 보호자용 또는 의뢰병원용 안내 메시지를 생성합니다. 결과는 저장되지 않으며 복사해서 카카오톡/메일 등에 붙여넣으세요.</p>
+
+<section class="card">
+  <h2>① 차트 내용 붙여넣기</h2>
+  <label>차트 본문 (진료 기록, 검사 결과, 처치 내용 등)
+    <textarea id="chart-text" rows="14" placeholder="예: 샤미 / 고양이 / 좌측 신장 종양 의심 / Creatinine 2.3 / 피하수액 진행 / AMC, Metro, Famo, Cerenia 3일분 처방 ..." style="font-family:monospace;"></textarea>
+  </label>
+</section>
+
+<section class="card">
+  <h2>② 출력 유형 선택</h2>
+  <div class="row-2" style="gap:20px;">
+    <label class="pt-option" style="display:flex;flex-direction:column;gap:4px;padding:12px;border:2px solid #e5e7eb;border-radius:6px;cursor:pointer;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <input type="radio" name="ce-mode" value="guardian" checked>
+        <strong>보호자용</strong>
+      </span>
+      <span class="muted" style="font-size:12px;">친절한 설명 톤 · 약물 한글명 · 수치 정상범위 병기 · 집 관리법·재진 안내 포함</span>
+    </label>
+    <label class="pt-option" style="display:flex;flex-direction:column;gap:4px;padding:12px;border:2px solid #e5e7eb;border-radius:6px;cursor:pointer;">
+      <span style="display:flex;align-items:center;gap:8px;">
+        <input type="radio" name="ce-mode" value="vet">
+        <strong>의뢰병원용</strong>
+      </span>
+      <span class="muted" style="font-size:12px;">간결·전문 톤 · 영문 약어/약물명 · 의뢰 원장님께 인사·감사 인사 포함</span>
+    </label>
+  </div>
+  <label id="ref-vet-wrap" style="display:none;margin-top:10px;">의뢰 원장님 성명 (선택 — 첫 줄 인사에 반영)
+    <input id="ref-vet-name" placeholder="예: 김영수">
+  </label>
+</section>
+
+<div class="actions">
+  <button id="btn-ce-generate" class="btn-primary">🤖 AI로 생성 (15~45초)</button>
+  <span id="ce-status" class="muted"></span>
+</div>
+
+<section class="card" id="result-card" style="display:none;">
+  <h2>③ 생성 결과</h2>
+  <textarea id="ce-result" rows="18" style="font-family:monospace;white-space:pre-wrap;"></textarea>
+  <div class="actions" style="margin-top:8px;">
+    <button id="btn-ce-copy" type="button" class="btn-ghost">📋 복사</button>
+    <button id="btn-ce-regen" type="button" class="btn-ghost">🔄 다시 생성</button>
+    <span id="copy-status" class="muted"></span>
+  </div>
+</section>
+
+<script>
+const modeRadios = document.querySelectorAll('input[name="ce-mode"]');
+const refVetWrap = document.getElementById('ref-vet-wrap');
+modeRadios.forEach(r => r.addEventListener('change', () => {
+  refVetWrap.style.display = (document.querySelector('input[name="ce-mode"]:checked').value === 'vet') ? 'block' : 'none';
+}));
+
+async function generate() {
+  const chart = document.getElementById('chart-text').value.trim();
+  if (!chart) { alert('차트 내용을 먼저 붙여넣으세요.'); return; }
+  const mode = document.querySelector('input[name="ce-mode"]:checked').value;
+  const ref_vet_name = document.getElementById('ref-vet-name').value.trim();
+  const btn = document.getElementById('btn-ce-generate');
+  const status = document.getElementById('ce-status');
+  const resultCard = document.getElementById('result-card');
+  const resultBox = document.getElementById('ce-result');
+  btn.disabled = true;
+  status.textContent = '🤖 생성 중... (15~45초)';
+  status.style.color = '#666';
+  try {
+    const r = await fetch('/api/ce/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({chart, mode, ref_vet_name})
+    });
+    const d = await r.json();
+    if (!r.ok || !d.ok) throw new Error(d.error || '실패');
+    resultBox.value = d.text;
+    resultCard.style.display = '';
+    resultCard.scrollIntoView({behavior:'smooth', block:'start'});
+    status.textContent = '✅ 생성 완료. 검토·수정 후 복사해서 전송하세요.';
+    status.style.color = '#0a7';
+  } catch (e) {
+    status.textContent = '❌ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('btn-ce-generate').addEventListener('click', generate);
+document.getElementById('btn-ce-regen').addEventListener('click', generate);
+
+document.getElementById('btn-ce-copy').addEventListener('click', async () => {
+  const text = document.getElementById('ce-result').value;
+  try {
+    await navigator.clipboard.writeText(text);
+    const s = document.getElementById('copy-status');
+    s.textContent = '✅ 클립보드에 복사됨';
+    s.style.color = '#0a7';
+    setTimeout(() => { s.textContent = ''; }, 2500);
+  } catch (e) {
+    alert('복사 실패. 결과창에서 전체 선택(Ctrl+A) → 복사(Ctrl+C) 해주세요.');
+  }
+});
+</script>
+{% endblock %}

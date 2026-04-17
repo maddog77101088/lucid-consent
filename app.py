@@ -1214,6 +1214,126 @@ def imaging_consent_preview():
     return render_template("imaging_print.html", d=data, r=rendered, doc_title=doc_title)
 
 
+# ===================== CE 보호자안내 생성 =====================
+
+CE_GUARDIAN_PROMPT = """당신은 한국 동물병원 원장의 진료 경과를 보호자에게 설명하는 안내문을 작성하는 전문가입니다.
+아래 제공되는 차트 내용(수의사가 작성한 진료 기록/수치/처치)을 근거로,
+보호자가 이해하기 쉬운 "-" 글머리 기호 줄글 안내문을 작성하세요.
+
+**톤과 양식 (매우 중요, 샘플을 그대로 따라갈 것)**:
+- "[환자이름]는/은 금일 ~ 증상으로 내원하였습니다." 로 시작
+- 친절하고 설명적 — 어려운 용어는 괄호로 풀어서 설명
+- 약물은 한글 설명명으로 기재 (예: "위장관보호제, 항구토제, 항생제")
+- 질병·검사는 한글+영문 병기 허용: "신세포암종(Renal cell carcinoma)", "조혈촉진제(DPO)"
+- 검사 수치는 정상 범위 함께 표기: "Creatinine이 2.3(정상 0.8~1.6)으로 상승"
+- 집에서의 관리 방법(음수량, 약 급여 시점)과 다음 단계 안내(추가 검사, 재진)를 자연스럽게 포함
+- 마지막 항목은 "~ 결정되시면 병원으로 연락 부탁 드립니다." 같은 후속 조치 안내
+
+**출력 규칙**:
+- "-" 글머리 기호 줄글만 사용 (헤더·인사·코드블록 금지)
+- 차트에 없는 의학적 사실은 추측·추가 금지
+- 정상 수치 범위는 차트에 명시가 있거나 일반 수의학 기준에서 확실한 값만 병기
+- 첫 줄부터 바로 본문, 마무리 인사 없이 내용만
+
+**참고 예시 (출력 형식을 이 톤/길이/구조로 맞추세요)**:
+- 샤미는 금일 구토, 식욕부진 증상으로 내원하였습니다.
+- 복부 방사선 및 복부 초음파 검사 상 좌측 신장에서 종양 의심 소견 관찰되었습니다.
+- 고양이 신장에서 가장 흔하게 발생하는 악성 종양은 신세포암종(Renal cell carcinoma)와 신장 림프종이며, 두 종양 모두 예후가 짧은 편입니다.
+- 신세포암종의 경우 수술적으로 좌측 신장 제거 진행하게 되며, 림프종의 경우 주사 항암 치료를 진행하게 됩니다.
+- 두 종양을 감별하기 위해서는 세침흡인 검사가 필요하며, 진행 원하시는 경우에는 병원으로 예약 연락 부탁 드립니다.
+- 혈액 검사 상 신장 수치 중 Creatinine이 2.3(정상 0.8~1.6)으로 상승된 것이 확인되었습니다. 탈수 지속되는 경우 신장 수치 상승 심화될 수 있어 원내에서 피하수액 진행하였습니다. 집에서는 물, 습식캔 등을 통해서 음수량 채울 수 있도록 해주세요.
+- 추가적으로 복부 초음파 검사 상 소장 근층 전반적으로 비후되어 있는 것이 확인되었습니다. 만성 장염을 우선 고려할 수 있는 소견으로, 회복 돕기 위해 내복약(위장관보호제, 항구토제, 항생제) 처방하였습니다. 오늘 저녁약부터 급여해주세요.
+- 고양이에서는 식욕 부진 지속되면 탈수, 빈혈 심화 뿐만 아니라 지방간으로 인해 간기능 저하 발생할 수 있습니다. 세침흡인 검사 진행 또는 스테로이드 처방 결정되시면 병원으로 연락 부탁 드립니다."""
+
+
+CE_VET_PROMPT = """당신은 한국 동물병원의 수의사가 다른 의뢰 병원 원장님(수의사)에게 보내는 진료 경과 보고 메시지를 작성하는 전문가입니다.
+아래 차트 내용을 근거로, 동료 수의사에게 간결·전문적으로 전달하는 메시지를 작성하세요.
+
+**톤과 양식 (매우 중요, 샘플을 그대로 따라갈 것)**:
+- 첫 줄: "안녕하세요 원장님." (의뢰 원장님 성명이 주어지면 "안녕하세요 [성명]원장님.")
+- 둘째 줄: "의뢰주신 [보호자]님 [환자이름] 진료 경과 관련하여 연락 드립니다."
+- 이후 "-" 글머리 기호 줄글
+- **동료 수의사 대상이므로 영문 약어·약물명 적극 사용**:
+  · 검사/수치: BUN, P, Crea, ALT, AST, HCT, CBC, CRP, FNA, PCR, US, Rad 등
+  · 약물: AMC, Metro, Famo, Cerenia, PDS, DPO, EPO, Omep, Ursodeoxy 등
+  · 질병/소견: CKD, HCM, DKA, IMHA, FIP, Lymphoma, RCC 등
+- 검사 수치는 정상 범위 병기 불필요 (동료는 이미 알고 있음)
+- 마지막 줄: "- 소중한 환자 의뢰해주셔서 감사합니다. 최선을 다해 진료 하도록 하겠습니다."
+
+**출력 규칙**:
+- 차트에 없는 의학적 사실은 추측·추가 금지
+- 첫 두 줄(인사·의뢰 안내) → "-" 글머리 본문 → 마무리 인사 순서 엄수
+
+**참고 예시 (출력 형식을 이 톤/길이/구조로 맞추세요)**:
+안녕하세요 원장님. 의뢰주신 김하은님 샤미 진료 경과 관련하여 연락 드립니다.
+- 샤미는 복부 방사선 및 복부 초음파 검사 상 좌측 신장에서 종양 의심 소견 관찰되었으며 혈액 검사 상 BUN, P 수치는 정상, Creatinine은 2.3으로 증가 확인되었습니다. 종양의 양상을 고려 시 신세포암종(Renal cell carcinoma) 혹은 신장 림프종 가능성 우선 고려되는 점 안내드렸으며, 두 종양을 감별하기 위해 세침흡인 검사 추천 드렸습니다.
+- 보호자님 고민해보시고 결정하시기로 해서 FNA는 우선 보류하였습니다.
+- 초음파 상 소장 근층 전반적으로 비후되어 있는 것이 확인되어 우선 장염 치료에 대해 AMC, Metro, Famo, Cerenia 3일분 처방하였으며, 3일간 고민해보신 후 결정되시면 재내원해주시기로 했습니다.
+- 혹시 FNA 진행 안하시는 쪽으로 결정하시게 되면 호스피스 관리 차원에서 PDS 처방 고려할 예정입니다.
+- 추가적으로 빈혈 수치 28.7%로 경도의 빈혈 확인되어 조혈촉진제(DPO), 철분제, 코발라민(비타민 B12) 주사 진행하였습니다.
+- 소중한 환자 의뢰해주셔서 감사합니다. 최선을 다해 진료 하도록 하겠습니다."""
+
+
+@app.route("/ce/new", methods=["GET"])
+@login_required
+def ce_new():
+    return render_template("ce_new.html")
+
+
+@app.route("/api/ce/generate", methods=["POST"])
+@login_required
+def api_ce_generate():
+    """차트 내용으로 보호자안내 또는 의뢰병원용 CE 메시지 생성."""
+    if requests is None:
+        return jsonify({"error": "'requests' 패키지가 설치되어 있지 않습니다."}), 500
+    data = request.get_json() or {}
+    chart = (data.get("chart") or "").strip()
+    mode = (data.get("mode") or "guardian").strip()  # "guardian" / "vet"
+    ref_vet_name = (data.get("ref_vet_name") or "").strip()
+    if not chart:
+        return jsonify({"error": "차트 내용을 입력하세요."}), 400
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다."}), 400
+
+    system = CE_VET_PROMPT if mode == "vet" else CE_GUARDIAN_PROMPT
+    user_msg = f"다음 차트 내용을 바탕으로 안내문을 작성해주세요.\n\n---\n{chart}\n---"
+    if mode == "vet" and ref_vet_name:
+        user_msg += f"\n\n의뢰 원장님 성명: {ref_vet_name} (첫 줄 인사에 반영)"
+
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 4000,
+                "system": system,
+                "messages": [{"role": "user", "content": user_msg}],
+            },
+            timeout=90,
+        )
+        if r.status_code != 200:
+            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
+        body = r.json()
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        # 마크다운 코드블록 제거
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith(("text", "markdown", "md")):
+                text = text.split("\n", 1)[1] if "\n" in text else ""
+            text = text.strip().rstrip("`").strip()
+        return jsonify({"ok": True, "text": text, "mode": mode})
+    except Exception as e:
+        return jsonify({"error": f"AI 요청 실패: {e}"}), 500
+
+
 @app.cli.command("init-db")
 def init_db_cmd():
     init_db(); print("DB 초기화 완료:", DB_PATH)
