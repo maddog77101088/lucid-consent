@@ -6,7 +6,7 @@
 <section class="card">
   <h2>① 차트 내용 붙여넣기</h2>
   <label>차트 본문 (진료 기록, 검사 결과, 처치 내용 등)
-    <textarea id="chart-text" rows="14" placeholder="예: 샤미 / 고양이 / 좌측 신장 종양 의심 / Creatinine 2.3 / 피하수액 진행 / AMC, Metro, Famo, Cerenia 3일분 처방 ..." style="font-family:monospace;"></textarea>
+    <textarea id="chart-text" rows="28" placeholder="예: 샤미 / 고양이 / 좌측 신장 종양 의심 / Creatinine 2.3 / 피하수액 진행 / AMC, Metro, Famo, Cerenia 3일분 처방 ..." style="font-family:monospace;min-height:420px;line-height:1.5;font-size:14px;"></textarea>
   </label>
 </section>
 
@@ -40,7 +40,7 @@
 
 <section class="card" id="result-card" style="display:none;">
   <h2>③ 생성 결과</h2>
-  <textarea id="ce-result" rows="18" style="font-family:monospace;white-space:pre-wrap;"></textarea>
+  <textarea id="ce-result" rows="32" style="font-family:monospace;white-space:pre-wrap;min-height:500px;line-height:1.5;font-size:14px;"></textarea>
   <div class="actions" style="margin-top:8px;">
     <button id="btn-ce-copy" type="button" class="btn-ghost">📋 복사</button>
     <button id="btn-ce-regen" type="button" class="btn-ghost">🔄 다시 생성</button>
