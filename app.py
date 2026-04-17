@@ -1221,7 +1221,8 @@ CE_GUARDIAN_PROMPT = """당신은 한국 동물병원 원장의 진료 경과를
 보호자가 이해하기 쉬운 "-" 글머리 기호 줄글 안내문을 작성하세요.
 
 **톤과 양식 (매우 중요, 샘플을 그대로 따라갈 것)**:
-- "[환자이름]는/은 금일 ~ 증상으로 내원하였습니다." 로 시작
+- **환자 이름이 제공되면 첫 줄을 "[환자이름] 보호자님." 으로 인사**, 한 줄 공백 후 본문 시작
+- 본문 시작: "[환자이름]는/은 금일 ~ 증상으로 내원하였습니다."
 - 친절하고 설명적 — 어려운 용어는 괄호로 풀어서 설명
 - 약물은 한글 설명명으로 기재 (예: "위장관보호제, 항구토제, 항생제")
 - 질병·검사는 한글+영문 병기 허용: "신세포암종(Renal cell carcinoma)", "조혈촉진제(DPO)"
@@ -1236,6 +1237,8 @@ CE_GUARDIAN_PROMPT = """당신은 한국 동물병원 원장의 진료 경과를
 - 첫 줄부터 바로 본문, 마무리 인사 없이 내용만
 
 **참고 예시 (출력 형식을 이 톤/길이/구조로 맞추세요)**:
+샤미 보호자님.
+
 - 샤미는 금일 구토, 식욕부진 증상으로 내원하였습니다.
 - 복부 방사선 및 복부 초음파 검사 상 좌측 신장에서 종양 의심 소견 관찰되었습니다.
 - 고양이 신장에서 가장 흔하게 발생하는 악성 종양은 신세포암종(Renal cell carcinoma)와 신장 림프종이며, 두 종양 모두 예후가 짧은 편입니다.
@@ -1290,6 +1293,8 @@ def api_ce_generate():
     chart = (data.get("chart") or "").strip()
     mode = (data.get("mode") or "guardian").strip()  # "guardian" / "vet"
     ref_vet_name = (data.get("ref_vet_name") or "").strip()
+    guardian_name = (data.get("guardian_name") or "").strip()
+    patient_name = (data.get("patient_name") or "").strip()
     if not chart:
         return jsonify({"error": "차트 내용을 입력하세요."}), 400
 
@@ -1298,9 +1303,21 @@ def api_ce_generate():
         return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다."}), 400
 
     system = CE_VET_PROMPT if mode == "vet" else CE_GUARDIAN_PROMPT
-    user_msg = f"다음 차트 내용을 바탕으로 안내문을 작성해주세요.\n\n---\n{chart}\n---"
+    meta_lines = []
+    if guardian_name: meta_lines.append(f"보호자 성명: {guardian_name}")
+    if patient_name:  meta_lines.append(f"환자 이름: {patient_name}")
     if mode == "vet" and ref_vet_name:
-        user_msg += f"\n\n의뢰 원장님 성명: {ref_vet_name} (첫 줄 인사에 반영)"
+        meta_lines.append(f"의뢰 원장님 성명: {ref_vet_name}")
+    meta_block = ("\n".join(meta_lines) + "\n\n") if meta_lines else ""
+
+    user_msg = f"{meta_block}다음 차트 내용을 바탕으로 안내문을 작성해주세요.\n\n---\n{chart}\n---"
+    if mode == "guardian" and patient_name:
+        user_msg += f"\n\n(첫 줄은 '{patient_name} 보호자님.'으로 인사하고, 한 줄 띄운 뒤 본문을 '-' 글머리 줄글로 작성하세요.)"
+    if mode == "vet":
+        greeting = f"안녕하세요 {ref_vet_name}원장님." if ref_vet_name else "안녕하세요 원장님."
+        g = guardian_name or "보호자"
+        p = patient_name or "환자"
+        user_msg += f"\n\n(첫 줄은 정확히 '{greeting}'으로, 둘째 줄은 '의뢰주신 {g}님 {p} 진료 경과 관련하여 연락 드립니다.'로 시작하세요.)"
 
     try:
         r = requests.post(
