@@ -82,26 +82,24 @@
 
     <fieldset style="border:1px solid #ddd;border-radius:4px;padding:8pt 12pt;margin:0 0 8pt;">
       <legend style="font-weight:600;padding:0 6pt;">검사 종류 (복수 선택 가능) *</legend>
-      <div class="row-3">
-        <label style="display:flex;align-items:center;gap:6pt;">
-          <input type="checkbox" name="imaging_modalities" value="CT(조영)"> CT(조영)
-        </label>
-        <label style="display:flex;align-items:center;gap:6pt;">
+      <div style="display:flex;flex-wrap:wrap;column-gap:20pt;row-gap:8pt;">
+        <label style="display:inline-flex;align-items:center;gap:4pt;white-space:nowrap;cursor:pointer;">
           <input type="checkbox" name="imaging_modalities" value="MRI(조영)"> MRI(조영)
         </label>
-        <label style="display:flex;align-items:center;gap:6pt;">
-          <input type="checkbox" name="imaging_modalities" value="초음파"> 초음파
-        </label>
-      </div>
-      <div class="row-3">
-        <label style="display:flex;align-items:center;gap:6pt;">
+        <label style="display:inline-flex;align-items:center;gap:4pt;white-space:nowrap;cursor:pointer;">
           <input type="checkbox" name="imaging_modalities" value="뇌척수액검사"> 뇌척수액검사
         </label>
-        <label style="display:flex;align-items:center;gap:6pt;">
+        <label style="display:inline-flex;align-items:center;gap:4pt;white-space:nowrap;cursor:pointer;">
+          <input type="checkbox" name="imaging_modalities" value="CT(조영)"> CT(조영)
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:4pt;white-space:nowrap;cursor:pointer;">
           <input type="checkbox" name="imaging_modalities" value="정형CT(비조영)"> 정형CT(비조영)
         </label>
-        <label style="display:flex;align-items:center;gap:6pt;">
+        <label style="display:inline-flex;align-items:center;gap:4pt;white-space:nowrap;cursor:pointer;">
           <input type="checkbox" name="imaging_modalities" value="CT(림프관조영술)"> CT(림프관조영술)
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:4pt;white-space:nowrap;cursor:pointer;">
+          <input type="checkbox" name="imaging_modalities" value="초음파"> 초음파
         </label>
       </div>
     </fieldset>
