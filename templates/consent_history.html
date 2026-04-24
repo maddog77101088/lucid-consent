@@ -10,28 +10,32 @@
 <p class="muted">보호자 서명이 완료된 모든 동의서는 여기에서 검색·재출력할 수 있습니다.</p>
 
 <form method="get" action="{{ url_for('consents_history') }}"
-      style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; align-items:center;">
-  <input type="text" name="q" value="{{ q }}" placeholder="환자·보호자·서명자·수의사 검색"
-         style="flex:1; min-width:220px; padding:9px 12px; font-size:14px;
-                border:1.5px solid #d1d5db; border-radius:4px;">
-  <select name="type" style="padding:9px 10px; font-size:14px;
-                             border:1.5px solid #d1d5db; border-radius:4px;">
+      style="display:flex; gap:8px; margin:16px 0 22px; flex-wrap:wrap; align-items:center;
+             background:#fff; padding:14px 16px; border-radius:8px;
+             box-shadow:0 1px 3px rgba(0,0,0,.06);">
+  <input type="text" name="q" value="{{ q }}" placeholder="🔍 환자·보호자·서명자·수의사 검색"
+         style="flex:1; min-width:260px; padding:10px 14px; font-size:14px;
+                border:1.5px solid #d1d5db; border-radius:6px;">
+  <select name="type" style="padding:10px 12px; font-size:14px;
+                             border:1.5px solid #d1d5db; border-radius:6px;
+                             background:#fff; cursor:pointer;">
     <option value="">전체 유형</option>
     <option value="surgery" {% if doc_type == 'surgery' %}selected{% endif %}>수술·입원</option>
     <option value="imaging" {% if doc_type == 'imaging' %}selected{% endif %}>영상검사</option>
   </select>
-  <button type="submit" style="background:#2563eb; color:#fff; border:0; padding:9px 20px;
-                               border-radius:4px; font-size:14px; font-weight:600; cursor:pointer;">
-    🔍 검색
+  <button type="submit" style="background:#2563eb; color:#fff; border:0; padding:10px 24px;
+                               border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
+    검색
   </button>
   {% if q or doc_type %}
     <a href="{{ url_for('consents_history') }}"
-       style="padding:9px 12px; color:#6b7280; text-decoration:none; font-size:13px;">전체 보기</a>
+       style="padding:10px 12px; color:#6b7280; text-decoration:none; font-size:13px;">✕ 조건 해제</a>
   {% endif %}
 </form>
 
 {% if not rows %}
-  <div class="card" style="padding:40px; text-align:center; color:#6b7280;">
+  <div class="card" style="padding:40px; text-align:center; color:#6b7280;
+       background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
     {% if q or doc_type %}
       검색 결과가 없습니다.
     {% else %}
@@ -39,42 +43,50 @@
     {% endif %}
   </div>
 {% else %}
-<table class="table" style="width:100%;">
+<div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow:hidden;">
+<table style="width:100%; border-collapse:collapse; font-size:14px;">
   <thead>
-    <tr>
-      <th style="width:80px;">종류</th>
-      <th>환자</th>
-      <th>보호자(기재)</th>
-      <th>서명자</th>
-      <th>담당 수의사</th>
-      <th>서명일시</th>
-      <th style="width:110px;">동작</th>
+    <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
+      <th style="width:90px; padding:12px 14px; text-align:left; font-size:13px; color:#374151;">종류</th>
+      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">환자</th>
+      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">보호자 기재</th>
+      <th style="padding:12px 10px; text-align:left; font-size:13px; color:#374151;">서명자</th>
+      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">담당 수의사</th>
+      <th style="width:140px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">서명일시</th>
+      <th style="width:140px; padding:12px 14px; text-align:right; font-size:13px; color:#374151;">동작</th>
     </tr>
   </thead>
   <tbody>
     {% for r in rows %}
-    <tr>
-      <td>
+    <tr style="border-bottom:1px solid #f3f4f6;"
+        onmouseover="this.style.background='#f9fafb';"
+        onmouseout="this.style.background='';">
+      <td style="padding:14px; vertical-align:middle;">
         {% if r.doc_type == 'imaging' %}
-          <span style="color:#7c3aed; font-weight:600;">영상검사</span>
+          <span style="color:#7c3aed; font-weight:600; background:#f3e8ff; padding:3px 8px; border-radius:10px; font-size:12px;">영상검사</span>
         {% else %}
-          <span style="color:#2563eb; font-weight:600;">수술·입원</span>
+          <span style="color:#2563eb; font-weight:600; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px;">수술·입원</span>
         {% endif %}
       </td>
-      <td><strong>{{ r.patient_name or '-' }}</strong></td>
-      <td>{{ r.guardian_name or '-' }}</td>
-      <td>
+      <td style="padding:14px 10px; vertical-align:middle; font-weight:600;">{{ r.patient_name or '-' }}</td>
+      <td style="padding:14px 10px; vertical-align:middle;">{{ r.guardian_name or '-' }}</td>
+      <td style="padding:14px 10px; vertical-align:middle;">
         {{ r.signer_name or '-' }}
         {% if r.signer_name and r.guardian_name and r.signer_name != r.guardian_name %}
-          <span class="muted" style="font-size:11px;">(기재와 다름)</span>
+          <span style="display:inline-block; font-size:11px; background:#fef3c7; color:#92400e;
+                       padding:1px 6px; border-radius:8px; margin-left:4px;">기재와 다름</span>
         {% endif %}
       </td>
-      <td>{{ r.vet_name or '-' }}</td>
-      <td class="muted" style="font-size:12px;">{{ r.signed_at }}</td>
-      <td>
+      <td style="padding:14px 10px; vertical-align:middle;">{{ r.vet_name or '-' }}</td>
+      <td style="padding:14px 10px; vertical-align:middle; color:#4b5563; font-size:12px; line-height:1.5;">
+        {% set parts = r.signed_at.split(' ') %}
+        <div>{{ parts[0] }}</div>
+        <div style="color:#9ca3af;">{{ parts[1] if parts|length > 1 else '' }}</div>
+      </td>
+      <td style="padding:14px; vertical-align:middle; text-align:right; white-space:nowrap;">
         <a href="{{ url_for('sign_pdf', token=r.token) }}" target="_blank"
-           style="background:#2563eb; color:#fff; padding:6px 12px; border-radius:4px;
-                  font-size:13px; text-decoration:none; display:inline-block;">
+           style="background:#2563eb; color:#fff; padding:8px 14px; border-radius:4px;
+                  font-size:13px; font-weight:600; text-decoration:none; display:inline-block;">
           📄 동의서 열기
         </a>
       </td>
@@ -82,5 +94,6 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 {% endblock %}
