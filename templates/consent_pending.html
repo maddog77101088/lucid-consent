@@ -43,6 +43,8 @@
           <span style="color:#059669; font-weight:600; background:#d1fae5; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">개인정보</span>
         {% elif r.doc_type == 'euthanasia' %}
           <span style="color:#dc2626; font-weight:600; background:#fee2e2; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">안락사</span>
+        {% elif r.doc_type == 'discharge' %}
+          <span style="color:#d97706; font-weight:600; background:#fef3c7; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">퇴원서약</span>
         {% else %}
           <span style="color:#2563eb; font-weight:600; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">수술·입원</span>
         {% endif %}

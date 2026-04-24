@@ -899,6 +899,96 @@ def imaging_consent_create_sign_link():
     })
 
 
+# ===================== 퇴원 요청 및 서약서 =====================
+# 보호자 요청에 의한 조기퇴원용 (치료 포기) 서약서.
+
+DISCHARGE_FIELDS = [
+    "guardian_id", "guardian_name", "guardian_phone", "guardian_mobile",
+    "guardian_address",
+    "animal_id", "rfid", "patient_name", "species", "breed",
+    "age", "sex", "color",
+    "diagnosis", "discharge_reason",
+]
+
+
+def _render_discharge_print_from_data(data, db, signature_b64=None, signer_name=None,
+                                      signed_at=None, show_sign_button=False,
+                                      sign_interactive=False):
+    """퇴원 요청 및 서약서 렌더링."""
+    doc_title = "퇴원 요청 및 서약서"
+    if signature_b64:
+        data["signature_b64"] = signature_b64
+        data["signer_name"] = signer_name or data.get("guardian_name", "")
+        data["signed_at"] = signed_at or ""
+    sign_form_fields = DISCHARGE_FIELDS + ["vet_name", "doc_date"]
+    return render_template(
+        "discharge_print.html",
+        d=data, doc_title=doc_title,
+        show_sign_button=show_sign_button and not signature_b64,
+        sign_interactive=sign_interactive,
+        sign_form_fields=sign_form_fields,
+        sign_form_action=url_for("discharge_create_sign_link"),
+        hospital_name=HOSPITAL_NAME,
+    )
+
+
+@app.route("/discharge/new", methods=["GET"])
+@login_required
+def discharge_new():
+    return render_template(
+        "discharge_new.html",
+        today=datetime.now().strftime("%Y-%m-%d"),
+        vet_name=session.get("display_name", ""),
+    )
+
+
+@app.route("/discharge/preview", methods=["POST"])
+@login_required
+def discharge_preview():
+    db = get_db()
+    data = {k: request.form.get(k, "") for k in DISCHARGE_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["doc_date"] = request.form.get("doc_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return _render_discharge_print_from_data(data, db, show_sign_button=True)
+
+
+@app.route("/discharge/create-sign-link", methods=["POST"])
+@login_required
+def discharge_create_sign_link():
+    """퇴원 서약서 폼 → 서명 토큰 생성."""
+    db = get_db()
+    data = {k: request.form.get(k, "") for k in DISCHARGE_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["doc_date"] = request.form.get("doc_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    token = _make_sign_token()
+    expires_at = (datetime.now() + timedelta(hours=SIGN_LINK_TTL_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
+
+    db.execute(
+        """INSERT INTO consent_records
+           (token, doc_type, form_data, patient_name, guardian_name, vet_name,
+            expires_at, created_by)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (token, "discharge", json.dumps(data, ensure_ascii=False),
+         data.get("patient_name", ""), data.get("guardian_name", ""),
+         data.get("vet_name", ""), expires_at, session.get("user_id", 0))
+    )
+    db.commit()
+
+    sign_url = f"{_sign_base_url()}/sign/{token}"
+    return jsonify({
+        "ok": True,
+        "token": token,
+        "url": sign_url,
+        "qr_b64": _qr_base64(sign_url),
+        "expires_at": expires_at,
+        "ttl_hours": SIGN_LINK_TTL_HOURS,
+        "doc_type": "discharge",
+    })
+
+
 # ===================== 안락사 동의서 =====================
 # 안락사 결정 환자용. 사후 장례 방법 선택 포함.
 
@@ -1135,6 +1225,8 @@ def sign_page(token):
         doc_title = "개인정보 수집 및 활용 동의서"
     elif doc_type == "euthanasia":
         doc_title = "안락사 동의서"
+    elif doc_type == "discharge":
+        doc_title = "퇴원 요청 및 서약서"
     else:
         pt = data.get("patient_type") or "surgery_hospital"
         if pt == "hospital_only":
@@ -1176,6 +1268,8 @@ def sign_doc_preview(token):
         return _render_privacy_print_from_data(data, db, sign_interactive=True)
     if row["doc_type"] == "euthanasia":
         return _render_euthanasia_print_from_data(data, db, sign_interactive=True)
+    if row["doc_type"] == "discharge":
+        return _render_discharge_print_from_data(data, db, sign_interactive=True)
     return _render_consent_print_from_data(data, db, sign_interactive=True)
 
 
@@ -1343,6 +1437,13 @@ def sign_pdf(token):
             signer_name=row["signer_name"],
             signed_at=row["signed_at"],
         )
+    if row["doc_type"] == "discharge":
+        return _render_discharge_print_from_data(
+            data, db,
+            signature_b64=row["signature_data"],
+            signer_name=row["signer_name"],
+            signed_at=row["signed_at"],
+        )
     return _render_consent_print_from_data(
         data, db,
         signature_b64=row["signature_data"],
@@ -1399,7 +1500,7 @@ def consents_history():
         sql += " AND (cr.patient_name LIKE ? OR cr.guardian_name LIKE ? OR cr.signer_name LIKE ? OR cr.vet_name LIKE ?)"
         like = f"%{q}%"
         args += [like, like, like, like]
-    if doc_type in ("surgery", "imaging", "privacy", "euthanasia"):
+    if doc_type in ("surgery", "imaging", "privacy", "euthanasia", "discharge"):
         sql += " AND cr.doc_type=?"
         args.append(doc_type)
     sql += " ORDER BY cr.signed_at DESC LIMIT 300"

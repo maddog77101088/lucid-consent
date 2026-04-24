@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>퇴원 요청 및 서약서 작성</h1>
+<p class="muted">보호자 요청에 의한 조기퇴원용 서약서. OCR로 기본정보 입력 후 QR로 보호자 스마트폰에서 서명.</p>
+
+<form method="post" action="{{ url_for('discharge_preview') }}" target="_blank" class="form-stack">
+
+  <!-- 차트 OCR -->
+  <section class="card" style="border-left:3px solid #2563eb;">
+    <h2>① 차트 스크린샷 업로드 (선택) <span class="muted" style="font-weight:normal;font-size:12px;">PMS365 등 차트 캡처 이미지 업로드 시 보호자·동물 정보 자동 추출</span></h2>
+    <div class="row-2">
+      <label>이미지 파일 선택 <span class="muted" style="font-weight:normal;font-size:11px;">(또는 Print Screen 후 아무 곳에나 Ctrl+V)</span>
+        <input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp">
+      </label>
+      <div style="display:flex;align-items:end;">
+        <button type="button" id="btn-chart-ocr" class="btn-primary">🖼 차트에서 정보 추출</button>
+      </div>
+    </div>
+    <p id="chart-ocr-status" class="muted" style="margin-top:4px;">💡 차트 캡처 후 <kbd>Ctrl+V</kbd> 하면 자동 OCR 실행됩니다.</p>
+  </section>
+
+  <!-- 보호자 정보 -->
+  <section class="card">
+    <h2>② 보호자 정보</h2>
+    <div class="row-3">
+      <label>보호자 ID (차트)<input name="guardian_id" placeholder="예: 348001"></label>
+      <label>보호자 성명 *<input name="guardian_name" required></label>
+      <label>&nbsp;</label>
+    </div>
+    <div class="row-3">
+      <label>전화<input name="guardian_phone"></label>
+      <label>휴대전화 *<input name="guardian_mobile" required placeholder="010-0000-0000"></label>
+      <label>&nbsp;</label>
+    </div>
+    <label>주소<input name="guardian_address" placeholder="예: 서울특별시 성북구 ○○동 ○○아파트 ○동 ○호"></label>
+  </section>
+
+  <!-- 동물 정보 -->
+  <section class="card">
+    <h2>③ 동물(환자) 정보</h2>
+    <div class="row-3">
+      <label>동물 ID (차트)<input name="animal_id"></label>
+      <label>RFID<input name="rfid"></label>
+      <label>이름 *<input name="patient_name" required></label>
+    </div>
+    <div class="row-3">
+      <label>종<select name="species"><option>Canine (개)</option><option>Feline (고양이)</option><option>기타</option></select></label>
+      <label>품종<input name="breed"></label>
+      <label>성별<input name="sex" placeholder="예: Spayed female"></label>
+    </div>
+    <div class="row-3">
+      <label>나이<input name="age" placeholder="예: 11y 9m"></label>
+      <label>피모색<input name="color"></label>
+      <label>&nbsp;</label>
+    </div>
+  </section>
+
+  <!-- 진단·퇴원 사유 -->
+  <section class="card" style="border-left:3px solid #d97706;">
+    <h2>④ 진단 및 퇴원 사유</h2>
+    <label>병명(진단명)<input name="diagnosis" placeholder="예: 급성 췌장염, 신부전 등"></label>
+    <label>퇴원 사유<textarea name="discharge_reason" rows="3" placeholder="보호자가 조기퇴원을 요청하는 사유 (예: 경제적 사정, 집에서 돌보기 원함 등)" style="resize:vertical;"></textarea></label>
+    <p class="muted" style="font-size:12px; margin-top:4px;">※ 수의사의 지속 치료 권유에도 보호자가 조기퇴원을 요청하는 경우에만 사용합니다.</p>
+  </section>
+
+  <!-- 작성일 -->
+  <section class="card">
+    <h2>⑤ 작성일</h2>
+    <input type="hidden" name="vet_name" value="{{ vet_name }}">
+    <label>작성일<input name="doc_date" type="date" value="{{ today }}"></label>
+  </section>
+
+  <div class="actions">
+    <a class="btn-ghost" href="{{ url_for('dashboard') }}">취소</a>
+    <button class="btn-primary" type="submit">📄 동의서 미리보기</button>
+  </div>
+</form>
+
+<script>
+  document.querySelector('form.form-stack').addEventListener('submit', function(){
+    setTimeout(function(){ window.location.replace("{{ url_for('dashboard') }}"); }, 80);
+  });
+</script>
+
+<script>
+// ----- 차트 OCR -----
+document.addEventListener('paste', (e) => {
+  const tag = (document.activeElement?.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
+    const hasImg = Array.from(e.clipboardData?.items || []).some(i => i.type.startsWith('image/'));
+    if (!hasImg) return;
+  }
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg','jpg');
+      const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.getElementById('chart-image').files = dt.files;
+      const status = document.getElementById('chart-ocr-status');
+      status.textContent = '📋 클립보드 이미지 감지 → 자동 OCR 실행...';
+      status.style.color = '#2563eb';
+      setTimeout(() => document.getElementById('btn-chart-ocr').click(), 100);
+      return;
+    }
+  }
+});
+
+document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
+  const fileEl = document.getElementById('chart-image');
+  const file = fileEl.files[0];
+  if (!file) { alert('이미지 파일을 먼저 선택하세요.'); return; }
+  const status = document.getElementById('chart-ocr-status');
+  const btn = document.getElementById('btn-chart-ocr');
+  btn.disabled = true;
+  status.textContent = '🖼 Claude가 차트 읽는 중... (5~15초)';
+  status.style.color = '#666';
+  try {
+    const fd = new FormData(); fd.append('image', file);
+    const r = await fetch('/api/chart-ocr', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    let filled = 0;
+    for (const [k, v] of Object.entries(d.data)) {
+      if (!v) continue;
+      const el = document.querySelector('[name="' + k + '"]');
+      if (el) { el.value = v; filled++; }
+    }
+    status.textContent = '✓ ' + filled + '개 필드 자동입력 완료.';
+    status.style.color = '#0a7';
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}
