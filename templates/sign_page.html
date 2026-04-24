@@ -50,8 +50,7 @@
     flex-shrink: 0;
     box-shadow: 0 -4px 12px rgba(0,0,0,.08);
   }
-  .sign-panel.collapsed .pad-area,
-  .sign-panel.collapsed .sign-actions,
+  .sign-panel.collapsed .pad-row,
   .sign-panel.collapsed .name-row {
     display: none;
   }
@@ -78,13 +77,19 @@
   .name-row input:focus {
     outline: none; border-color: #2563eb;
   }
+  /* 서명패드(좌) + 버튼들(우) 나란히 배치 */
+  .pad-row {
+    display: flex; gap: 8px; margin-bottom: 8px;
+    align-items: stretch;
+  }
   .pad-area {
     position: relative;
+    flex: 1; min-width: 0;
     background: #fafafa; border: 1.5px solid #d1d5db;
-    border-radius: 5px; margin-bottom: 8px;
+    border-radius: 5px;
   }
   .pad-area canvas {
-    display: block; width: 100%; height: 140px;
+    display: block; width: 100%; height: 120px;
     touch-action: none;
     background: #fff;
     border-radius: 4px;
@@ -92,16 +97,19 @@
   .pad-hint {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    color: #9ca3af; font-size: 13px; pointer-events: none;
+    color: #9ca3af; font-size: 12px; pointer-events: none;
     user-select: none;
+    white-space: nowrap;
   }
   .pad-hint.hidden { display: none; }
   .sign-actions {
-    display: flex; gap: 8px;
+    display: flex; flex-direction: column; gap: 6px;
+    width: 88px; flex-shrink: 0;
   }
   .sign-actions button {
-    flex: 1; padding: 11px; font-size: 14px; font-weight: 600;
+    flex: 1; padding: 6px 4px; font-size: 13px; font-weight: 600;
     border: 0; border-radius: 5px; cursor: pointer;
+    line-height: 1.25;
   }
   .btn-clear {
     background: #f3f4f6; color: #6b7280;
@@ -109,7 +117,6 @@
   .btn-clear:hover { background: #e5e7eb; }
   .btn-submit {
     background: #059669; color: #fff;
-    flex: 2;
   }
   .btn-submit:hover { background: #047857; }
   .btn-submit:disabled {
@@ -160,55 +167,45 @@
 
     {% if doc_type == 'privacy' %}
     <!-- 개인정보 동의서 전용: 주민번호 + 이메일 + 수신동의 + 법정대리인 -->
-    <div id="privacy-extra" style="background:#fef3c7; padding:10px 12px; border-radius:6px; margin-bottom:10px; border:1px solid #fbbf24;">
-      <div style="font-size:13px; font-weight:600; color:#92400e; margin-bottom:8px;">
-        🔐 마약류관리법 (NIMS) 제출용 필수 입력
+    <div id="privacy-extra" style="background:#fef3c7; padding:8px 10px; border-radius:6px; margin-bottom:8px; border:1px solid #fbbf24;">
+      <div style="font-size:12px; font-weight:600; color:#92400e; margin-bottom:6px;">
+        🔐 마약류관리법 (NIMS) 제출용 주민등록번호
       </div>
-      <div style="margin-bottom:8px;">
-        <label style="display:block; font-size:12px; color:#374151; margin-bottom:3px;">주민등록번호 (13자리)</label>
+      <div style="margin-bottom:6px;">
         <input type="tel" id="priv-rrn" inputmode="numeric" pattern="[0-9]*" maxlength="14"
-               placeholder="000000-0000000"
-               style="width:100%; padding:9px 10px; font-size:16px; border:1.5px solid #d1d5db;
-                      border-radius:5px; letter-spacing:1px; font-family:monospace; box-sizing:border-box;">
-        <div id="priv-rrn-hint" style="font-size:11px; color:#6b7280; margin-top:3px;">
-          숫자만 입력 → 자동으로 "-" 삽입됩니다
-        </div>
+               placeholder="주민등록번호 13자리 (000000-0000000)"
+               style="width:100%; padding:7px 10px; font-size:15px; border:1.5px solid #d1d5db;
+                      border-radius:5px; letter-spacing:0.5px; font-family:monospace; box-sizing:border-box;">
       </div>
-      <div style="margin-bottom:8px;">
-        <label style="display:block; font-size:12px; color:#374151; margin-bottom:3px;">이메일 (선택)</label>
-        <input type="email" id="priv-email" value="{{ guardian_email or '' }}" placeholder="선택 입력"
-               style="width:100%; padding:9px 10px; font-size:14px; border:1.5px solid #d1d5db;
-                      border-radius:5px; box-sizing:border-box;">
-      </div>
-      <div style="border-top:1px solid #fbbf24; padding-top:8px; margin-top:8px;">
-        <div style="font-size:12px; color:#92400e; font-weight:600; margin-bottom:6px;">수신 동의 (선택)</div>
-        <div style="display:flex; flex-direction:column; gap:6px; font-size:13px;">
+      <div style="border-top:1px solid #fbbf24; padding-top:6px; margin-top:6px;">
+        <div style="font-size:11px; color:#92400e; font-weight:600; margin-bottom:4px;">수신 동의 (선택)</div>
+        <div style="display:flex; flex-direction:column; gap:3px; font-size:12px;">
           <label style="display:flex; justify-content:space-between; align-items:center;">
-            <span>📱 문자서비스 수신</span>
+            <span>📱 문자서비스</span>
             <span>
-              <label style="margin-right:8px;"><input type="radio" name="priv_sms" value="yes" checked> 예</label>
+              <label style="margin-right:6px;"><input type="radio" name="priv_sms" value="yes" checked> 예</label>
               <label><input type="radio" name="priv_sms" value="no"> 아니오</label>
             </span>
           </label>
           <label style="display:flex; justify-content:space-between; align-items:center;">
-            <span>📧 정보메일 수신</span>
+            <span>📧 정보메일</span>
             <span>
-              <label style="margin-right:8px;"><input type="radio" name="priv_mail" value="yes" checked> 예</label>
+              <label style="margin-right:6px;"><input type="radio" name="priv_mail" value="yes" checked> 예</label>
               <label><input type="radio" name="priv_mail" value="no"> 아니오</label>
             </span>
           </label>
           <label style="display:flex; justify-content:space-between; align-items:center;">
-            <span>📢 광고성 정보 수신</span>
+            <span>📢 광고성 정보</span>
             <span>
-              <label style="margin-right:8px;"><input type="radio" name="priv_ads" value="yes" checked> 예</label>
+              <label style="margin-right:6px;"><input type="radio" name="priv_ads" value="yes" checked> 예</label>
               <label><input type="radio" name="priv_ads" value="no"> 아니오</label>
             </span>
           </label>
         </div>
       </div>
-      <div style="border-top:1px solid #fbbf24; padding-top:8px; margin-top:8px;">
-        <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#92400e; font-weight:600; margin-bottom:6px; cursor:pointer;">
-          <input type="checkbox" id="priv-legal-toggle"> 만 14세 미만 아동입니다 (법정대리인 정보 입력)
+      <div style="border-top:1px solid #fbbf24; padding-top:6px; margin-top:6px;">
+        <label style="display:flex; align-items:center; gap:5px; font-size:11px; color:#92400e; font-weight:600; margin-bottom:4px; cursor:pointer;">
+          <input type="checkbox" id="priv-legal-toggle"> 만 14세 미만 아동 (법정대리인 입력)
         </label>
         <div id="priv-legal-fields" style="display:none; margin-top:4px; font-size:13px;">
           <input type="text" id="priv-legal-name" placeholder="법정대리인 성명"
@@ -240,14 +237,15 @@
 
     <button type="button" class="panel-toggle" id="panel-toggle"></button>
 
-    <div class="pad-area">
-      <canvas id="pad"></canvas>
-      <div class="pad-hint" id="pad-hint">✎ 이 영역에 손가락 또는 펜으로 서명해주세요</div>
-    </div>
-
-    <div class="sign-actions">
-      <button type="button" class="btn-clear" id="btn-clear">다시 서명</button>
-      <button type="button" class="btn-submit" id="btn-submit">동의 및 제출</button>
+    <div class="pad-row">
+      <div class="pad-area">
+        <canvas id="pad"></canvas>
+        <div class="pad-hint" id="pad-hint">✎ 여기에 서명해주세요</div>
+      </div>
+      <div class="sign-actions">
+        <button type="button" class="btn-clear" id="btn-clear">다시<br>서명</button>
+        <button type="button" class="btn-submit" id="btn-submit">동의<br>및<br>제출</button>
+      </div>
     </div>
   </div>
 </div>
@@ -402,7 +400,6 @@
     const legalToggle = document.getElementById('priv-legal-toggle').checked;
     privacyInput = {
       rrn: rrn,
-      email: document.getElementById('priv-email').value.trim(),
       sms_ok: smsEl ? smsEl.value : 'no',
       mail_ok: mailEl ? mailEl.value : 'no',
       ads_ok: adsEl ? adsEl.value : 'no',
