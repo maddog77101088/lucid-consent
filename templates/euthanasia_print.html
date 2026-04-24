@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>{{ doc_title }} - {{ d.guardian_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}">
+</head>
+<body class="print-body">
+
+{% if not sign_interactive %}
+<div class="print-toolbar no-print">
+  <button onclick="window.print()">인쇄 / PDF 저장</button>
+  <button onclick="window.close()">닫기</button>
+  {% if show_sign_button %}{% include "_sign_qr_button.html" %}{% endif %}
+  <span class="muted">인쇄 대화상자에서 "PDF로 저장"을 선택하면 PDF로 저장됩니다.</span>
+</div>
+{% endif %}
+
+<article class="consent-doc">
+  <div style="text-align:center; line-height:1.4;">
+    <h1 style="margin:0 0 6px 0; letter-spacing:6px;">{{ doc_title }}</h1>
+    <div style="font-size:10pt; color:#444;">{{ hospital_name }}</div>
+  </div>
+
+  <h4 style="margin-top:14pt;">보호자</h4>
+  <table class="info info-4col">
+    <colgroup><col class="lbl"><col class="val"><col class="lbl"><col class="val"></colgroup>
+    <tr><th>ID</th><td>{{ d.guardian_id or '-' }}</td><th>이름</th><td>{{ d.guardian_name }}</td></tr>
+    <tr><th>전화</th><td>{{ d.guardian_phone or '-' }}</td><th>휴대전화</th><td>{{ d.guardian_mobile }}</td></tr>
+    <tr><th>주소</th><td colspan="3">{{ d.guardian_address or '-' }}</td></tr>
+    <tr><th>주민등록번호 앞 6자리</th><td colspan="3">{{ d.guardian_rrn6 or '-' }}</td></tr>
+  </table>
+
+  <h4>동물</h4>
+  <table class="info info-4col">
+    <colgroup><col class="lbl"><col class="val"><col class="lbl"><col class="val"></colgroup>
+    <tr><th>ID</th><td>{{ d.animal_id or '-' }}</td><th>RFID</th><td>{{ d.rfid or '-' }}</td></tr>
+    <tr><th>종</th><td>{{ d.species or '-' }}</td><th>품종</th><td>{{ d.breed or '-' }}</td></tr>
+    <tr><th>이름</th><td>{{ d.patient_name }}</td><th>나이</th><td>{{ d.age or '-' }}</td></tr>
+    <tr><th>성별</th><td>{{ d.sex or '-' }}</td><th>피모색</th><td>{{ d.color or '-' }}</td></tr>
+  </table>
+
+  <p class="small" style="margin-top:16pt; line-height:1.7; text-align:justify;">
+    본인은 위 동물의 보호자로서 위 동물의 안락사에 대해 병원 의료진과 상의하였고,
+    의도적인 안락사가 본 동물을 위해 적합한 선택이라는 것을 충분히 이해합니다.
+  </p>
+  <p class="small" style="margin-top:10pt; font-weight:600;">
+    위 환자에 대하여 안락사를 요청합니다.
+  </p>
+
+  <h4 style="margin-top:14pt;">사후 장례 방법</h4>
+  <table class="info" style="width:100%;">
+    <tr>
+      <td style="padding:6pt 10pt;">
+        <span class="cb">{% if d.funeral == 'individual' %}☑{% else %}☐{% endif %}</span>
+        장례업체를 통한 개별 장례를 의뢰하겠습니다.
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:6pt 10pt;">
+        <span class="cb">{% if d.funeral == 'hospital' %}☑{% else %}☐{% endif %}</span>
+        병원에 합동화장을 의뢰하겠습니다.
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:6pt 10pt;">
+        <span class="cb">{% if d.funeral == 'take_home' %}☑{% else %}☐{% endif %}</span>
+        개인적인 장례를 위해 데리고 가겠습니다.
+      </td>
+    </tr>
+  </table>
+
+  <p class="sign-date" style="text-align:center; margin-top:18pt;">{{ d.doc_date }}</p>
+  <p class="sign-target" style="text-align:right; margin-top:14pt;">
+    {% if not d.signature_b64 %}
+    보호자 또는 의뢰인: ________________________ (인)<br>
+    {% endif %}
+    {{ hospital_name }} 귀하
+  </p>
+
+  {% if d.signature_b64 %}
+  <div class="signature-panel" style="margin-top:14pt; padding:10pt 12pt; border:1.5pt solid #059669; border-radius:4pt; page-break-inside: avoid;">
+    <div style="font-size:10pt; color:#059669; font-weight:600; margin-bottom:6pt;">✓ 보호자 전자서명 완료</div>
+    <div style="display:flex; align-items:flex-end; gap:14pt; flex-wrap:wrap;">
+      <div style="flex:1; min-width:200px; border-bottom:1pt solid #111; padding-bottom:2pt;">
+        <img src="data:image/png;base64,{{ d.signature_b64 }}" style="max-width:280px; max-height:90px; display:block;">
+      </div>
+      <div style="min-width:160px;">
+        <div style="font-size:10pt; color:#6b7280;">보호자 (전자서명)</div>
+        <div style="font-size:13pt; font-weight:600;">{{ d.signer_name }}</div>
+        <div style="font-size:9pt; color:#6b7280;">서명일시: {{ d.signed_at }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="footer-small muted" style="margin-top:14pt; text-align:center; font-size:9pt; line-height:1.5;">
+    {{ hospital_name }}<br>
+    서울특별시 강북구 월계로 3 (미아동, 덕신빌딩) · TEL: 02-941-7900<br>
+    문서작성일시 {{ d.created_at }} · 담당 {{ d.vet_name }}
+  </div>
+</article>
+
+{% if sign_interactive %}{% include "_sign_interactive_js.html" %}{% endif %}
+</body>
+</html>
