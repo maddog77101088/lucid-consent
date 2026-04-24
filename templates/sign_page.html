@@ -298,6 +298,15 @@
     }
     const dataUrl = canvas.toDataURL('image/png');
 
+    // iframe 내부에서 체크한 박스 인덱스 수집 (same-origin이라 접근 가능)
+    let checkedBoxes = [];
+    try {
+      const frame = document.getElementById('doc-frame');
+      if (frame && frame.contentWindow && typeof frame.contentWindow.__collectCheckedBoxes === 'function') {
+        checkedBoxes = frame.contentWindow.__collectCheckedBoxes();
+      }
+    } catch (e) { /* 접근 실패 시 빈 배열 */ }
+
     const btn = this;
     btn.disabled = true;
     document.getElementById('overlay').classList.add('show');
@@ -306,7 +315,11 @@
       const res = await fetch("{{ url_for('sign_submit', token=token) }}", {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ signer_name: name, signature: dataUrl })
+        body: JSON.stringify({
+          signer_name: name,
+          signature: dataUrl,
+          checked_boxes: checkedBoxes,
+        })
       });
       const json = await res.json();
       if (!res.ok || !json.ok) {

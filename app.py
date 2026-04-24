@@ -167,6 +167,11 @@ def init_db():
     ucols = [c[1] for c in cur.fetchall()]
     if "must_change_password" not in ucols:
         cur.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+    # consent_records 마이그레이션: checked_boxes 컬럼 (보호자 체크 상태 JSON)
+    cur.execute("PRAGMA table_info(consent_records)")
+    cr_cols = [c[1] for c in cur.fetchall()]
+    if "checked_boxes" not in cr_cols:
+        cur.execute("ALTER TABLE consent_records ADD COLUMN checked_boxes TEXT DEFAULT '[]'")
     con.commit()
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
@@ -659,10 +664,42 @@ CONSENT_FIELDS = ["guardian_id","guardian_name","guardian_phone","guardian_mobil
     ]
 
 
-def _render_consent_print_from_data(data, db, signature_b64=None, signer_name=None, signed_at=None, show_sign_button=False):
+def _apply_checked_boxes(html, checked_set):
+    """렌더된 HTML 내 <span class="cb">☐</span> 들을 순서대로 찾아서,
+    checked_set(int set)에 해당하는 인덱스는 ☑로 치환. ASA 표 등 '☑'가 이미 있는
+    것은 class="cb"가 없거나 '☐'가 아니라 자동으로 건너뛴다."""
+    import re as _re
+    pattern = _re.compile(r'(<span[^>]*class="cb"[^>]*>)☐(</span>)')
+    counter = [0]
+    def rep(m):
+        i = counter[0]
+        counter[0] += 1
+        if i in checked_set:
+            return m.group(1) + '☑' + m.group(2)
+        return m.group(0)
+    return pattern.sub(rep, html)
+
+
+def _strip_handwritten_signature(html):
+    """전자서명이 있을 때 footer의 '보호자 또는 의뢰인: ___ (인)' 수기 서명란 제거."""
+    import re as _re
+    # DEFAULT_FOOTER 형태의 수기 서명란 + 선택적 <br> 까지 함께 제거
+    html = _re.sub(
+        r'보호자\s*또는\s*의뢰인\s*:\s*[_]+\s*\(인\)\s*(<br\s*/?>)?\s*',
+        '',
+        html
+    )
+    return html
+
+
+def _render_consent_print_from_data(data, db, signature_b64=None, signer_name=None, signed_at=None,
+                                    show_sign_button=False, sign_interactive=False,
+                                    checked_boxes=None):
     """수술/입원 동의서 data dict → consent_print.html 렌더링.
     consent_preview와 sign 페이지에서 공통으로 사용. signature_b64가 있으면 서명 이미지 삽입.
-    show_sign_button=True: 원내 수의사 미리보기에 "서명받기" 버튼 노출."""
+    show_sign_button=True: 원내 수의사 미리보기에 "서명받기" 버튼 노출.
+    sign_interactive=True: iframe 내부에서 체크박스 클릭 가능하게 JS 주입.
+    checked_boxes: list of int (서명본 렌더링 시 체크할 인덱스들)."""
     tpl = db.execute("SELECT * FROM hospital_template WHERE id=1").fetchone()
     # YouTube URL / QR 코드 (DB가 비어있으면 기본값 fallback)
     try:
@@ -723,13 +760,20 @@ def _render_consent_print_from_data(data, db, signature_b64=None, signer_name=No
         data["signed_at"] = signed_at or ""
     # 서명받기 버튼용 hidden form 필드 (렌더된 추가 필드는 제외)
     sign_form_fields = CONSENT_FIELDS + ["vet_name", "surgery_date"]
-    return render_template(
+    html = render_template(
         "consent_print.html",
         d=data, r=rendered, doc_title=doc_title,
         show_sign_button=show_sign_button and not signature_b64,
+        sign_interactive=sign_interactive,
         sign_form_fields=sign_form_fields,
         sign_form_action=url_for("consent_create_sign_link"),
     )
+    # 서명 완료본 렌더링 후처리: 체크박스 반영 + 수기 서명란 제거
+    if signature_b64:
+        if checked_boxes:
+            html = _apply_checked_boxes(html, set(checked_boxes))
+        html = _strip_handwritten_signature(html)
+    return html
 
 
 @app.route("/consent/preview", methods=["POST"])
@@ -910,7 +954,7 @@ def sign_page(token):
 
 @app.route("/sign/<token>/preview", methods=["GET"])
 def sign_doc_preview(token):
-    """iframe용 동의서 본문 렌더링 (서명란 없는 원본)."""
+    """iframe용 동의서 본문 렌더링 (서명란 없는 원본) + 체크박스 활성화 JS."""
     row = _load_sign_record(token)
     status = _sign_status(row)
     if status is None:
@@ -921,8 +965,8 @@ def sign_doc_preview(token):
     data = json.loads(row["form_data"])
     db = get_db()
     if row["doc_type"] == "imaging":
-        return _render_imaging_print_from_data(data, db)
-    return _render_consent_print_from_data(data, db)
+        return _render_imaging_print_from_data(data, db, sign_interactive=True)
+    return _render_consent_print_from_data(data, db, sign_interactive=True)
 
 
 @app.route("/sign/<token>", methods=["POST"])
@@ -940,6 +984,7 @@ def sign_submit(token):
     payload = request.get_json(silent=True) or {}
     signer_name = (payload.get("signer_name") or "").strip()
     signature = payload.get("signature") or ""
+    checked_raw = payload.get("checked_boxes") or []
     if not signer_name:
         return jsonify({"ok": False, "error": "보호자 성함을 입력해주세요."}), 400
     if not signature.startswith("data:image/"):
@@ -955,11 +1000,17 @@ def sign_submit(token):
     if len(b64) > 2_800_000:
         return jsonify({"ok": False, "error": "서명 이미지가 너무 큽니다."}), 400
 
+    # checked_boxes: 정수 배열만 허용
+    try:
+        checked_boxes = sorted({int(x) for x in checked_raw if isinstance(x, (int, str)) and str(x).isdigit()})
+    except (TypeError, ValueError):
+        checked_boxes = []
+
     signed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db = get_db()
     db.execute(
-        "UPDATE consent_records SET signature_data=?, signer_name=?, signed_at=? WHERE token=?",
-        (b64, signer_name, signed_at, token)
+        "UPDATE consent_records SET signature_data=?, signer_name=?, signed_at=?, checked_boxes=? WHERE token=?",
+        (b64, signer_name, signed_at, json.dumps(checked_boxes), token)
     )
     db.commit()
     return jsonify({
@@ -999,6 +1050,14 @@ def sign_pdf(token):
         abort(400)
 
     data = json.loads(row["form_data"])
+    # checked_boxes JSON 파싱
+    try:
+        checked_boxes = json.loads(row["checked_boxes"] or "[]")
+        if not isinstance(checked_boxes, list):
+            checked_boxes = []
+    except (ValueError, TypeError):
+        checked_boxes = []
+
     db = get_db()
     if row["doc_type"] == "imaging":
         return _render_imaging_print_from_data(
@@ -1006,12 +1065,14 @@ def sign_pdf(token):
             signature_b64=row["signature_data"],
             signer_name=row["signer_name"],
             signed_at=row["signed_at"],
+            checked_boxes=checked_boxes,
         )
     return _render_consent_print_from_data(
         data, db,
         signature_b64=row["signature_data"],
         signer_name=row["signer_name"],
         signed_at=row["signed_at"],
+        checked_boxes=checked_boxes,
     )
 
 
@@ -1497,11 +1558,12 @@ def imaging_consent_new():
                            today=datetime.now().strftime("%Y-%m-%d"))
 
 
-def _render_imaging_print_from_data(data, db, signature_b64=None, signer_name=None, signed_at=None, show_sign_button=False):
+def _render_imaging_print_from_data(data, db, signature_b64=None, signer_name=None, signed_at=None,
+                                    show_sign_button=False, sign_interactive=False,
+                                    checked_boxes=None):
     """영상검사 마취 동의서 data dict → imaging_print.html 렌더링.
     imaging_consent_preview와 sign 페이지에서 공통으로 사용."""
     tpl = db.execute("SELECT * FROM hospital_template WHERE id=1").fetchone()
-    # 문서 제목: "영상 촬영 마취 동의서" + 선택된 모달리티
     mod_label = (data.get("imaging_modalities") or "").replace(",", "·")
     if mod_label:
         doc_title = f"영상 촬영 마취 동의서 ({mod_label})"
@@ -1516,13 +1578,19 @@ def _render_imaging_print_from_data(data, db, signature_b64=None, signer_name=No
         data["signer_name"] = signer_name or data.get("guardian_name", "")
         data["signed_at"] = signed_at or ""
     sign_form_fields = CONSENT_IMG_FIELDS + ["vet_name", "exam_date"]
-    return render_template(
+    html = render_template(
         "imaging_print.html",
         d=data, r=rendered, doc_title=doc_title,
         show_sign_button=show_sign_button and not signature_b64,
+        sign_interactive=sign_interactive,
         sign_form_fields=sign_form_fields,
         sign_form_action=url_for("imaging_consent_create_sign_link"),
     )
+    if signature_b64:
+        if checked_boxes:
+            html = _apply_checked_boxes(html, set(checked_boxes))
+        html = _strip_handwritten_signature(html)
+    return html
 
 
 @app.route("/imaging/consent/preview", methods=["POST"])

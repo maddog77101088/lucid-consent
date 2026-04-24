@@ -1,0 +1,72 @@
+{# 보호자 서명 페이지 iframe 전용 - 체크박스 클릭 가능하게 만드는 JS #}
+<style>
+  /* 클릭 가능 상태 시각적 강조 */
+  span.cb[data-cb-idx] {
+    display: inline-block;
+    min-width: 22px; min-height: 22px;
+    padding: 0 3px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background .12s;
+    user-select: none;
+    -webkit-tap-highlight-color: rgba(37,99,235,.2);
+  }
+  span.cb[data-cb-idx]:hover {
+    background: #dbeafe;
+  }
+  span.cb[data-cb-idx][data-cb-checked="1"] {
+    color: #059669;
+    font-weight: 700;
+  }
+  /* 모바일에서 좀 더 크게 */
+  @media (max-width: 768px) {
+    span.cb[data-cb-idx] {
+      font-size: 18px;
+      padding: 2px 6px;
+    }
+  }
+</style>
+<script>
+(function(){
+  // 동의서 본문의 모든 체크박스(.cb)를 클릭 가능하게 만든다.
+  // ASA 등급 표의 체크박스(☑)는 class="cb"가 없어서 자동 제외됨.
+  const boxes = document.querySelectorAll('span.cb');
+  let idx = 0;
+  boxes.forEach(function(el){
+    // 이미 ☑ 가 하드코딩된 경우는 서버가 결정한 것이므로 건드리지 않음
+    const txt = (el.textContent || '').trim();
+    if (txt !== '☐') return;
+    el.dataset.cbIdx = String(idx++);
+    el.dataset.cbChecked = '0';
+    el.setAttribute('role', 'checkbox');
+    el.setAttribute('aria-checked', 'false');
+    el.setAttribute('tabindex', '0');
+    el.addEventListener('click', toggle);
+    el.addEventListener('keydown', function(ev){
+      if (ev.key === ' ' || ev.key === 'Enter') { ev.preventDefault(); toggle.call(el); }
+    });
+  });
+  function toggle() {
+    const isChecked = this.dataset.cbChecked === '1';
+    if (isChecked) {
+      this.textContent = '☐';
+      this.dataset.cbChecked = '0';
+      this.setAttribute('aria-checked', 'false');
+    } else {
+      this.textContent = '☑';
+      this.dataset.cbChecked = '1';
+      this.setAttribute('aria-checked', 'true');
+    }
+  }
+  // 부모 페이지에서 호출할 수 있도록 현재 체크 상태 수집 함수 노출
+  window.__collectCheckedBoxes = function(){
+    const out = [];
+    document.querySelectorAll('span.cb[data-cb-idx]').forEach(function(el){
+      if (el.dataset.cbChecked === '1') {
+        out.push(parseInt(el.dataset.cbIdx, 10));
+      }
+    });
+    return out;
+  };
+})();
+</script>
