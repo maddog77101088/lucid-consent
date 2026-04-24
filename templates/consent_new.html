@@ -583,76 +583,6 @@ document.getElementById('btn-hosp-ai').addEventListener('click', async () => {
   }
 });
 
-// ----- 클립보드 붙여넣기 OCR -----
-document.addEventListener('paste', (e) => {
-  const tag = (document.activeElement?.tagName || '').toUpperCase();
-  if (tag === 'INPUT' || tag === 'TEXTAREA') {
-    const hasImg = Array.from(e.clipboardData?.items || []).some(i => i.type.startsWith('image/'));
-    if (!hasImg) return;
-  }
-  const items = e.clipboardData?.items;
-  if (!items) return;
-  for (const item of items) {
-    if (item.type.startsWith('image/')) {
-      e.preventDefault();
-      const blob = item.getAsFile();
-      if (!blob) continue;
-      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg','jpg');
-      const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      document.getElementById('chart-image').files = dt.files;
-      const status = document.getElementById('chart-ocr-status');
-      status.textContent = '📋 클립보드 이미지 붙여넣기 감지 → 자동 OCR 실행...';
-      status.style.color = '#2563eb';
-      document.getElementById('chart-image').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      setTimeout(() => document.getElementById('btn-chart-ocr').click(), 100);
-      return;
-    }
-  }
-});
-
-document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
-  const fileEl = document.getElementById('chart-image');
-  const file = fileEl.files[0];
-  if (!file) { alert('이미지 파일을 먼저 선택하세요.'); return; }
-  const status = document.getElementById('chart-ocr-status');
-  const btn = document.getElementById('btn-chart-ocr');
-  btn.disabled = true;
-  status.textContent = '🖼 Claude가 차트 읽는 중... (5~15초)';
-  status.style.color = '#666';
-  try {
-    const fd = new FormData(); fd.append('image', file);
-    const r = await fetch('/api/chart-ocr', { method: 'POST', body: fd });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.error || '실패');
-    let filled = 0;
-    for (const [k, v] of Object.entries(d.data)) {
-      if (!v) continue;
-      const el = document.querySelector('[name="' + k + '"]');
-      if (el) { el.value = v; filled++; }
-    }
-    window.__autosizeAll = () => document.querySelectorAll('textarea').forEach(autosize);
-
-const ALL_SURGERIES = [
-{% for s in surgeries %}{ id: {{ s.id }}, name: "{{ s.name|replace('"','\\"') }}", category: "{{ s.category }}" },
-{% endfor %}
-];
-
-function setName(v) {
-  document.getElementById('surgery_name').value = v;
-  document.getElementById('surgery_name_display').value = v;
-}
-function setCat(v) {
-  document.getElementById('surgery_category').value = v;
-  document.getElementById('surgery_category_display').value = v;
-}
-function clearFields() {
-  fields.forEach(f => document.getElementById(f).value = '');
-}
-document.getElementById('surgery_category_display').addEventListener('change', e => {
-  document.getElementById('surgery_category').value = e.target.value;
-});
 
 async function loadSurgeryById(id) {
   const r = await fetch('/api/surgery/' + id);
@@ -880,4 +810,67 @@ document.getElementById('btn-hosp-ai').addEventListener('click', async () => {
 // 초기 상태 적용
 applyPatientType();
 </script>
+
+<script>
+// ----- 클립보드 붙여넣기 OCR (imaging_new.html과 동일 방식) -----
+document.addEventListener('paste', (e) => {
+  const tag = (document.activeElement?.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
+    const hasImg = Array.from(e.clipboardData?.items || []).some(i => i.type.startsWith('image/'));
+    if (!hasImg) return;
+  }
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg','jpg');
+      const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.getElementById('chart-image').files = dt.files;
+      const status = document.getElementById('chart-ocr-status');
+      status.textContent = '📋 클립보드 이미지 붙여넣기 감지 → 자동 OCR 실행...';
+      status.style.color = '#2563eb';
+      document.getElementById('chart-image').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => document.getElementById('btn-chart-ocr').click(), 100);
+      return;
+    }
+  }
+});
+
+// ----- 차트 OCR 버튼 클릭 -----
+document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
+  const fileEl = document.getElementById('chart-image');
+  const file = fileEl.files[0];
+  if (!file) { alert('이미지 파일을 먼저 선택하세요.'); return; }
+  const status = document.getElementById('chart-ocr-status');
+  const btn = document.getElementById('btn-chart-ocr');
+  btn.disabled = true;
+  status.textContent = '🖼 Claude가 차트 읽는 중... (5~15초)';
+  status.style.color = '#666';
+  try {
+    const fd = new FormData(); fd.append('image', file);
+    const r = await fetch('/api/chart-ocr', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    let filled = 0;
+    for (const [k, v] of Object.entries(d.data)) {
+      if (!v) continue;
+      const el = document.querySelector('[name="' + k + '"]');
+      if (el) { el.value = v; filled++; }
+    }
+    status.textContent = '✓ ' + filled + '개 필드 자동입력 완료. 검토 후 필요시 수정하세요.';
+    status.style.color = '#0a7';
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+
 {% endblock %}
