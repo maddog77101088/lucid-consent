@@ -85,15 +85,22 @@
       <label>활동제한 (일)<input id="activity_limit_days" type="number" min="0" max="90" placeholder="14"></label>
     </section>
 
-    <!-- 입원 기간 -->
+    <!-- 입원 기간 / 퇴원 상태 -->
     <section class="card" style="border-left:3px solid #0891b2;">
-      <h2>⑤ 입원 기간</h2>
+      <h2>⑤ 입원 기간 & 퇴원 당시 상태</h2>
       <label>수술후 입원일수 <span class="muted" style="font-size:12px;">(0 = 당일 퇴원)</span>
         <input id="hospitalization_days" type="number" min="0" max="60" value="0" placeholder="0">
       </label>
-      <div style="font-size:13px; color:#6b7280; margin-top:4px;">
+      <div style="font-size:13px; color:#6b7280; margin:4px 0 12px;">
         <span id="hosp-hint">💡 0 = 당일 퇴원 시 마취회복·식이 안내 포함</span>
       </div>
+      <label>퇴원 당시 환자 상태 <span class="muted" style="font-size:12px;">(AI가 안내문 톤·주의사항 수준을 조절합니다)</span>
+        <select id="discharge_status">
+          <option value="good">✅ 좋은 경과로 퇴원 (회복 순조로움)</option>
+          <option value="delayed">⚠️ 회복이 지연 중 퇴원 (주의 깊은 관찰 필요)</option>
+          <option value="worsening">🚨 상태 악화 중 퇴원 (보호자 요청 등, 적극적 관찰 필요)</option>
+        </select>
+      </label>
     </section>
 
     <!-- 상처 관리 지침 -->
@@ -230,6 +237,7 @@ document.getElementById('btn-generate').addEventListener('click', async function
     wound_ointment: document.getElementById('wound_ointment').value,
     wound_ointment_name: document.getElementById('wound_ointment_name').value.trim(),
     wound_bandage: document.getElementById('wound_bandage').value,
+    discharge_status: document.getElementById('discharge_status').value,
   };
 
   try {
