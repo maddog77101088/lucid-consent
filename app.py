@@ -179,6 +179,11 @@ def init_db():
         cur.execute("ALTER TABLE consent_records ADD COLUMN deleted_by INTEGER")
     if "delete_reason" not in cr_cols:
         cur.execute("ALTER TABLE consent_records ADD COLUMN delete_reason TEXT")
+    # surgeries 마이그레이션: post_op_notes (수술후 기본 안내)
+    cur.execute("PRAGMA table_info(surgeries)")
+    sg_cols = [c[1] for c in cur.fetchall()]
+    if "post_op_notes" not in sg_cols:
+        cur.execute("ALTER TABLE surgeries ADD COLUMN post_op_notes TEXT DEFAULT ''")
     con.commit()
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
@@ -376,7 +381,8 @@ def surgery_list():
 
 
 SURGERY_FIELDS = ["name","category","purpose_effect","procedure","complications",
-    "anesthesia_risk","estimated_cost","hospitalization","expected_duration","notes"]
+    "anesthesia_risk","estimated_cost","hospitalization","expected_duration","notes",
+    "post_op_notes"]
 
 
 def _form_to_surgery():
@@ -391,8 +397,8 @@ def surgery_new():
         try:
             get_db().execute("""INSERT INTO surgeries
                 (name,category,purpose_effect,procedure,complications,anesthesia_risk,
-                 estimated_cost,hospitalization,expected_duration,notes)
-                VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                 estimated_cost,hospitalization,expected_duration,notes,post_op_notes)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 tuple(d[k] for k in SURGERY_FIELDS))
             get_db().commit()
             flash("수술이 DB에 추가되었습니다.", "ok")
@@ -412,7 +418,7 @@ def surgery_edit(sid):
         d = _form_to_surgery()
         db.execute("""UPDATE surgeries SET name=?,category=?,purpose_effect=?,procedure=?,
             complications=?,anesthesia_risk=?,estimated_cost=?,hospitalization=?,
-            expected_duration=?,notes=?,updated_at=datetime('now') WHERE id=?""",
+            expected_duration=?,notes=?,post_op_notes=?,updated_at=datetime('now') WHERE id=?""",
             tuple(d[k] for k in SURGERY_FIELDS) + (sid,))
         db.commit()
         flash("수정되었습니다.", "ok")
@@ -1093,6 +1099,151 @@ def payment_create_sign_link():
         "ttl_hours": SIGN_LINK_TTL_HOURS,
         "doc_type": "payment",
     })
+
+
+# ===================== 수술후 안내문 (AI 자동생성) =====================
+# B+C 방식: 수술 DB의 post_op_notes 기본값 + 환자 특이사항 → Claude 로 보호자용 안내문 작성.
+
+POSTOP_PROMPT = """당신은 한국 동물병원의 수의사가 수술 후 퇴원하는 환자의 보호자에게 전달할 안내문을 작성하는 전문가입니다.
+
+**톤과 양식 (매우 중요)**:
+- 첫 줄: "[환자이름] 보호자님께"
+- 둘째 줄(빈 줄)
+- 셋째 줄: "[환자이름]는 오늘 [수술명]을 잘 마치고 퇴원합니다. 집에서 아래 사항들을 꼭 지켜주세요."
+- 이후 각 섹션은 이모지 제목 + "-" 글머리 본문
+- 부드럽고 안심되는 어투. 하지만 주의사항은 명확히.
+- 전문 용어 대신 쉬운 말 (예: "경구 투여" → "먹이기", "식욕부진" → "밥을 잘 안 먹음")
+
+**섹션 순서 (빠지지 않게)**:
+1. 📌 오늘~내일 (가장 중요한 초기 24시간 관리)
+2. 🍚 먹이기 (오늘 저녁 / 내일 아침 단계별 양·횟수)
+3. 💊 약 복용 (처방된 약 이름·횟수·기간 정확히)
+4. 🩹 상처 관리 & E-collar (수술 부위 보호·핥기 방지)
+5. 🐾 활동 제한 (산책·점프·계단 등 며칠간)
+6. 🚨 이런 증상 시 즉시 연락 (응급 신호 구체적으로)
+7. 📅 다음 내원 일정 (실밥제거·경과확인 날짜)
+8. 마무리 (궁금한 점 언제든 연락 + 병원 전화번호)
+
+**출력 규칙**:
+- 마크다운 코드블록·헤더(#) 금지. 이모지 + 줄글만.
+- 입력된 정보(약 이름·일수·날짜)는 정확히 그대로 반영.
+- 입력에 없는 정보는 추측 금지. 일반적으로 통용되는 상식 수준만 추가.
+- 응급 증상은 보호자가 즉시 알아차릴 수 있도록 구체적으로 (색·냄새·빈도 등).
+- 마지막 줄: "궁금한 점이 있으시면 언제든 병원으로 연락 주세요. 02-941-7900 · 24시 루시드 동물병원"
+"""
+
+
+@app.route("/postop/new", methods=["GET"])
+@login_required
+def postop_new():
+    db = get_db()
+    surgeries = db.execute(
+        "SELECT id,name,category FROM surgeries ORDER BY category,name"
+    ).fetchall()
+    return render_template("postop_new.html",
+                           surgeries=surgeries,
+                           today=datetime.now().strftime("%Y-%m-%d"),
+                           vet_name=session.get("display_name", ""))
+
+
+@app.route("/api/postop/generate", methods=["POST"])
+@login_required
+def api_postop_generate():
+    """구조화 입력 + 수술 DB post_op_notes → Claude 로 보호자 안내문 생성."""
+    if requests is None:
+        return jsonify({"error": "'requests' 패키지가 설치되어 있지 않습니다."}), 500
+    data = request.get_json() or {}
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수 미설정"}), 400
+
+    patient = (data.get("patient_name") or "").strip()
+    guardian = (data.get("guardian_name") or "").strip()
+    species = (data.get("species") or "").strip()
+    age = (data.get("age") or "").strip()
+    surgery_name = (data.get("surgery_name") or "").strip()
+    diagnosis = (data.get("diagnosis") or "").strip()
+    medications = (data.get("medications") or "").strip()
+    med_days = (data.get("med_days") or "").strip()
+    ecollar_days = (data.get("ecollar_days") or "").strip()
+    activity_limit_days = (data.get("activity_limit_days") or "").strip()
+    suture_remove_date = (data.get("suture_remove_date") or "").strip()
+    followup_note = (data.get("followup_note") or "").strip()
+    db_postop = (data.get("db_postop_notes") or "").strip()
+    special_notes = (data.get("special_notes") or "").strip()
+
+    if not patient or not surgery_name:
+        return jsonify({"error": "환자명과 수술명은 필수입니다."}), 400
+
+    meta = []
+    if patient: meta.append(f"- 환자 이름: {patient}")
+    if species: meta.append(f"- 종: {species}")
+    if age: meta.append(f"- 나이: {age}")
+    if guardian: meta.append(f"- 보호자: {guardian}")
+    if surgery_name: meta.append(f"- 수술명: {surgery_name}")
+    if diagnosis: meta.append(f"- 진단명: {diagnosis}")
+
+    extra = []
+    if medications:
+        extra.append(f"- 처방 약물: {medications}" + (f" (복용 기간: {med_days}일)" if med_days else ""))
+    if ecollar_days:
+        extra.append(f"- E-collar 착용 기간: {ecollar_days}일")
+    if activity_limit_days:
+        extra.append(f"- 활동 제한 기간: {activity_limit_days}일")
+    if suture_remove_date:
+        extra.append(f"- 실밥 제거 예정일: {suture_remove_date}")
+    if followup_note:
+        extra.append(f"- 추가 재진 안내: {followup_note}")
+
+    user_msg_parts = ["[환자 및 수술 정보]", "\n".join(meta)]
+    if extra:
+        user_msg_parts += ["\n[이번 환자의 처방·관리 조건]", "\n".join(extra)]
+    if db_postop:
+        user_msg_parts += ["\n[병원 DB의 해당 수술 기본 주의사항]", db_postop]
+    if special_notes:
+        user_msg_parts += ["\n[이번 환자 특이사항]", special_notes]
+    user_msg_parts.append("\n위 정보를 모두 반영하여 보호자용 퇴원 안내문을 작성해주세요.")
+    user_msg = "\n".join(user_msg_parts)
+
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 4000,
+                "system": POSTOP_PROMPT,
+                "messages": [{"role": "user", "content": user_msg}],
+            },
+            timeout=90,
+        )
+        if r.status_code != 200:
+            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
+        body = r.json()
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith(("text","markdown","md")):
+                text = text.split("\n", 1)[1] if "\n" in text else ""
+            text = text.strip().rstrip("`").strip()
+        return jsonify({"ok": True, "text": text})
+    except Exception as e:
+        return jsonify({"error": f"AI 요청 실패: {e}"}), 500
+
+
+@app.route("/api/surgery/<int:sid>/postop", methods=["GET"])
+@login_required
+def api_surgery_postop(sid):
+    """수술 DB 에서 post_op_notes 반환."""
+    row = get_db().execute("SELECT post_op_notes FROM surgeries WHERE id=?", (sid,)).fetchone()
+    if not row: return jsonify({"error": "not found"}), 404
+    return jsonify({"post_op_notes": row["post_op_notes"] or ""})
+
 
 
 # ===================== 안락사 동의서 =====================

@@ -41,6 +41,9 @@
   <label>비고
     <input name="notes" value="{{ surgery.notes if surgery else '' }}">
   </label>
+  <label>수술후 기본 안내 <span class="muted" style="font-weight:normal; font-size:12px;">(수술후 안내문 AI 생성 시 기본값으로 사용됩니다)</span>
+    <textarea name="post_op_notes" rows="5" placeholder="예) 일반적인 E-collar 14일, 산책 2주간 제한. 상처 부위 붉은기나 분비물 시 내원. 식이는 평소 식사 50%부터 시작하여 2~3일에 걸쳐 회복. ...">{{ surgery.post_op_notes if surgery else '' }}</textarea>
+  </label>
   <div class="actions">
     <a class="btn-ghost" href="{{ url_for('surgery_list') }}">취소</a>
     <button class="btn-primary" type="submit">저장</button>

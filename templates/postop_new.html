@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>수술후 안내문 작성 <span class="muted" style="font-size:14px; font-weight:400;">(AI 자동 생성)</span></h1>
+<p class="muted">환자 정보 + 수술 선택 + 처방·재진 정보를 입력하면 AI가 보호자용 안내문을 작성합니다.</p>
+
+<div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+
+  <!-- 좌: 입력 폼 -->
+  <div>
+    <!-- 차트 OCR -->
+    <section class="card" style="border-left:3px solid #2563eb;">
+      <h2>① 차트 OCR (선택)</h2>
+      <div class="row-2">
+        <label>이미지 <input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp"></label>
+        <div style="display:flex;align-items:end;">
+          <button type="button" id="btn-chart-ocr" class="btn-primary">🖼 정보 추출</button>
+        </div>
+      </div>
+      <p id="chart-ocr-status" class="muted" style="margin-top:4px; font-size:12px;">💡 차트 캡처 후 <kbd>Ctrl+V</kbd></p>
+    </section>
+
+    <!-- 환자 정보 -->
+    <section class="card">
+      <h2>② 환자 / 보호자</h2>
+      <div class="row-2">
+        <label>보호자 성명<input id="guardian_name"></label>
+        <label>환자 이름 *<input id="patient_name" required></label>
+      </div>
+      <div class="row-2">
+        <label>종<select id="species"><option>Canine (개)</option><option>Feline (고양이)</option><option>기타</option></select></label>
+        <label>나이<input id="age" placeholder="예: 11y 9m"></label>
+      </div>
+    </section>
+
+    <!-- 수술 -->
+    <section class="card" style="border-left:3px solid #0891b2;">
+      <h2>③ 수술 정보</h2>
+      <label>수술 선택 <span class="muted" style="font-size:12px;">(DB에서 기본 안내 자동 로드)</span>
+        <select id="surgery_select">
+          <option value="">-- 선택 --</option>
+          {% for s in surgeries %}
+            <option value="{{ s.id }}" data-name="{{ s.name }}">[{{ s.category }}] {{ s.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>수술명 (직접 입력 / OCR 채움)<input id="surgery_name" placeholder="예: TPLO, OHE, 슬관절 탈구 교정술"></label>
+      <label>진단명 (선택)<input id="diagnosis" placeholder="예: 좌측 슬관절 탈구 Grade 3"></label>
+    </section>
+
+    <!-- 처방·관리 -->
+    <section class="card" style="border-left:3px solid #0891b2;">
+      <h2>④ 처방 · 관리</h2>
+      <label>처방 약물 <span class="muted" style="font-size:12px;">(이름만, 콤마로 구분)</span>
+        <input id="medications" placeholder="예: Amoxicillin-Clavulanic acid, Metacam">
+      </label>
+      <div class="row-3">
+        <label>복용 일수<input id="med_days" type="number" min="1" max="30" placeholder="7"></label>
+        <label>E-collar (일)<input id="ecollar_days" type="number" min="0" max="60" placeholder="14"></label>
+        <label>활동제한 (일)<input id="activity_limit_days" type="number" min="0" max="90" placeholder="14"></label>
+      </div>
+    </section>
+
+    <!-- 재진 -->
+    <section class="card" style="border-left:3px solid #0891b2;">
+      <h2>⑤ 재진 일정</h2>
+      <div class="row-2">
+        <label>실밥 제거일<input id="suture_remove_date" type="date"></label>
+        <label>&nbsp;<button type="button" id="btn-auto-suture" class="btn-ghost" style="width:100%;">작성일 + 14일로 자동</button></label>
+      </div>
+      <label>추가 재진 안내 (선택)<input id="followup_note" placeholder="예: 2주 후 재진, 혈액 재검사 필요"></label>
+    </section>
+
+    <!-- DB 기본 안내 + 특이사항 -->
+    <section class="card">
+      <h2>⑥ AI 참고 정보</h2>
+      <label>수술 DB의 기본 안내 <span class="muted" style="font-size:12px;">(수술 선택 시 자동 채움, 수정 가능)</span>
+        <textarea id="db_postop_notes" rows="3" placeholder="수술을 선택하면 자동으로 채워집니다."></textarea>
+      </label>
+      <label>이번 환자 특이사항 (선택)<textarea id="special_notes" rows="2" placeholder="예: 수술 중 예상보다 출혈량 많았음. 당분간 더 주의 깊게 관찰 필요."></textarea></label>
+    </section>
+
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <a class="btn-ghost" href="{{ url_for('dashboard') }}" style="flex:0 0 auto;">취소</a>
+      <button type="button" id="btn-generate" class="btn-primary" style="flex:1; padding:12px; font-size:15px; font-weight:600;">
+        ✨ AI로 안내문 생성
+      </button>
+    </div>
+  </div>
+
+  <!-- 우: AI 결과 -->
+  <div>
+    <section class="card" style="position:sticky; top:12px;">
+      <h2>📄 생성된 안내문 <span id="gen-status" class="muted" style="font-size:12px; font-weight:normal;"></span></h2>
+      <textarea id="result" rows="28"
+                placeholder="좌측에 정보 입력 후 [✨ AI로 안내문 생성] 버튼을 눌러주세요."
+                style="width:100%; font-family: -apple-system, 'Malgun Gothic', sans-serif; font-size:13.5px;
+                       line-height:1.7; padding:12px; border:1.5px solid #d1d5db; border-radius:6px;
+                       white-space:pre-wrap; box-sizing:border-box; resize:vertical;"></textarea>
+      <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+        <button type="button" id="btn-copy" class="btn-ghost" style="flex:1;">📋 복사</button>
+        <button type="button" id="btn-print" class="btn-ghost" style="flex:1;">🖨 인쇄/PDF</button>
+      </div>
+      <p class="muted" style="font-size:11px; margin-top:6px;">※ AI 생성 후 자유롭게 편집 가능. 편집 내용은 복사·인쇄에 반영됩니다.</p>
+    </section>
+  </div>
+
+</div>
+
+<!-- 인쇄용 숨김 영역 -->
+<div id="print-area" style="display:none;"></div>
+
+<script>
+// ----- 수술 선택 시 DB 기본 안내 자동 로드 -----
+document.getElementById('surgery_select').addEventListener('change', async function(){
+  const sid = this.value;
+  const name = this.options[this.selectedIndex].dataset.name || '';
+  if (name) document.getElementById('surgery_name').value = name;
+  if (!sid) return;
+  try {
+    const r = await fetch(`/api/surgery/${sid}/postop`);
+    const d = await r.json();
+    if (r.ok && d.post_op_notes !== undefined) {
+      document.getElementById('db_postop_notes').value = d.post_op_notes;
+    }
+  } catch (e) { /* ignore */ }
+});
+
+// ----- 실밥제거일 자동 계산 -----
+document.getElementById('btn-auto-suture').addEventListener('click', function(){
+  const today = new Date('{{ today }}');
+  today.setDate(today.getDate() + 14);
+  document.getElementById('suture_remove_date').value = today.toISOString().slice(0,10);
+});
+
+// ----- AI 생성 -----
+document.getElementById('btn-generate').addEventListener('click', async function(){
+  const btn = this;
+  const status = document.getElementById('gen-status');
+  const result = document.getElementById('result');
+  const patient = document.getElementById('patient_name').value.trim();
+  const surgery = document.getElementById('surgery_name').value.trim();
+  if (!patient) { alert('환자 이름을 입력해주세요.'); return; }
+  if (!surgery) { alert('수술명을 입력하거나 수술 DB에서 선택해주세요.'); return; }
+
+  btn.disabled = true;
+  status.textContent = '🤖 Claude가 안내문 작성 중... (10~30초)';
+  status.style.color = '#2563eb';
+
+  const payload = {
+    patient_name: patient,
+    guardian_name: document.getElementById('guardian_name').value.trim(),
+    species: document.getElementById('species').value,
+    age: document.getElementById('age').value.trim(),
+    surgery_name: surgery,
+    diagnosis: document.getElementById('diagnosis').value.trim(),
+    medications: document.getElementById('medications').value.trim(),
+    med_days: document.getElementById('med_days').value.trim(),
+    ecollar_days: document.getElementById('ecollar_days').value.trim(),
+    activity_limit_days: document.getElementById('activity_limit_days').value.trim(),
+    suture_remove_date: document.getElementById('suture_remove_date').value,
+    followup_note: document.getElementById('followup_note').value.trim(),
+    db_postop_notes: document.getElementById('db_postop_notes').value.trim(),
+    special_notes: document.getElementById('special_notes').value.trim(),
+  };
+
+  try {
+    const r = await fetch('/api/postop/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '생성 실패');
+    result.value = d.text;
+    status.textContent = '✓ 완료 (편집 가능)';
+    status.style.color = '#059669';
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#dc2626';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ----- 복사 -----
+document.getElementById('btn-copy').addEventListener('click', async function(){
+  const text = document.getElementById('result').value;
+  if (!text) { alert('복사할 내용이 없습니다.'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    this.textContent = '✓ 복사됨';
+    setTimeout(() => this.textContent = '📋 복사', 1500);
+  } catch (e) {
+    alert('복사 실패 - 수동으로 선택하여 복사해주세요.');
+  }
+});
+
+// ----- 인쇄 -----
+document.getElementById('btn-print').addEventListener('click', function(){
+  const text = document.getElementById('result').value;
+  if (!text) { alert('인쇄할 내용이 없습니다.'); return; }
+  const patient = document.getElementById('patient_name').value.trim() || '환자';
+  const w = window.open('', '_blank');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8">
+    <title>수술후 안내문 - ${patient}</title>
+    <style>
+      @page { margin: 20mm 18mm; }
+      body { font-family: -apple-system, "Malgun Gothic", sans-serif; line-height: 1.75; font-size: 11pt; }
+      h1 { font-size: 16pt; border-bottom: 2pt solid #0891b2; padding-bottom: 6pt; }
+      pre { white-space: pre-wrap; font-family: inherit; font-size: 11pt; }
+      .footer { margin-top: 20pt; font-size: 9pt; color: #666; text-align: center; border-top: 1pt solid #ccc; padding-top: 8pt; }
+    </style></head><body>
+    <h1>🏥 수술후 안내문 — ${patient}</h1>
+    <pre>${text.replace(/</g,'&lt;')}</pre>
+    <div class="footer">24시루시드동물메디컬센터 · 서울 강북구 월계로 3 · TEL 02-941-7900</div>
+    <script>window.onload=()=>window.print();<\\/script>
+    </body></html>`);
+  w.document.close();
+});
+
+// ----- 차트 OCR -----
+document.addEventListener('paste', (e) => {
+  const tag = (document.activeElement?.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
+    const hasImg = Array.from(e.clipboardData?.items || []).some(i => i.type.startsWith('image/'));
+    if (!hasImg) return;
+  }
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      const file = new File([blob], `clipboard-${Date.now()}.png`, { type: blob.type });
+      const dt = new DataTransfer(); dt.items.add(file);
+      document.getElementById('chart-image').files = dt.files;
+      document.getElementById('chart-ocr-status').textContent = '📋 클립보드 이미지 감지 → OCR 실행...';
+      setTimeout(() => document.getElementById('btn-chart-ocr').click(), 100);
+      return;
+    }
+  }
+});
+
+document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
+  const fileEl = document.getElementById('chart-image');
+  const file = fileEl.files[0];
+  if (!file) { alert('이미지 파일을 먼저 선택하세요.'); return; }
+  const status = document.getElementById('chart-ocr-status');
+  const btn = document.getElementById('btn-chart-ocr');
+  btn.disabled = true;
+  status.textContent = '🖼 Claude가 차트 읽는 중...';
+  try {
+    const fd = new FormData(); fd.append('image', file);
+    const r = await fetch('/api/chart-ocr', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    let filled = 0;
+    // OCR 결과 매핑: consent 폼 키와 다를 수 있음
+    const map = {
+      guardian_name: 'guardian_name',
+      patient_name: 'patient_name',
+      species: 'species',
+      age: 'age',
+    };
+    for (const [k, v] of Object.entries(d.data)) {
+      if (!v) continue;
+      const id = map[k] || k;
+      const el = document.getElementById(id);
+      if (el) { el.value = v; filled++; }
+    }
+    status.textContent = '✓ ' + filled + '개 필드 자동입력';
+    status.style.color = '#0a7';
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+
+<style>
+  @media (max-width: 900px) {
+    div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+  }
+</style>
+{% endblock %}
