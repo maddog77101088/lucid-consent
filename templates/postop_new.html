@@ -2,17 +2,38 @@
 {% block content %}
 
 <style>
-  /* 수술후 안내문 폼 label 정렬 - 라벨과 입력칸이 같은 줄에서 끊기지 않도록 */
+  /* 수술후 안내문 폼 - 라벨(좌) + 입력칸(우) 나란히 배치, 스크롤 양 최소화 */
   .postop-form label {
-    display: block;
-    margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: 190px 1fr;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
     font-size: 13px;
     color: #374151;
     font-weight: 500;
+    line-height: 1.4;
   }
-  .postop-form label input,
-  .postop-form label select,
-  .postop-form label textarea {
+  .postop-form label > input,
+  .postop-form label > select {
+    padding: 7px 10px;
+    font-size: 14px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 5px;
+    box-sizing: border-box;
+    font-weight: normal;
+    min-width: 0;
+    width: 100%;
+  }
+  .postop-form label > input:focus,
+  .postop-form label > select:focus {
+    outline: none; border-color: #2563eb;
+  }
+  /* textarea 라벨은 세로 스택 (label 위, 큰 textarea 아래) */
+  .postop-form label:has(> textarea) {
+    display: block;
+  }
+  .postop-form label > textarea {
     display: block;
     width: 100%;
     margin-top: 4px;
@@ -23,16 +44,24 @@
     box-sizing: border-box;
     font-weight: normal;
   }
-  .postop-form label input:focus,
-  .postop-form label select:focus,
-  .postop-form label textarea:focus {
+  .postop-form label > textarea:focus {
     outline: none; border-color: #2563eb;
+  }
+  .postop-form .card {
+    padding: 14px 16px;
   }
   .postop-form .card h2 {
     margin-top: 0;
     font-size: 15px;
     color: #1f2937;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
+  }
+  /* 좁은 화면 폴백 */
+  @media (max-width: 640px) {
+    .postop-form label {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
   }
 </style>
 
