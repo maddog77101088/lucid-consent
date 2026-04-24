@@ -140,7 +140,7 @@
   }
 
   openBtn.addEventListener('click', createSignLink);
-  closeBtn.addEventListener('click', hideModal);
+  closeBtn.addEventListener('click', function(){ hideModal(); window.close(); });
   modal.addEventListener('click', function(e) {
     if (e.target === modal) hideModal();
   });
