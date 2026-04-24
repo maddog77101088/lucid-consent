@@ -140,7 +140,12 @@
   }
 
   openBtn.addEventListener('click', createSignLink);
-  closeBtn.addEventListener('click', function(){ hideModal(); window.close(); });
+  closeBtn.addEventListener('click', function(){
+    hideModal();
+    window.close();
+    // 브라우저 정책상 탭이 안 닫히면 대시보드로 이동 (같은 탭에서 열린 경우)
+    setTimeout(function(){ window.location.href = '/'; }, 100);
+  });
   modal.addEventListener('click', function(e) {
     if (e.target === modal) hideModal();
   });
