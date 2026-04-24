@@ -17,44 +17,55 @@
     <a href="{{ url_for('imaging_consent_new') }}" style="color:#2563eb;">새 영상 동의서 작성</a>
   </div>
 {% else %}
-<table class="table" style="width:100%;">
+<div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow:hidden;">
+<table style="width:100%; border-collapse:collapse; font-size:14px;">
   <thead>
-    <tr>
-      <th style="width:80px;">종류</th>
-      <th>환자</th>
-      <th>보호자</th>
-      <th>담당 수의사</th>
-      <th>작성자</th>
-      <th>등록시각</th>
-      <th>만료</th>
-      <th style="width:180px;">동작</th>
+    <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
+      <th style="width:90px; padding:12px 14px; text-align:left; font-size:13px; color:#374151;">종류</th>
+      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">환자</th>
+      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">보호자</th>
+      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">담당 수의사</th>
+      <th style="width:100px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">작성자</th>
+      <th style="width:140px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">등록시각</th>
+      <th style="width:140px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">만료</th>
+      <th style="width:190px; padding:12px 14px; text-align:right; font-size:13px; color:#374151;">동작</th>
     </tr>
   </thead>
   <tbody>
     {% for r in rows %}
-    <tr data-cid="{{ r.id }}">
-      <td>
+    <tr data-cid="{{ r.id }}" style="border-bottom:1px solid #f3f4f6;"
+        onmouseover="this.style.background='#f9fafb';"
+        onmouseout="this.style.background='';">
+      <td style="padding:14px; vertical-align:middle;">
         {% if r.doc_type == 'imaging' %}
-          <span style="color:#7c3aed; font-weight:600;">영상검사</span>
+          <span style="color:#7c3aed; font-weight:600; background:#f3e8ff; padding:3px 8px; border-radius:10px; font-size:12px;">영상검사</span>
         {% else %}
-          <span style="color:#2563eb; font-weight:600;">수술·입원</span>
+          <span style="color:#2563eb; font-weight:600; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px;">수술·입원</span>
         {% endif %}
       </td>
-      <td><strong>{{ r.patient_name or '-' }}</strong></td>
-      <td>{{ r.guardian_name or '-' }}</td>
-      <td>{{ r.vet_name or '-' }}</td>
-      <td class="muted">{{ r.creator_name or '-' }}</td>
-      <td class="muted" style="font-size:12px;">{{ r.created_at }}</td>
-      <td class="muted" style="font-size:12px;">{{ r.expires_at }}</td>
-      <td>
+      <td style="padding:14px 10px; vertical-align:middle; font-weight:600;">{{ r.patient_name or '-' }}</td>
+      <td style="padding:14px 10px; vertical-align:middle;">{{ r.guardian_name or '-' }}</td>
+      <td style="padding:14px 10px; vertical-align:middle;">{{ r.vet_name or '-' }}</td>
+      <td style="padding:14px 10px; vertical-align:middle; color:#6b7280;">{{ r.creator_name or '-' }}</td>
+      <td style="padding:14px 10px; vertical-align:middle; color:#4b5563; font-size:12px; line-height:1.5;">
+        {% set parts = r.created_at.split(' ') %}
+        <div>{{ parts[0] }}</div>
+        <div style="color:#9ca3af;">{{ parts[1] if parts|length > 1 else '' }}</div>
+      </td>
+      <td style="padding:14px 10px; vertical-align:middle; color:#4b5563; font-size:12px; line-height:1.5;">
+        {% set eparts = r.expires_at.split(' ') %}
+        <div>{{ eparts[0] }}</div>
+        <div style="color:#9ca3af;">{{ eparts[1] if eparts|length > 1 else '' }}</div>
+      </td>
+      <td style="padding:14px; vertical-align:middle; text-align:right; white-space:nowrap;">
         <button type="button" class="btn-qr" data-cid="{{ r.id }}"
-                style="background:#059669; color:#fff; border:0; padding:6px 12px;
-                       border-radius:4px; font-size:13px; cursor:pointer; margin-right:4px;">
+                style="background:#059669; color:#fff; border:0; padding:8px 14px;
+                       border-radius:4px; font-size:13px; font-weight:600; cursor:pointer; margin-right:4px;">
           📱 QR 보기
         </button>
         <button type="button" class="btn-cancel" data-cid="{{ r.id }}"
-                style="background:#f3f4f6; color:#6b7280; border:1px solid #d1d5db;
-                       padding:6px 10px; border-radius:4px; font-size:12px; cursor:pointer;">
+                style="background:#fff; color:#6b7280; border:1px solid #d1d5db;
+                       padding:7px 12px; border-radius:4px; font-size:12px; cursor:pointer;">
           취소
         </button>
       </td>
@@ -62,9 +73,10 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 
-<!-- QR 팝업 모달 (재사용) -->
+<!-- QR 팝업 모달 -->
 <div id="qr-modal" style="display:none; position:fixed; inset:0;
      background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
   <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:420px;
@@ -79,24 +91,18 @@
       </div>
       <div id="qr-url" style="font-size:11px; color:#9ca3af; word-break:break-all;
                   background:#f3f4f6; padding:8px 10px; border-radius:4px; margin-bottom:10px;"></div>
-      <div style="display:flex; gap:8px; margin-bottom:10px;">
-        <button type="button" id="qr-copy" style="flex:1; padding:8px; font-size:13px;
-                background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; cursor:pointer;">
-          🔗 링크 복사
-        </button>
-        <button type="button" id="qr-refresh" style="flex:1; padding:8px; font-size:13px;
-                background:#dbeafe; border:1px solid #2563eb; color:#1d4ed8;
-                border-radius:4px; cursor:pointer;">
-          🔄 서명 확인
-        </button>
-      </div>
+      <button type="button" id="qr-copy" style="width:100%; padding:9px; font-size:13px;
+              background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; cursor:pointer; margin-bottom:10px;">
+        🔗 링크 복사
+      </button>
       <div style="font-size:12px; color:#d97706; background:#fef3c7; padding:6px 10px;
                   border-radius:4px; margin-bottom:10px;">
         ⏰ 만료: <strong id="qr-exp"></strong>
       </div>
       <div id="qr-status" style="font-size:12px; color:#059669; min-height:16px; margin-bottom:10px;"></div>
-      <button type="button" id="qr-close" style="background:#6b7280; color:#fff;
-              border:0; padding:9px 22px; border-radius:4px; font-size:13px; cursor:pointer;">
+      <button type="button" id="qr-close" style="background:#2563eb; color:#fff;
+              border:0; padding:10px 22px; border-radius:4px; font-size:14px; font-weight:600;
+              cursor:pointer; width:100%;">
         닫기
       </button>
     </div>
@@ -152,10 +158,7 @@
     if (!currentToken) return;
     try {
       const res = await fetch(`/sign/${currentToken}/complete`, { redirect: 'manual' });
-      if (res.type === 'opaqueredirect' || res.status === 302 || res.status === 303) {
-        qrStatus.textContent = '아직 서명 전입니다.';
-        return;
-      }
+      if (res.type === 'opaqueredirect' || res.status === 302 || res.status === 303) return;
       if (res.ok) {
         qrStatus.innerHTML = '✓ 서명 완료! <a href="/sign/' + currentToken +
           '/pdf" target="_blank" style="color:#059669; text-decoration:underline;">서명된 동의서 보기</a> · ' +
@@ -170,7 +173,6 @@
     pollTimer = setInterval(checkSigned, 15000);
   }
 
-  // 이벤트 바인딩
   document.querySelectorAll('.btn-qr').forEach(btn => {
     btn.addEventListener('click', function(){
       const cid = this.dataset.cid;
@@ -197,10 +199,6 @@
 
   document.getElementById('qr-close').addEventListener('click', hide);
   modal.addEventListener('click', e => { if (e.target === modal) hide(); });
-  document.getElementById('qr-refresh').addEventListener('click', () => {
-    qrStatus.textContent = '확인 중...';
-    checkSigned();
-  });
   document.getElementById('qr-copy').addEventListener('click', async () => {
     const url = qrUrl.textContent;
     try {
