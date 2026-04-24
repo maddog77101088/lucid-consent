@@ -343,7 +343,15 @@ def change_password():
 def dashboard():
     db = get_db()
     counts = {c: db.execute("SELECT COUNT(*) FROM surgeries WHERE category=?", (c,)).fetchone()[0] for c in CATEGORIES}
-    return render_template("dashboard.html", counts=counts, total=sum(counts.values()))
+    pending_cnt = db.execute(
+        "SELECT COUNT(*) FROM consent_records WHERE signed_at IS NULL "
+        "AND datetime(expires_at) > datetime('now', 'localtime')"
+    ).fetchone()[0]
+    signed_cnt = db.execute(
+        "SELECT COUNT(*) FROM consent_records WHERE signed_at IS NOT NULL"
+    ).fetchone()[0]
+    return render_template("dashboard.html", counts=counts, total=sum(counts.values()),
+                           pending_cnt=pending_cnt, signed_cnt=signed_cnt)
 
 
 @app.route("/surgeries")
@@ -1074,6 +1082,108 @@ def sign_pdf(token):
         signed_at=row["signed_at"],
         checked_boxes=checked_boxes,
     )
+
+
+# ----- 서명 대기 리스트 / 동의서 이력 / QR 재조회 -----
+
+def _doc_type_label(t):
+    return "영상검사" if t == "imaging" else "수술·입원"
+
+
+@app.route("/consents/pending", methods=["GET"])
+@login_required
+def consents_pending():
+    """서명 대기 리스트: signed_at IS NULL, 미만료."""
+    db = get_db()
+    rows = db.execute("""
+        SELECT cr.id, cr.token, cr.doc_type, cr.patient_name, cr.guardian_name,
+               cr.vet_name, cr.expires_at, cr.created_at, cr.created_by,
+               u.display_name AS creator_name
+        FROM consent_records cr
+        LEFT JOIN users u ON u.id = cr.created_by
+        WHERE cr.signed_at IS NULL
+          AND datetime(cr.expires_at) > datetime('now', 'localtime')
+        ORDER BY cr.created_at DESC
+    """).fetchall()
+    return render_template("consent_pending.html", rows=rows,
+                           doc_type_label=_doc_type_label)
+
+
+@app.route("/consents", methods=["GET"])
+@login_required
+def consents_history():
+    """서명 완료 동의서 검색/이력."""
+    q = (request.args.get("q") or "").strip()
+    doc_type = request.args.get("type") or ""
+    db = get_db()
+    sql = """
+        SELECT cr.id, cr.token, cr.doc_type, cr.patient_name, cr.guardian_name,
+               cr.vet_name, cr.signer_name, cr.signed_at, cr.created_at,
+               u.display_name AS creator_name
+        FROM consent_records cr
+        LEFT JOIN users u ON u.id = cr.created_by
+        WHERE cr.signed_at IS NOT NULL
+    """
+    args = []
+    if q:
+        sql += " AND (cr.patient_name LIKE ? OR cr.guardian_name LIKE ? OR cr.signer_name LIKE ? OR cr.vet_name LIKE ?)"
+        like = f"%{q}%"
+        args += [like, like, like, like]
+    if doc_type in ("surgery", "imaging"):
+        sql += " AND cr.doc_type=?"
+        args.append(doc_type)
+    sql += " ORDER BY cr.signed_at DESC LIMIT 300"
+    rows = db.execute(sql, args).fetchall()
+    return render_template("consent_history.html", rows=rows,
+                           q=q, doc_type=doc_type,
+                           doc_type_label=_doc_type_label)
+
+
+@app.route("/api/consents/<int:cid>/qr", methods=["GET"])
+@login_required
+def api_consent_qr(cid):
+    """기존 토큰의 QR을 다시 반환 (대기 리스트 → QR 팝업용)."""
+    db = get_db()
+    row = db.execute(
+        "SELECT token, expires_at, signed_at FROM consent_records WHERE id=?", (cid,)
+    ).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "동의서를 찾을 수 없습니다."}), 404
+    if row["signed_at"]:
+        return jsonify({"ok": False, "error": "이미 서명이 완료되었습니다.",
+                        "signed": True}), 409
+    try:
+        exp = datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        exp = None
+    if exp and datetime.now() > exp:
+        return jsonify({"ok": False, "error": "링크가 만료되었습니다.",
+                        "expired": True}), 410
+    sign_url = f"{_sign_base_url()}/sign/{row['token']}"
+    return jsonify({
+        "ok": True,
+        "token": row["token"],
+        "url": sign_url,
+        "qr_b64": _qr_base64(sign_url),
+        "expires_at": row["expires_at"],
+    })
+
+
+@app.route("/api/consents/<int:cid>/cancel", methods=["POST"])
+@login_required
+def api_consent_cancel(cid):
+    """대기 중인 서명 요청 취소 (만료 시각을 과거로 설정)."""
+    db = get_db()
+    row = db.execute(
+        "SELECT signed_at FROM consent_records WHERE id=?", (cid,)
+    ).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "없습니다."}), 404
+    if row["signed_at"]:
+        return jsonify({"ok": False, "error": "이미 서명이 완료된 건은 취소할 수 없습니다."}), 409
+    db.execute("UPDATE consent_records SET expires_at='2000-01-01 00:00:00' WHERE id=?", (cid,))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/template", methods=["GET","POST"])

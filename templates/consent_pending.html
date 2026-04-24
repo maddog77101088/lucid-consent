@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}서명 대기 리스트 - {{ hospital_short }}{% endblock %}
+{% block content %}
+<h1 style="display:flex; align-items:center; gap:10px;">
+  📋 서명 대기 리스트
+  <span class="muted" style="font-size:13px; font-weight:400;">
+    ({{ rows|length }}건 대기 중 · 24시간 유효)
+  </span>
+</h1>
+<p class="muted">주치의 PC에서 미리 작성·등록해둔 동의서 중 아직 서명이 안 된 항목입니다. 진료실에서 "QR 보기"를 눌러 보호자 스마트폰으로 스캔하세요.</p>
+
+{% if not rows %}
+  <div class="card" style="padding:40px; text-align:center; color:#6b7280;">
+    대기 중인 동의서가 없습니다.<br>
+    <a href="{{ url_for('consent_new') }}" style="color:#2563eb;">새 수술 동의서 작성</a>
+    &nbsp;·&nbsp;
+    <a href="{{ url_for('imaging_consent_new') }}" style="color:#2563eb;">새 영상 동의서 작성</a>
+  </div>
+{% else %}
+<table class="table" style="width:100%;">
+  <thead>
+    <tr>
+      <th style="width:80px;">종류</th>
+      <th>환자</th>
+      <th>보호자</th>
+      <th>담당 수의사</th>
+      <th>작성자</th>
+      <th>등록시각</th>
+      <th>만료</th>
+      <th style="width:180px;">동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr data-cid="{{ r.id }}">
+      <td>
+        {% if r.doc_type == 'imaging' %}
+          <span style="color:#7c3aed; font-weight:600;">영상검사</span>
+        {% else %}
+          <span style="color:#2563eb; font-weight:600;">수술·입원</span>
+        {% endif %}
+      </td>
+      <td><strong>{{ r.patient_name or '-' }}</strong></td>
+      <td>{{ r.guardian_name or '-' }}</td>
+      <td>{{ r.vet_name or '-' }}</td>
+      <td class="muted">{{ r.creator_name or '-' }}</td>
+      <td class="muted" style="font-size:12px;">{{ r.created_at }}</td>
+      <td class="muted" style="font-size:12px;">{{ r.expires_at }}</td>
+      <td>
+        <button type="button" class="btn-qr" data-cid="{{ r.id }}"
+                style="background:#059669; color:#fff; border:0; padding:6px 12px;
+                       border-radius:4px; font-size:13px; cursor:pointer; margin-right:4px;">
+          📱 QR 보기
+        </button>
+        <button type="button" class="btn-cancel" data-cid="{{ r.id }}"
+                style="background:#f3f4f6; color:#6b7280; border:1px solid #d1d5db;
+                       padding:6px 10px; border-radius:4px; font-size:12px; cursor:pointer;">
+          취소
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<!-- QR 팝업 모달 (재사용) -->
+<div id="qr-modal" style="display:none; position:fixed; inset:0;
+     background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:420px;
+              width:90%; box-shadow:0 10px 40px rgba(0,0,0,.3); text-align:center;">
+    <div id="qr-loading" style="padding:40px 0; color:#6b7280;">QR 불러오는 중...</div>
+    <div id="qr-content" style="display:none;">
+      <h3 style="margin:0 0 4px; font-size:18px;">📱 보호자 서명받기</h3>
+      <p id="qr-patient" style="margin:0 0 14px; color:#4b5563; font-size:13px;"></p>
+      <div style="background:#fafafa; padding:16px; border-radius:8px; margin-bottom:12px;">
+        <img id="qr-img" src="" alt="서명 QR"
+             style="width:260px; height:260px; display:block; margin:0 auto;">
+      </div>
+      <div id="qr-url" style="font-size:11px; color:#9ca3af; word-break:break-all;
+                  background:#f3f4f6; padding:8px 10px; border-radius:4px; margin-bottom:10px;"></div>
+      <div style="display:flex; gap:8px; margin-bottom:10px;">
+        <button type="button" id="qr-copy" style="flex:1; padding:8px; font-size:13px;
+                background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; cursor:pointer;">
+          🔗 링크 복사
+        </button>
+        <button type="button" id="qr-refresh" style="flex:1; padding:8px; font-size:13px;
+                background:#dbeafe; border:1px solid #2563eb; color:#1d4ed8;
+                border-radius:4px; cursor:pointer;">
+          🔄 서명 확인
+        </button>
+      </div>
+      <div style="font-size:12px; color:#d97706; background:#fef3c7; padding:6px 10px;
+                  border-radius:4px; margin-bottom:10px;">
+        ⏰ 만료: <strong id="qr-exp"></strong>
+      </div>
+      <div id="qr-status" style="font-size:12px; color:#059669; min-height:16px; margin-bottom:10px;"></div>
+      <button type="button" id="qr-close" style="background:#6b7280; color:#fff;
+              border:0; padding:9px 22px; border-radius:4px; font-size:13px; cursor:pointer;">
+        닫기
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const modal = document.getElementById('qr-modal');
+  const loading = document.getElementById('qr-loading');
+  const content = document.getElementById('qr-content');
+  const qrImg = document.getElementById('qr-img');
+  const qrUrl = document.getElementById('qr-url');
+  const qrExp = document.getElementById('qr-exp');
+  const qrPatient = document.getElementById('qr-patient');
+  const qrStatus = document.getElementById('qr-status');
+
+  let currentCid = null;
+  let currentToken = null;
+  let pollTimer = null;
+
+  function show() { modal.style.display = 'flex'; }
+  function hide() {
+    modal.style.display = 'none';
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function openQR(cid, patient, guardian) {
+    currentCid = cid;
+    show();
+    loading.style.display = 'block';
+    content.style.display = 'none';
+    qrStatus.textContent = '';
+    try {
+      const res = await fetch(`/api/consents/${cid}/qr`);
+      const j = await res.json();
+      if (!res.ok || !j.ok) throw new Error(j.error || 'QR 생성 실패');
+      currentToken = j.token;
+      qrImg.src = 'data:image/png;base64,' + j.qr_b64;
+      qrUrl.textContent = j.url;
+      qrExp.textContent = j.expires_at;
+      qrPatient.textContent = `환자: ${patient || '-'} · 보호자: ${guardian || '-'}`;
+      loading.style.display = 'none';
+      content.style.display = 'block';
+      startPolling();
+    } catch (err) {
+      loading.innerHTML = '<div style="color:#dc2626; padding:20px;">' +
+        (err.message || '오류') + '</div>';
+    }
+  }
+
+  async function checkSigned() {
+    if (!currentToken) return;
+    try {
+      const res = await fetch(`/sign/${currentToken}/complete`, { redirect: 'manual' });
+      if (res.type === 'opaqueredirect' || res.status === 302 || res.status === 303) {
+        qrStatus.textContent = '아직 서명 전입니다.';
+        return;
+      }
+      if (res.ok) {
+        qrStatus.innerHTML = '✓ 서명 완료! <a href="/sign/' + currentToken +
+          '/pdf" target="_blank" style="color:#059669; text-decoration:underline;">서명된 동의서 보기</a> · ' +
+          '<a href="#" onclick="location.reload();return false;" style="color:#2563eb;">목록 새로고침</a>';
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      }
+    } catch (e) {}
+  }
+
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(checkSigned, 15000);
+  }
+
+  // 이벤트 바인딩
+  document.querySelectorAll('.btn-qr').forEach(btn => {
+    btn.addEventListener('click', function(){
+      const cid = this.dataset.cid;
+      const row = this.closest('tr');
+      const patient = row.cells[1].textContent.trim();
+      const guardian = row.cells[2].textContent.trim();
+      openQR(cid, patient, guardian);
+    });
+  });
+
+  document.querySelectorAll('.btn-cancel').forEach(btn => {
+    btn.addEventListener('click', async function(){
+      if (!confirm('이 서명 요청을 취소할까요?')) return;
+      const cid = this.dataset.cid;
+      const res = await fetch(`/api/consents/${cid}/cancel`, { method: 'POST' });
+      if (res.ok) {
+        this.closest('tr').remove();
+      } else {
+        const j = await res.json().catch(()=>({}));
+        alert(j.error || '취소 실패');
+      }
+    });
+  });
+
+  document.getElementById('qr-close').addEventListener('click', hide);
+  modal.addEventListener('click', e => { if (e.target === modal) hide(); });
+  document.getElementById('qr-refresh').addEventListener('click', () => {
+    qrStatus.textContent = '확인 중...';
+    checkSigned();
+  });
+  document.getElementById('qr-copy').addEventListener('click', async () => {
+    const url = qrUrl.textContent;
+    try {
+      await navigator.clipboard.writeText(url);
+      const btn = document.getElementById('qr-copy');
+      btn.textContent = '✓ 복사됨';
+      setTimeout(() => { btn.innerHTML = '🔗 링크 복사'; }, 1500);
+    } catch (e) { alert('복사 실패. 수동으로 선택해주세요.'); }
+  });
+})();
+</script>
+{% endblock %}

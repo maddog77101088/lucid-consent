@@ -9,12 +9,32 @@
       <p>환자·보호자 정보를 입력하고, 수술을 선택하면 기본양식과 DB 내용이 자동으로 채워집니다.</p>
     </div>
   </a>
+  <a class="card big-action" href="{{ url_for('consents_pending') }}"
+     style="{% if pending_cnt and pending_cnt > 0 %}border:2px solid #059669;{% endif %}">
+    <div class="big-icon">📋</div>
+    <div>
+      <h2>서명 대기 리스트
+        {% if pending_cnt and pending_cnt > 0 %}
+        <span style="background:#059669; color:#fff; padding:2px 10px; border-radius:12px; font-size:14px; margin-left:6px;">{{ pending_cnt }}</span>
+        {% endif %}
+      </h2>
+      <p>주치의가 미리 작성해둔 서명 대기 동의서 {{ pending_cnt or 0 }}건.<br>
+      진료실에서 QR 띄워 보호자 스마트폰으로 서명받기.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('consents_history') }}">
+    <div class="big-icon">🗃</div>
+    <div>
+      <h2>서명 완료 동의서</h2>
+      <p>지금까지 서명 완료된 동의서 <strong>{{ signed_cnt or 0 }}건</strong>.<br>
+      환자명·보호자명·수의사로 검색하고 PDF 재출력 가능.</p>
+    </div>
+  </a>
   <a class="card big-action" href="{{ url_for('surgery_list') }}">
     <div class="big-icon">🗂</div>
     <div>
       <h2>수술 DB 관리</h2>
-      <p>현재 등록된 수술: <strong>{{ total }}건</strong><br>
-      카테고리별: {% for c in categories %}{{ c }} {{ counts[c] }}건{% if not loop.last %} · {% endif %}{% endfor %}</p>
+      <p>현재 등록된 수술: <strong>{{ total }}건</strong></p>
     </div>
   </a>
 </div>

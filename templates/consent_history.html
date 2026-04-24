@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}서명 완료 동의서 - {{ hospital_short }}{% endblock %}
+{% block content %}
+<h1 style="display:flex; align-items:center; gap:10px;">
+  🗃 서명 완료 동의서
+  <span class="muted" style="font-size:13px; font-weight:400;">
+    ({{ rows|length }}건 표시 · 최대 300건)
+  </span>
+</h1>
+<p class="muted">보호자 서명이 완료된 모든 동의서는 여기에서 검색·재출력할 수 있습니다.</p>
+
+<form method="get" action="{{ url_for('consents_history') }}"
+      style="display:flex; gap:8px; margin-bottom:20px; flex-wrap:wrap; align-items:center;">
+  <input type="text" name="q" value="{{ q }}" placeholder="환자·보호자·서명자·수의사 검색"
+         style="flex:1; min-width:220px; padding:9px 12px; font-size:14px;
+                border:1.5px solid #d1d5db; border-radius:4px;">
+  <select name="type" style="padding:9px 10px; font-size:14px;
+                             border:1.5px solid #d1d5db; border-radius:4px;">
+    <option value="">전체 유형</option>
+    <option value="surgery" {% if doc_type == 'surgery' %}selected{% endif %}>수술·입원</option>
+    <option value="imaging" {% if doc_type == 'imaging' %}selected{% endif %}>영상검사</option>
+  </select>
+  <button type="submit" style="background:#2563eb; color:#fff; border:0; padding:9px 20px;
+                               border-radius:4px; font-size:14px; font-weight:600; cursor:pointer;">
+    🔍 검색
+  </button>
+  {% if q or doc_type %}
+    <a href="{{ url_for('consents_history') }}"
+       style="padding:9px 12px; color:#6b7280; text-decoration:none; font-size:13px;">전체 보기</a>
+  {% endif %}
+</form>
+
+{% if not rows %}
+  <div class="card" style="padding:40px; text-align:center; color:#6b7280;">
+    {% if q or doc_type %}
+      검색 결과가 없습니다.
+    {% else %}
+      아직 서명 완료된 동의서가 없습니다.
+    {% endif %}
+  </div>
+{% else %}
+<table class="table" style="width:100%;">
+  <thead>
+    <tr>
+      <th style="width:80px;">종류</th>
+      <th>환자</th>
+      <th>보호자(기재)</th>
+      <th>서명자</th>
+      <th>담당 수의사</th>
+      <th>서명일시</th>
+      <th style="width:110px;">동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>
+        {% if r.doc_type == 'imaging' %}
+          <span style="color:#7c3aed; font-weight:600;">영상검사</span>
+        {% else %}
+          <span style="color:#2563eb; font-weight:600;">수술·입원</span>
+        {% endif %}
+      </td>
+      <td><strong>{{ r.patient_name or '-' }}</strong></td>
+      <td>{{ r.guardian_name or '-' }}</td>
+      <td>
+        {{ r.signer_name or '-' }}
+        {% if r.signer_name and r.guardian_name and r.signer_name != r.guardian_name %}
+          <span class="muted" style="font-size:11px;">(기재와 다름)</span>
+        {% endif %}
+      </td>
+      <td>{{ r.vet_name or '-' }}</td>
+      <td class="muted" style="font-size:12px;">{{ r.signed_at }}</td>
+      <td>
+        <a href="{{ url_for('sign_pdf', token=r.token) }}" target="_blank"
+           style="background:#2563eb; color:#fff; padding:6px 12px; border-radius:4px;
+                  font-size:13px; text-decoration:none; display:inline-block;">
+          📄 동의서 열기
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}
