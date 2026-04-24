@@ -11,6 +11,7 @@
 <div class="print-toolbar no-print">
   <button onclick="window.print()">인쇄 / PDF 저장</button>
   <button onclick="window.close()">닫기</button>
+  {% if show_sign_button %}{% include "_sign_qr_button.html" %}{% endif %}
   <label style="margin-left:10px; cursor:pointer; user-select:none;">
     <input type="checkbox" id="expand-toggle" onchange="document.body.classList.toggle('expand-print', this.checked)">
     🔍 확장 모드 <span class="muted" style="font-size:11px;">(여백이 남을 때 켜면 행간·폰트·여백 키워서 읽기 편하게)</span>
@@ -106,6 +107,22 @@
   </p>
 
   {{ r.footer|safe }}
+
+  {% if d.signature_b64 %}
+  <div class="signature-panel" style="margin-top:14pt; padding:10pt 12pt; border:1.5pt solid #059669; border-radius:4pt; page-break-inside: avoid;">
+    <div style="font-size:10pt; color:#059669; font-weight:600; margin-bottom:6pt;">✓ 보호자 전자서명 완료</div>
+    <div style="display:flex; align-items:flex-end; gap:14pt; flex-wrap:wrap;">
+      <div style="flex:1; min-width:200px; border-bottom:1pt solid #111; padding-bottom:2pt;">
+        <img src="data:image/png;base64,{{ d.signature_b64 }}" style="max-width:280px; max-height:90px; display:block;">
+      </div>
+      <div style="min-width:160px;">
+        <div style="font-size:10pt; color:#6b7280;">보호자 (전자서명)</div>
+        <div style="font-size:13pt; font-weight:600;">{{ d.signer_name }}</div>
+        <div style="font-size:9pt; color:#6b7280;">서명일시: {{ d.signed_at }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
   <div class="footer-small muted">
     {{ hospital_name }} · 문서작성일시 {{ d.created_at }} · 주치의 {{ d.vet_name }}

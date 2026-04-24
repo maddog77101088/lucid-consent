@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>보호자 서명 - {{ hospital_name }}</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+                 "Malgun Gothic", "맑은 고딕", sans-serif;
+    background: #f5f6f8; color: #1f2937;
+    height: 100%; overflow: hidden;
+    -webkit-text-size-adjust: 100%;
+  }
+  .sign-wrap {
+    display: flex; flex-direction: column;
+    height: 100vh; height: 100dvh;
+  }
+  /* 상단 헤더 */
+  .sign-header {
+    background: #2563eb; color: #fff;
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    flex-shrink: 0;
+  }
+  .sign-header h1 {
+    margin: 0; font-size: 15px; font-weight: 600;
+    flex: 1; line-height: 1.35;
+  }
+  .sign-header .patient {
+    font-size: 12px; opacity: .85; margin-top: 2px;
+  }
+  .countdown {
+    font-size: 11px; background: rgba(255,255,255,.2);
+    padding: 3px 8px; border-radius: 12px;
+    white-space: nowrap;
+  }
+  /* 본문 iframe */
+  .doc-frame {
+    flex: 1; min-height: 0;
+    background: #fff; border: 0;
+    width: 100%; display: block;
+  }
+  /* 하단 서명 패널 */
+  .sign-panel {
+    background: #fff; border-top: 2px solid #e5e7eb;
+    padding: 10px 12px 14px;
+    flex-shrink: 0;
+    box-shadow: 0 -4px 12px rgba(0,0,0,.08);
+  }
+  .sign-panel.collapsed .pad-area,
+  .sign-panel.collapsed .sign-actions,
+  .sign-panel.collapsed .name-row {
+    display: none;
+  }
+  .sign-panel.collapsed .panel-toggle::after { content: "▲ 서명하기"; }
+  .sign-panel .panel-toggle::after { content: "▼ 접기"; }
+  .panel-toggle {
+    background: #2563eb; color: #fff;
+    width: 100%; padding: 10px; font-size: 15px; font-weight: 600;
+    border: 0; border-radius: 6px;
+    margin-bottom: 8px; cursor: pointer;
+  }
+  .name-row {
+    display: flex; gap: 8px; align-items: center;
+    margin-bottom: 8px;
+  }
+  .name-row label {
+    font-size: 13px; color: #374151; flex-shrink: 0; font-weight: 500;
+  }
+  .name-row input {
+    flex: 1; padding: 9px 10px; font-size: 15px;
+    border: 1.5px solid #d1d5db; border-radius: 5px;
+    min-width: 0;
+  }
+  .name-row input:focus {
+    outline: none; border-color: #2563eb;
+  }
+  .pad-area {
+    position: relative;
+    background: #fafafa; border: 1.5px solid #d1d5db;
+    border-radius: 5px; margin-bottom: 8px;
+  }
+  .pad-area canvas {
+    display: block; width: 100%; height: 140px;
+    touch-action: none;
+    background: #fff;
+    border-radius: 4px;
+  }
+  .pad-hint {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: #9ca3af; font-size: 13px; pointer-events: none;
+    user-select: none;
+  }
+  .pad-hint.hidden { display: none; }
+  .sign-actions {
+    display: flex; gap: 8px;
+  }
+  .sign-actions button {
+    flex: 1; padding: 11px; font-size: 14px; font-weight: 600;
+    border: 0; border-radius: 5px; cursor: pointer;
+  }
+  .btn-clear {
+    background: #f3f4f6; color: #6b7280;
+  }
+  .btn-clear:hover { background: #e5e7eb; }
+  .btn-submit {
+    background: #059669; color: #fff;
+    flex: 2;
+  }
+  .btn-submit:hover { background: #047857; }
+  .btn-submit:disabled {
+    background: #9ca3af; cursor: not-allowed;
+  }
+  .submitting-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.5);
+    display: none; align-items: center; justify-content: center;
+    z-index: 999;
+  }
+  .submitting-overlay.show { display: flex; }
+  .spinner-box {
+    background: #fff; padding: 20px 28px;
+    border-radius: 8px; text-align: center;
+    font-size: 14px; color: #374151;
+  }
+  .spinner {
+    width: 32px; height: 32px;
+    border: 3px solid #e5e7eb; border-top-color: #2563eb;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="sign-wrap">
+  <div class="sign-header">
+    <div style="flex:1;">
+      <h1>{{ doc_title }}</h1>
+      <div class="patient">{{ patient_name or '환자명 미입력' }} · 보호자: {{ guardian_name or '-' }}</div>
+    </div>
+    <div class="countdown" id="countdown">남은 유효시간: --</div>
+  </div>
+
+  <iframe class="doc-frame" id="doc-frame"
+          src="{{ url_for('sign_doc_preview', token=token) }}"
+          title="동의서 내용"></iframe>
+
+  <div class="sign-panel collapsed" id="sign-panel">
+    <button type="button" class="panel-toggle" id="panel-toggle"></button>
+
+    <div class="name-row">
+      <label>보호자 성함</label>
+      <input type="text" id="signer-name" placeholder="서명자 성함을 입력해주세요"
+             value="{{ guardian_name or '' }}" autocomplete="name">
+    </div>
+
+    <div class="pad-area">
+      <canvas id="pad"></canvas>
+      <div class="pad-hint" id="pad-hint">✎ 이 영역에 손가락 또는 펜으로 서명해주세요</div>
+    </div>
+
+    <div class="sign-actions">
+      <button type="button" class="btn-clear" id="btn-clear">다시 서명</button>
+      <button type="button" class="btn-submit" id="btn-submit">동의 및 제출</button>
+    </div>
+  </div>
+</div>
+
+<div class="submitting-overlay" id="overlay">
+  <div class="spinner-box">
+    <div class="spinner"></div>
+    <div>서명을 저장하는 중...</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  // ===== 서명 패드 =====
+  const canvas = document.getElementById('pad');
+  const hint = document.getElementById('pad-hint');
+  const ctx = canvas.getContext('2d');
+  let drawing = false, touched = false;
+  let lastX = 0, lastY = 0;
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    // 기존 데이터 백업
+    const data = touched ? canvas.toDataURL() : null;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111827';
+    if (data) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      img.src = data;
+    }
+  }
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+  }
+
+  function start(e) {
+    e.preventDefault();
+    drawing = true;
+    touched = true;
+    hint.classList.add('hidden');
+    const p = getPos(e);
+    lastX = p.x; lastY = p.y;
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+  }
+  function move(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = getPos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    lastX = p.x; lastY = p.y;
+  }
+  function end(e) {
+    if (!drawing) return;
+    if (e) e.preventDefault();
+    drawing = false;
+    ctx.closePath();
+  }
+
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  canvas.addEventListener('mouseup', end);
+  canvas.addEventListener('mouseleave', end);
+  canvas.addEventListener('touchstart', start, {passive:false});
+  canvas.addEventListener('touchmove', move, {passive:false});
+  canvas.addEventListener('touchend', end);
+  canvas.addEventListener('touchcancel', end);
+
+  document.getElementById('btn-clear').addEventListener('click', function(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    touched = false;
+    hint.classList.remove('hidden');
+  });
+
+  // ===== 패널 토글 =====
+  const panel = document.getElementById('sign-panel');
+  document.getElementById('panel-toggle').addEventListener('click', function(){
+    panel.classList.toggle('collapsed');
+    if (!panel.classList.contains('collapsed')) {
+      setTimeout(resizeCanvas, 50);
+    }
+  });
+
+  // ===== 남은시간 카운트다운 =====
+  const expiresAt = new Date("{{ expires_at_iso }}");
+  const countEl = document.getElementById('countdown');
+  function updateCountdown() {
+    const now = new Date();
+    const diffMs = expiresAt - now;
+    if (diffMs <= 0) {
+      countEl.textContent = "⚠ 링크 만료됨";
+      countEl.style.background = "#dc2626";
+      return;
+    }
+    const hrs = Math.floor(diffMs / 3600000);
+    const mins = Math.floor((diffMs % 3600000) / 60000);
+    if (hrs > 0) {
+      countEl.textContent = `남은시간: ${hrs}시간 ${mins}분`;
+    } else {
+      countEl.textContent = `남은시간: ${mins}분`;
+    }
+  }
+  updateCountdown();
+  setInterval(updateCountdown, 30000);
+
+  // ===== 제출 =====
+  document.getElementById('btn-submit').addEventListener('click', async function(){
+    const name = document.getElementById('signer-name').value.trim();
+    if (!name) {
+      alert('보호자 성함을 입력해주세요.');
+      document.getElementById('signer-name').focus();
+      return;
+    }
+    if (!touched) {
+      alert('서명을 해주세요.');
+      return;
+    }
+    const dataUrl = canvas.toDataURL('image/png');
+
+    const btn = this;
+    btn.disabled = true;
+    document.getElementById('overlay').classList.add('show');
+
+    try {
+      const res = await fetch("{{ url_for('sign_submit', token=token) }}", {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ signer_name: name, signature: dataUrl })
+      });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || '저장에 실패했습니다.');
+      }
+      // 완료 페이지로 이동
+      window.location.href = json.redirect;
+    } catch (err) {
+      document.getElementById('overlay').classList.remove('show');
+      btn.disabled = false;
+      alert('서명 저장 중 오류가 발생했습니다.\n' + (err.message || ''));
+    }
+  });
+
+  // 초기 resize
+  window.addEventListener('load', resizeCanvas);
+  window.addEventListener('resize', resizeCanvas);
+})();
+</script>
+</body>
+</html>

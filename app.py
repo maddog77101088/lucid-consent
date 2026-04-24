@@ -2,8 +2,9 @@
 import os
 import json
 import base64
+import secrets
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
     Flask, render_template, render_template_string, request, redirect, url_for,
@@ -135,6 +136,23 @@ def init_db():
             header_html TEXT, disclaimer_html TEXT, footer_html TEXT,
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
+        CREATE TABLE IF NOT EXISTS consent_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            doc_type TEXT NOT NULL,           -- 'surgery' or 'imaging'
+            form_data TEXT NOT NULL,          -- JSON (원본 폼 데이터)
+            patient_name TEXT,
+            guardian_name TEXT,
+            vet_name TEXT,
+            signature_data TEXT,              -- base64 PNG (서명 이미지)
+            signer_name TEXT,                 -- 실제 서명한 보호자명 입력값
+            signed_at TEXT,
+            expires_at TEXT NOT NULL,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_consent_token ON consent_records(token);
+        CREATE INDEX IF NOT EXISTS idx_consent_created ON consent_records(created_at);
     """)
     # 기존 DB 마이그레이션: youtube_url 컬럼 추가 + 빈 값이면 기본값으로 채우기
     cur.execute("PRAGMA table_info(hospital_template)")
@@ -641,15 +659,11 @@ CONSENT_FIELDS = ["guardian_id","guardian_name","guardian_phone","guardian_mobil
     ]
 
 
-@app.route("/consent/preview", methods=["POST"])
-@login_required
-def consent_preview():
-    db = get_db()
+def _render_consent_print_from_data(data, db, signature_b64=None, signer_name=None, signed_at=None, show_sign_button=False):
+    """수술/입원 동의서 data dict → consent_print.html 렌더링.
+    consent_preview와 sign 페이지에서 공통으로 사용. signature_b64가 있으면 서명 이미지 삽입.
+    show_sign_button=True: 원내 수의사 미리보기에 "서명받기" 버튼 노출."""
     tpl = db.execute("SELECT * FROM hospital_template WHERE id=1").fetchone()
-    data = {k: request.form.get(k,"") for k in CONSENT_FIELDS}
-    data["vet_name"] = request.form.get("vet_name") or session.get("display_name","")
-    data["surgery_date"] = request.form.get("surgery_date") or datetime.now().strftime("%Y-%m-%d")
-    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
     # YouTube URL / QR 코드 (DB가 비어있으면 기본값 fallback)
     try:
         yt_url = tpl["youtube_url"] if "youtube_url" in tpl.keys() else ""
@@ -702,7 +716,303 @@ def consent_preview():
             r'\1' + qr_html,
             rendered["disclaimer"], count=1, flags=_re2.DOTALL
         )
-    return render_template("consent_print.html", d=data, r=rendered, doc_title=doc_title)
+    # 서명 이미지가 제공되면 data에 주입 (consent_print.html에서 표시)
+    if signature_b64:
+        data["signature_b64"] = signature_b64
+        data["signer_name"] = signer_name or data.get("guardian_name", "")
+        data["signed_at"] = signed_at or ""
+    # 서명받기 버튼용 hidden form 필드 (렌더된 추가 필드는 제외)
+    sign_form_fields = CONSENT_FIELDS + ["vet_name", "surgery_date"]
+    return render_template(
+        "consent_print.html",
+        d=data, r=rendered, doc_title=doc_title,
+        show_sign_button=show_sign_button and not signature_b64,
+        sign_form_fields=sign_form_fields,
+        sign_form_action=url_for("consent_create_sign_link"),
+    )
+
+
+@app.route("/consent/preview", methods=["POST"])
+@login_required
+def consent_preview():
+    db = get_db()
+    data = {k: request.form.get(k, "") for k in CONSENT_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["surgery_date"] = request.form.get("surgery_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return _render_consent_print_from_data(data, db, show_sign_button=True)
+
+
+# ===================== 보호자 모바일 서명 (QR 링크) =====================
+
+SIGN_LINK_TTL_HOURS = 24  # QR 링크 유효시간 (시간 단위)
+
+
+def _make_sign_token():
+    """URL-safe 랜덤 토큰 32자."""
+    return secrets.token_urlsafe(24)
+
+
+def _sign_base_url():
+    """외부에서 접근 가능한 기본 URL.
+    Render/프록시 환경에서 X-Forwarded-Proto 고려."""
+    # 우선 ENV에서 지정된 PUBLIC_BASE_URL 사용 (예: https://lucid-consent.onrender.com)
+    base = os.environ.get("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if base:
+        return base
+    # 없으면 요청 헤더 기반
+    return request.url_root.rstrip("/")
+
+
+@app.route("/consent/create-sign-link", methods=["POST"])
+@login_required
+def consent_create_sign_link():
+    """수술동의서 폼 데이터로 서명 토큰 생성 → QR/URL 반환 (AJAX)."""
+    db = get_db()
+    # 기존 preview와 동일하게 폼 데이터 수집
+    data = {k: request.form.get(k, "") for k in CONSENT_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["surgery_date"] = request.form.get("surgery_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    token = _make_sign_token()
+    expires_at = (datetime.now() + timedelta(hours=SIGN_LINK_TTL_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
+
+    db.execute(
+        """INSERT INTO consent_records
+           (token, doc_type, form_data, patient_name, guardian_name, vet_name,
+            expires_at, created_by)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (token, "surgery", json.dumps(data, ensure_ascii=False),
+         data.get("patient_name", ""), data.get("guardian_name", ""),
+         data.get("vet_name", ""), expires_at, session.get("user_id", 0))
+    )
+    db.commit()
+
+    sign_url = f"{_sign_base_url()}/sign/{token}"
+    return jsonify({
+        "ok": True,
+        "token": token,
+        "url": sign_url,
+        "qr_b64": _qr_base64(sign_url),
+        "expires_at": expires_at,
+        "ttl_hours": SIGN_LINK_TTL_HOURS,
+        "doc_type": "surgery",
+    })
+
+
+@app.route("/imaging/consent/create-sign-link", methods=["POST"])
+@login_required
+def imaging_consent_create_sign_link():
+    """영상검사 동의서 폼 데이터로 서명 토큰 생성 → QR/URL 반환 (AJAX)."""
+    db = get_db()
+    mods = request.form.getlist("imaging_modalities")
+    data = {k: request.form.get(k, "") for k in CONSENT_IMG_FIELDS}
+    data["imaging_modalities"] = ",".join(mods) if mods else request.form.get("imaging_modalities", "")
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["exam_date"] = request.form.get("exam_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    token = _make_sign_token()
+    expires_at = (datetime.now() + timedelta(hours=SIGN_LINK_TTL_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
+
+    db.execute(
+        """INSERT INTO consent_records
+           (token, doc_type, form_data, patient_name, guardian_name, vet_name,
+            expires_at, created_by)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (token, "imaging", json.dumps(data, ensure_ascii=False),
+         data.get("patient_name", ""), data.get("guardian_name", ""),
+         data.get("vet_name", ""), expires_at, session.get("user_id", 0))
+    )
+    db.commit()
+
+    sign_url = f"{_sign_base_url()}/sign/{token}"
+    return jsonify({
+        "ok": True,
+        "token": token,
+        "url": sign_url,
+        "qr_b64": _qr_base64(sign_url),
+        "expires_at": expires_at,
+        "ttl_hours": SIGN_LINK_TTL_HOURS,
+        "doc_type": "imaging",
+    })
+
+
+# ----- 보호자 서명 페이지 (로그인 불필요, 토큰 기반) -----
+
+def _load_sign_record(token):
+    """토큰으로 consent_records 조회. 없으면 None."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM consent_records WHERE token=?", (token,)
+    ).fetchone()
+    return row
+
+
+def _sign_status(row):
+    """서명 레코드 상태 판정: 'ok' / 'expired' / 'signed' / None(missing)."""
+    if not row:
+        return None
+    if row["signed_at"]:
+        return "signed"
+    try:
+        exp = datetime.strptime(row["expires_at"], "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        exp = None
+    if exp and datetime.now() > exp:
+        return "expired"
+    return "ok"
+
+
+@app.route("/sign/<token>", methods=["GET"])
+def sign_page(token):
+    """보호자 서명 페이지 (모바일 최적화)."""
+    row = _load_sign_record(token)
+    status = _sign_status(row)
+    if status is None:
+        return render_template("sign_status.html",
+                               status="missing",
+                               hospital_name=HOSPITAL_SHORT), 404
+    if status == "expired":
+        return render_template("sign_status.html",
+                               status="expired",
+                               hospital_name=HOSPITAL_SHORT), 410
+    if status == "signed":
+        # 이미 서명 완료 → 열람(complete 페이지로)
+        return redirect(url_for("sign_complete", token=token))
+
+    data = json.loads(row["form_data"])
+    doc_type = row["doc_type"]
+    if doc_type == "imaging":
+        mod_label = (data.get("imaging_modalities") or "").replace(",", "·")
+        doc_title = f"영상 촬영 마취 동의서 ({mod_label})" if mod_label else "영상 촬영 마취 동의서"
+    else:
+        pt = data.get("patient_type") or "surgery_hospital"
+        if pt == "hospital_only":
+            doc_title = "입원 동의서"
+        elif pt == "surgery_daycare":
+            doc_title = "수술 동의서"
+        else:
+            doc_title = "수술 및 입원 동의서"
+
+    # JS에서 Date() 파싱 가능하도록 ISO 유사 포맷 (로컬시간)
+    expires_at_iso = row["expires_at"].replace(" ", "T")
+
+    return render_template("sign_page.html",
+                           token=token,
+                           doc_title=doc_title,
+                           patient_name=data.get("patient_name", ""),
+                           guardian_name=data.get("guardian_name", ""),
+                           hospital_name=HOSPITAL_SHORT,
+                           expires_at_iso=expires_at_iso)
+
+
+@app.route("/sign/<token>/preview", methods=["GET"])
+def sign_doc_preview(token):
+    """iframe용 동의서 본문 렌더링 (서명란 없는 원본)."""
+    row = _load_sign_record(token)
+    status = _sign_status(row)
+    if status is None:
+        abort(404)
+    if status == "expired":
+        abort(410)
+
+    data = json.loads(row["form_data"])
+    db = get_db()
+    if row["doc_type"] == "imaging":
+        return _render_imaging_print_from_data(data, db)
+    return _render_consent_print_from_data(data, db)
+
+
+@app.route("/sign/<token>", methods=["POST"])
+def sign_submit(token):
+    """보호자 서명 제출. JSON body: {signer_name, signature(data URL)}."""
+    row = _load_sign_record(token)
+    status = _sign_status(row)
+    if status is None:
+        return jsonify({"ok": False, "error": "유효하지 않은 링크입니다."}), 404
+    if status == "expired":
+        return jsonify({"ok": False, "error": "링크가 만료되었습니다."}), 410
+    if status == "signed":
+        return jsonify({"ok": False, "error": "이미 서명이 완료된 동의서입니다."}), 409
+
+    payload = request.get_json(silent=True) or {}
+    signer_name = (payload.get("signer_name") or "").strip()
+    signature = payload.get("signature") or ""
+    if not signer_name:
+        return jsonify({"ok": False, "error": "보호자 성함을 입력해주세요."}), 400
+    if not signature.startswith("data:image/"):
+        return jsonify({"ok": False, "error": "서명 이미지가 올바르지 않습니다."}), 400
+
+    # "data:image/png;base64,XXXX" 에서 base64 부분만 저장
+    try:
+        _, b64 = signature.split(",", 1)
+    except ValueError:
+        return jsonify({"ok": False, "error": "서명 이미지 형식 오류."}), 400
+
+    # 용량 제한 (대략 2MB)
+    if len(b64) > 2_800_000:
+        return jsonify({"ok": False, "error": "서명 이미지가 너무 큽니다."}), 400
+
+    signed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db = get_db()
+    db.execute(
+        "UPDATE consent_records SET signature_data=?, signer_name=?, signed_at=? WHERE token=?",
+        (b64, signer_name, signed_at, token)
+    )
+    db.commit()
+    return jsonify({
+        "ok": True,
+        "redirect": url_for("sign_complete", token=token),
+    })
+
+
+@app.route("/sign/<token>/complete", methods=["GET"])
+def sign_complete(token):
+    """서명 완료 안내 + 서명본 PDF(브라우저 인쇄) 버튼."""
+    row = _load_sign_record(token)
+    if not row:
+        abort(404)
+    if not row["signed_at"]:
+        # 미서명 상태면 서명 페이지로
+        return redirect(url_for("sign_page", token=token))
+
+    data = json.loads(row["form_data"])
+    return render_template(
+        "sign_complete.html",
+        token=token,
+        hospital_name=HOSPITAL_SHORT,
+        patient_name=data.get("patient_name", ""),
+        signer_name=row["signer_name"] or "",
+        signed_at=row["signed_at"],
+    )
+
+
+@app.route("/sign/<token>/pdf", methods=["GET"])
+def sign_pdf(token):
+    """서명 이미지 삽입된 완성본 동의서 (브라우저 인쇄 → PDF 저장)."""
+    row = _load_sign_record(token)
+    if not row:
+        abort(404)
+    if not row["signed_at"]:
+        abort(400)
+
+    data = json.loads(row["form_data"])
+    db = get_db()
+    if row["doc_type"] == "imaging":
+        return _render_imaging_print_from_data(
+            data, db,
+            signature_b64=row["signature_data"],
+            signer_name=row["signer_name"],
+            signed_at=row["signed_at"],
+        )
+    return _render_consent_print_from_data(
+        data, db,
+        signature_b64=row["signature_data"],
+        signer_name=row["signer_name"],
+        signed_at=row["signed_at"],
+    )
 
 
 @app.route("/template", methods=["GET","POST"])
@@ -1187,31 +1497,46 @@ def imaging_consent_new():
                            today=datetime.now().strftime("%Y-%m-%d"))
 
 
-@app.route("/imaging/consent/preview", methods=["POST"])
-@login_required
-def imaging_consent_preview():
-    db = get_db()
+def _render_imaging_print_from_data(data, db, signature_b64=None, signer_name=None, signed_at=None, show_sign_button=False):
+    """영상검사 마취 동의서 data dict → imaging_print.html 렌더링.
+    imaging_consent_preview와 sign 페이지에서 공통으로 사용."""
     tpl = db.execute("SELECT * FROM hospital_template WHERE id=1").fetchone()
-    # imaging_modalities는 체크박스 복수 선택이라 getlist
-    mods = request.form.getlist("imaging_modalities")
-    data = {k: request.form.get(k,"") for k in CONSENT_IMG_FIELDS}
-    data["imaging_modalities"] = ",".join(mods) if mods else request.form.get("imaging_modalities","")
-    data["vet_name"] = request.form.get("vet_name") or session.get("display_name","")
-    data["exam_date"] = request.form.get("exam_date") or datetime.now().strftime("%Y-%m-%d")
-    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-
     # 문서 제목: "영상 촬영 마취 동의서" + 선택된 모달리티
-    mod_label = data["imaging_modalities"].replace(",", "·")
+    mod_label = (data.get("imaging_modalities") or "").replace(",", "·")
     if mod_label:
         doc_title = f"영상 촬영 마취 동의서 ({mod_label})"
     else:
         doc_title = "영상 촬영 마취 동의서"
-
     rendered = {
         "header": render_template_string(tpl["header_html"] or "", d=data, doc_title=doc_title),
         "footer": render_template_string(tpl["footer_html"] or "", d=data, doc_title=doc_title),
     }
-    return render_template("imaging_print.html", d=data, r=rendered, doc_title=doc_title)
+    if signature_b64:
+        data["signature_b64"] = signature_b64
+        data["signer_name"] = signer_name or data.get("guardian_name", "")
+        data["signed_at"] = signed_at or ""
+    sign_form_fields = CONSENT_IMG_FIELDS + ["vet_name", "exam_date"]
+    return render_template(
+        "imaging_print.html",
+        d=data, r=rendered, doc_title=doc_title,
+        show_sign_button=show_sign_button and not signature_b64,
+        sign_form_fields=sign_form_fields,
+        sign_form_action=url_for("imaging_consent_create_sign_link"),
+    )
+
+
+@app.route("/imaging/consent/preview", methods=["POST"])
+@login_required
+def imaging_consent_preview():
+    db = get_db()
+    # imaging_modalities는 체크박스 복수 선택이라 getlist
+    mods = request.form.getlist("imaging_modalities")
+    data = {k: request.form.get(k, "") for k in CONSENT_IMG_FIELDS}
+    data["imaging_modalities"] = ",".join(mods) if mods else request.form.get("imaging_modalities", "")
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["exam_date"] = request.form.get("exam_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return _render_imaging_print_from_data(data, db, show_sign_button=True)
 
 
 # ===================== CE 보호자안내 생성 =====================

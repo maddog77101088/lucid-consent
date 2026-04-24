@@ -1,0 +1,175 @@
+{# 보호자 서명받기 버튼 + QR 팝업 모달 (print-toolbar 안에 배치) #}
+{# 필요 변수: sign_form_fields (list), sign_form_action (url), d (data dict) #}
+
+<button type="button" id="open-sign-btn"
+        style="background:#059669; color:#fff; border:0; padding:7px 14px; border-radius:4px;
+               font-size:13px; font-weight:600; cursor:pointer; margin-left:8px;">
+  📱 보호자 서명받기
+</button>
+
+<!-- 숨겨진 form: 현재 동의서 데이터를 서명 링크 API로 전송 -->
+<form id="sign-data-form" style="display:none;" action="{{ sign_form_action }}" method="post">
+  {% for k in sign_form_fields %}
+    {% if k == 'imaging_modalities' %}
+      {# 체크박스 복수 선택은 쉼표로 구분된 단일 문자열로 저장된 상태 → 그대로 재전송 #}
+      {% if d.get(k) %}
+        {% for m in d[k].split(',') %}
+          <input type="hidden" name="imaging_modalities" value="{{ m.strip() }}">
+        {% endfor %}
+      {% endif %}
+    {% else %}
+      <input type="hidden" name="{{ k }}" value="{{ d.get(k, '') }}">
+    {% endif %}
+  {% endfor %}
+</form>
+
+<!-- QR 팝업 모달 -->
+<div id="sign-qr-modal" class="no-print" style="display:none; position:fixed; inset:0;
+     background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;
+     font-family:-apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;">
+  <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:420px;
+              width:90%; box-shadow:0 10px 40px rgba(0,0,0,.3); text-align:center;">
+    <div id="sign-qr-loading" style="padding:40px 0;">
+      <div style="font-size:14px; color:#6b7280;">서명 링크 생성 중...</div>
+    </div>
+    <div id="sign-qr-content" style="display:none;">
+      <h3 style="margin:0 0 8px; font-size:18px;">📱 보호자 서명받기</h3>
+      <p style="margin:0 0 16px; font-size:13px; color:#6b7280; line-height:1.5;">
+        보호자님의 스마트폰으로 아래 QR 코드를 스캔하시면<br>
+        서명 페이지로 연결됩니다.
+      </p>
+      <div style="background:#fafafa; padding:16px; border-radius:8px; margin-bottom:14px;">
+        <img id="sign-qr-img" src="" alt="서명 QR"
+             style="width:240px; height:240px; display:block; margin:0 auto;">
+      </div>
+      <div style="font-size:11px; color:#9ca3af; word-break:break-all; background:#f3f4f6;
+                  padding:8px 10px; border-radius:4px; margin-bottom:12px;" id="sign-qr-url">
+      </div>
+      <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <button type="button" id="sign-qr-copy" style="flex:1; padding:8px; font-size:13px;
+                background:#f3f4f6; border:1px solid #d1d5db; border-radius:4px; cursor:pointer;">
+          🔗 링크 복사
+        </button>
+        <button type="button" id="sign-qr-check" style="flex:1; padding:8px; font-size:13px;
+                background:#dbeafe; border:1px solid #2563eb; color:#1d4ed8; border-radius:4px;
+                cursor:pointer;">
+          🔄 서명 확인
+        </button>
+      </div>
+      <div style="font-size:12px; color:#d97706; background:#fef3c7; padding:8px 10px;
+                  border-radius:4px; margin-bottom:12px;">
+        ⏰ 이 링크는 <strong id="sign-qr-ttl">24시간</strong> 동안 유효합니다
+      </div>
+      <div id="sign-qr-status" style="font-size:12px; color:#059669; margin-bottom:10px; min-height:16px;"></div>
+      <button type="button" id="sign-qr-close" style="background:#6b7280; color:#fff;
+              border:0; padding:9px 22px; border-radius:4px; font-size:13px; cursor:pointer;">
+        닫기
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const openBtn = document.getElementById('open-sign-btn');
+  const modal = document.getElementById('sign-qr-modal');
+  const loading = document.getElementById('sign-qr-loading');
+  const content = document.getElementById('sign-qr-content');
+  const qrImg = document.getElementById('sign-qr-img');
+  const qrUrlEl = document.getElementById('sign-qr-url');
+  const ttlEl = document.getElementById('sign-qr-ttl');
+  const statusEl = document.getElementById('sign-qr-status');
+  const closeBtn = document.getElementById('sign-qr-close');
+  const copyBtn = document.getElementById('sign-qr-copy');
+  const checkBtn = document.getElementById('sign-qr-check');
+  const form = document.getElementById('sign-data-form');
+
+  let currentToken = null;
+  let pollTimer = null;
+
+  function showModal() {
+    modal.style.display = 'flex';
+    loading.style.display = 'block';
+    content.style.display = 'none';
+    statusEl.textContent = '';
+  }
+  function hideModal() {
+    modal.style.display = 'none';
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  async function createSignLink() {
+    showModal();
+    try {
+      const formData = new FormData(form);
+      const res = await fetch(form.action, { method: 'POST', body: formData });
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || '서명 링크 생성 실패');
+      currentToken = json.token;
+      qrImg.src = 'data:image/png;base64,' + json.qr_b64;
+      qrUrlEl.textContent = json.url;
+      ttlEl.textContent = json.ttl_hours + '시간';
+      loading.style.display = 'none';
+      content.style.display = 'block';
+      // 15초마다 서명 완료 확인
+      startPolling();
+    } catch (err) {
+      loading.innerHTML = '<div style="color:#dc2626; padding:20px;">오류: ' +
+        (err.message || '알 수 없는 오류') + '</div>';
+    }
+  }
+
+  async function checkSignStatus() {
+    if (!currentToken) return;
+    try {
+      // HEAD 대신 GET으로 complete 페이지 존재 여부 체크 (서명 완료면 200, 아니면 302 redirect → sign_page)
+      const res = await fetch('/sign/' + currentToken + '/complete', {
+        method: 'GET', redirect: 'manual'
+      });
+      // manual redirect: 서명 미완료면 302(opaqueredirect type), 완료면 200
+      if (res.type === 'opaqueredirect' || res.status === 302 || res.status === 303) {
+        statusEl.textContent = '아직 서명 전입니다. 잠시 후 다시 확인하세요.';
+        return false;
+      }
+      if (res.ok) {
+        statusEl.innerHTML = '✓ 서명 완료! <a href="/sign/' + currentToken + '/pdf" target="_blank" style="color:#059669; text-decoration:underline;">서명된 동의서 보기</a>';
+        if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+        return true;
+      }
+    } catch (err) {
+      // network error 무시
+    }
+    return false;
+  }
+
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(checkSignStatus, 15000);
+  }
+
+  openBtn.addEventListener('click', createSignLink);
+  closeBtn.addEventListener('click', hideModal);
+  modal.addEventListener('click', function(e) {
+    if (e.target === modal) hideModal();
+  });
+  checkBtn.addEventListener('click', function(){
+    statusEl.textContent = '확인 중...';
+    checkSignStatus();
+  });
+  copyBtn.addEventListener('click', async function(){
+    const url = qrUrlEl.textContent;
+    try {
+      await navigator.clipboard.writeText(url);
+      copyBtn.textContent = '✓ 복사됨';
+      setTimeout(() => { copyBtn.innerHTML = '🔗 링크 복사'; }, 2000);
+    } catch (err) {
+      // 클립보드 API 미지원: 텍스트 선택
+      const r = document.createRange();
+      r.selectNode(qrUrlEl);
+      window.getSelection().removeAllRanges();
+      window.getSelection().addRange(r);
+      alert('링크가 선택되었습니다. 길게 눌러 복사하세요.');
+    }
+  });
+})();
+</script>

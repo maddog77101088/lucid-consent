@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>서명 완료 - {{ hospital_name }}</title>
+<style>
+  body {
+    margin: 0; padding: 20px 16px 40px;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+                 "Malgun Gothic", sans-serif;
+    background: #f5f6f8; color: #1f2937;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: #fff; border-radius: 12px;
+    padding: 28px 22px;
+    max-width: 440px; width: 100%;
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+  }
+  .check {
+    width: 64px; height: 64px; margin: 0 auto 14px;
+    background: #059669; color: #fff;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 34px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 20px; margin: 0 0 18px;
+  }
+  .info {
+    background: #f9fafb; border-radius: 6px;
+    padding: 12px 14px; margin: 14px 0;
+    font-size: 14px; line-height: 1.7;
+  }
+  .info dt {
+    color: #6b7280; font-weight: 500;
+    display: inline-block; width: 80px;
+  }
+  .info dd {
+    display: inline; margin: 0; color: #111827; font-weight: 500;
+  }
+  .info .row { margin: 3px 0; }
+  .btn-primary {
+    display: block; width: 100%;
+    background: #2563eb; color: #fff;
+    padding: 13px; margin-top: 16px;
+    font-size: 15px; font-weight: 600;
+    border: 0; border-radius: 6px;
+    text-align: center; text-decoration: none;
+    cursor: pointer;
+  }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-primary:active { background: #1e40af; }
+  .guide {
+    background: #eff6ff; border-left: 3px solid #2563eb;
+    padding: 12px 14px; margin-top: 16px;
+    font-size: 13px; line-height: 1.7; color: #1e40af;
+    border-radius: 4px;
+  }
+  .guide strong { display: block; margin-bottom: 4px; }
+  .hospital {
+    text-align: center;
+    font-size: 12px; color: #9ca3af;
+    margin-top: 22px; padding-top: 14px;
+    border-top: 1px solid #e5e7eb;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="check">✓</div>
+    <h1>서명이 완료되었습니다</h1>
+
+    <dl class="info">
+      <div class="row"><dt>환자</dt><dd>{{ patient_name or '-' }}</dd></div>
+      <div class="row"><dt>보호자</dt><dd>{{ signer_name }}</dd></div>
+      <div class="row"><dt>서명일시</dt><dd>{{ signed_at }}</dd></div>
+    </dl>
+
+    <a href="{{ url_for('sign_pdf', token=token) }}" class="btn-primary" target="_blank">
+      📄 서명된 동의서 PDF로 저장
+    </a>
+
+    <div class="guide">
+      <strong>📱 PDF 저장 방법</strong>
+      · 위 버튼을 누르면 완성된 동의서가 열립니다<br>
+      · 브라우저 메뉴 → <strong>인쇄</strong> 또는 <strong>공유</strong> 선택<br>
+      · <strong>"PDF로 저장"</strong>을 선택하시면 스마트폰에 저장됩니다
+    </div>
+
+    <div class="hospital">
+      <strong>{{ hospital_name }}</strong><br>
+      서울 강북구 월계로3 덕신빌딩 4층 · 02-941-7900
+    </div>
+  </div>
+</body>
+</html>

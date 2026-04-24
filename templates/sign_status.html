@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>서명 링크 안내 - {{ hospital_name }}</title>
+<style>
+  body {
+    margin: 0; padding: 24px 16px;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo",
+                 "Malgun Gothic", sans-serif;
+    background: #f5f6f8; color: #1f2937;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    background: #fff; border-radius: 12px;
+    padding: 28px 22px;
+    max-width: 420px; width: 100%;
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    text-align: center;
+  }
+  .icon {
+    font-size: 48px; margin-bottom: 8px;
+  }
+  h1 {
+    font-size: 18px; margin: 8px 0 12px;
+    color: #111827;
+  }
+  p {
+    font-size: 14px; line-height: 1.6; color: #4b5563;
+    margin: 6px 0;
+  }
+  .hospital {
+    font-size: 13px; color: #9ca3af;
+    margin-top: 18px; padding-top: 14px;
+    border-top: 1px solid #e5e7eb;
+  }
+  .status-expired .icon { color: #d97706; }
+  .status-missing .icon { color: #dc2626; }
+</style>
+</head>
+<body>
+  <div class="card status-{{ status }}">
+    {% if status == 'expired' %}
+      <div class="icon">⏰</div>
+      <h1>링크 유효시간이 만료되었습니다</h1>
+      <p>서명 링크는 발급 후 24시간 동안만 유효합니다.</p>
+      <p>병원으로 연락주시면 새 서명 링크를 다시 전송해드리겠습니다.</p>
+    {% elif status == 'missing' %}
+      <div class="icon">🔍</div>
+      <h1>유효하지 않은 링크입니다</h1>
+      <p>링크 주소가 잘못되었거나 삭제된 서명 요청입니다.</p>
+      <p>QR 코드를 다시 스캔하시거나 병원으로 문의해주세요.</p>
+    {% else %}
+      <div class="icon">ℹ️</div>
+      <h1>서명 페이지에 접근할 수 없습니다</h1>
+      <p>문제가 계속되면 병원으로 문의해주세요.</p>
+    {% endif %}
+    <div class="hospital">
+      <strong>{{ hospital_name }}</strong><br>
+      서울 강북구 월계로3 덕신빌딩 4층 · 02-941-7900
+    </div>
+  </div>
+</body>
+</html>
