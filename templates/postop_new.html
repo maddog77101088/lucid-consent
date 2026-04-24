@@ -85,9 +85,13 @@
     <!-- 차트 OCR -->
     <section class="card" style="border-left:3px solid #2563eb;">
       <h2>① 차트 OCR (선택)</h2>
-      <label><span class="lbl">이미지</span><input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp"></label>
-      <button type="button" id="btn-chart-ocr" class="btn-primary" style="margin-top:6px;">🖼 정보 추출</button>
-      <p id="chart-ocr-status" class="muted" style="margin-top:4px; font-size:12px;">💡 차트 캡처 후 <kbd>Ctrl+V</kbd></p>
+      <label><span class="lbl">이미지</span>
+        <span style="flex:1; display:flex; gap:6px;">
+          <input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp" style="flex:1;">
+          <button type="button" id="btn-chart-ocr" class="btn-primary" style="white-space:nowrap;">🖼 정보 추출</button>
+        </span>
+      </label>
+      <p id="chart-ocr-status" class="muted" style="margin:4px 0 0 212px; font-size:12px;">💡 차트 캡처 후 <kbd>Ctrl+V</kbd></p>
     </section>
 
     <!-- 환자 정보 -->
@@ -176,7 +180,7 @@
       <label><span class="lbl">실밥 제거일</span>
         <span style="flex:1; display:flex; gap:6px;">
           <input id="suture_remove_date" type="date" style="flex:1;">
-          <button type="button" id="btn-auto-suture" class="btn-ghost" style="white-space:nowrap;">작성일 +14일</button>
+          <button type="button" id="btn-auto-suture" class="btn-primary" style="white-space:nowrap;">작성일 +14일</button>
         </span>
       </label>
       <label><span class="lbl">추가 재진 안내 <span class="muted" style="font-size:11px;">(선택)</span></span><input id="followup_note" placeholder="예: 2주 후 재진, 혈액 재검사 필요"></label>
