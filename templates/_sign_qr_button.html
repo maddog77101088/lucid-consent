@@ -142,9 +142,16 @@
   openBtn.addEventListener('click', createSignLink);
   closeBtn.addEventListener('click', function(){
     hideModal();
-    // 현재 탭(미리보기)을 대시보드로 이동. history에 남기지 않아 뒤로가기로
-    // preview 재진입 불가 → 실수로 같은 토큰 재사용 방지.
-    window.location.replace('/');
+    // 원래 창(작성 페이지)을 대시보드로 이동 → 사용자가 돌아갔을 때 대시보드 보게.
+    try {
+      if (window.opener && !window.opener.closed) {
+        window.opener.location.replace('/');
+      }
+    } catch (e) { /* 크로스 오리진 등 */ }
+    // 현재 preview 탭 닫기 (스크립트/폼으로 열린 새 탭이면 성공)
+    window.close();
+    // 탭이 안 닫히는 edge case: 이 탭도 대시보드로 이동시켜 중복 상태 방지
+    setTimeout(function(){ window.location.replace('/'); }, 80);
   });
   modal.addEventListener('click', function(e) {
     if (e.target === modal) hideModal();

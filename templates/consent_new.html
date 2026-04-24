@@ -271,6 +271,14 @@
   </div>
 </form>
 
+<script>
+  // "동의서 미리보기" 제출 시: 새 탭에 preview가 열림과 동시에
+  // 현재(작성) 탭을 대시보드로 이동 → preview 탭을 나중에 닫을 때 중복 대시보드 방지.
+  document.querySelector('form.form-stack').addEventListener('submit', function(){
+    setTimeout(function(){ window.location.replace("{{ url_for('dashboard') }}"); }, 80);
+  });
+</script>
+
 <style>
   .pt-option { display:flex; flex-direction:column; gap:4px; padding:10px 12px; border:1.5px solid #d1d5db; border-radius:6px; cursor:pointer; }
   .pt-option:hover { border-color:#2563eb; background:white; }
@@ -331,6 +339,300 @@ if (document.readyState === 'loading') {
 }
 window.__autosize = autosize;
 window.__autosizeAll = () => document.querySelectorAll('textarea').forEach(autosize);
+
+const ALL_SURGERIES = [
+{% for s in surgeries %}{ id: {{ s.id }}, name: "{{ s.name|replace('"','\\"') }}", category: "{{ s.category }}" },
+{% endfor %}
+];
+
+function setName(v) {
+  document.getElementById('surgery_name').value = v;
+  document.getElementById('surgery_name_display').value = v;
+}
+function setCat(v) {
+  document.getElementById('surgery_category').value = v;
+  document.getElementById('surgery_category_display').value = v;
+}
+function clearFields() {
+  fields.forEach(f => document.getElementById(f).value = '');
+}
+document.getElementById('surgery_category_display').addEventListener('change', e => {
+  document.getElementById('surgery_category').value = e.target.value;
+});
+
+async function loadSurgeryById(id) {
+  const r = await fetch('/api/surgery/' + id);
+  const d = await r.json();
+  setName(d.name); setCat(d.category);
+  fields.forEach(f => document.getElementById(f).value = d[f] || '');
+  window.__autosizeAll && window.__autosizeAll();
+}
+
+searchInput.addEventListener('input', async () => {
+  const val = searchInput.value.trim();
+  if (!val) { setName(''); clearFields(); return; }
+  const match = ALL_SURGERIES.find(s => s.name === val);
+  if (match) {
+    await loadSurgeryById(match.id);
+    document.getElementById('ai-status').textContent = '✓ DB에서 불러옴';
+    document.getElementById('ai-status').style.color = '#0a7';
+  } else {
+    setName(val);
+    document.getElementById('ai-status').textContent = '📝 직접 입력 중 — [AI 자동채움]을 누르면 웹검색으로 자동 작성됩니다';
+    document.getElementById('ai-status').style.color = '#666';
+  }
+});
+
+document.getElementById('btn-save-db').addEventListener('click', async () => {
+  const name = document.getElementById('surgery_name').value.trim();
+  if (!name) { alert('수술명이 비어있습니다.'); return; }
+  const body = { name, category: document.getElementById('surgery_category').value || '응급·기타' };
+  fields.forEach(f => body[f] = document.getElementById(f).value);
+  const r = await fetch('/api/surgery/quick-add', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  const status = document.getElementById('save-db-status');
+  if (d.updated) status.textContent = '✓ 기존 DB 항목 덮어쓰기 완료 (id=' + d.id + ')';
+  else if (d.existed) status.textContent = '✓ 이미 DB에 존재하는 수술입니다.';
+  else status.textContent = '✓ DB에 신규 추가되었습니다. (id=' + d.id + ')';
+  status.style.color = '#0a7';
+});
+
+document.getElementById('btn-ai-generate').addEventListener('click', async () => {
+  const name = (searchInput.value || document.getElementById('surgery_name').value).trim();
+  if (!name) { alert('위 "수술명 검색 / 직접 입력" 칸에 수술명을 먼저 입력하세요.'); return; }
+  const status = document.getElementById('ai-status');
+  const btn = document.getElementById('btn-ai-generate');
+  btn.disabled = true;
+  status.textContent = '🤖 Claude에게 문의 중 (웹검색 포함)... 10~60초';
+  status.style.color = '#666';
+  try {
+    const r = await fetch('/api/surgery/ai-generate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    setName(name);
+    if (d.data.category) setCat(d.data.category);
+    fields.forEach(f => { if (d.data[f]) document.getElementById(f).value = d.data[f]; });
+    window.__autosizeAll && window.__autosizeAll();
+
+    const saveBody = { name, category: d.data.category || '응급·기타' };
+    fields.forEach(f => saveBody[f] = d.data[f] || '');
+    try {
+      const sr = await fetch('/api/surgery/quick-add', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(saveBody)
+      });
+      const sd = await sr.json();
+      if (sd.existed && sd.updated) {
+        status.textContent = '✓ AI 자동채움 완료 + 기존 DB 항목 최신 내용으로 업데이트됨 (id=' + sd.id + ')';
+      } else if (sd.existed) {
+        status.textContent = '✓ AI 자동채움 완료 (DB에 이미 존재)';
+      } else {
+        status.textContent = '✓ AI 자동채움 완료 + 수술DB 신규 저장됨 (id=' + sd.id + ')';
+      }
+      status.style.color = '#0a7';
+    } catch (se) {
+      status.textContent = '✓ AI 자동채움 완료 (DB 저장은 실패 — 수동 저장 버튼 사용)';
+      status.style.color = '#d97706';
+    }
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.querySelector('input[name=surgery_date]').value = new Date().toISOString().slice(0,10);
+const admitDateEl = document.querySelector('input[name=h_admit_date]');
+if (admitDateEl) admitDateEl.value = new Date().toISOString().slice(0,10);
+
+// ----- 입원 케이스(hospital_only) 로직 -----
+const hospSearch = document.getElementById('hosp-search');
+const hospFields = ['h_purpose_effect','h_complications','h_estimated_cost',
+                    'h_hospitalization','h_expected_duration'];
+const hospFieldMap = {
+  h_purpose_effect: 'purpose_effect',
+  h_complications: 'complications',
+  h_estimated_cost: 'estimated_cost',
+  h_hospitalization: 'hospitalization',
+  h_expected_duration: 'expected_duration',
+};
+const ALL_HOSPITALIZATIONS = [
+{% for h in hospitalizations %}{ id: {{ h.id }}, name: "{{ h.name|replace('"','\\"') }}", category: "{{ h.category }}" },
+{% endfor %}
+];
+
+function setHospName(v) {
+  document.getElementById('hospital_name').value = v;
+  document.getElementById('hospital_name_display').value = v;
+}
+function setHospCat(v) {
+  document.getElementById('hospital_category').value = v;
+  document.getElementById('hospital_category_display').value = v;
+}
+function clearHospFields() {
+  hospFields.forEach(f => { const el = document.getElementById(f); if (el) el.value = ''; });
+}
+document.getElementById('hospital_category_display').addEventListener('change', e => {
+  document.getElementById('hospital_category').value = e.target.value;
+});
+
+async function loadHospById(id) {
+  const r = await fetch('/api/hospitalization/' + id);
+  const d = await r.json();
+  setHospName(d.name); setHospCat(d.category);
+  for (const [formField, apiField] of Object.entries(hospFieldMap)) {
+    const el = document.getElementById(formField);
+    if (el) el.value = d[apiField] || '';
+  }
+  window.__autosizeAll && window.__autosizeAll();
+}
+
+hospSearch.addEventListener('input', async () => {
+  const val = hospSearch.value.trim();
+  if (!val) { setHospName(''); clearHospFields(); return; }
+  const match = ALL_HOSPITALIZATIONS.find(h => h.name === val);
+  if (match) {
+    await loadHospById(match.id);
+    document.getElementById('hosp-ai-status').textContent = '✓ 입원DB에서 불러옴';
+    document.getElementById('hosp-ai-status').style.color = '#0a7';
+  } else {
+    setHospName(val);
+    document.getElementById('hosp-ai-status').textContent = '📝 직접 입력 중 — [AI 자동채움]을 누르면 웹검색으로 자동 작성됩니다';
+    document.getElementById('hosp-ai-status').style.color = '#666';
+  }
+});
+
+document.getElementById('btn-hosp-save').addEventListener('click', async () => {
+  const name = document.getElementById('hospital_name').value.trim();
+  if (!name) { alert('병증명이 비어있습니다.'); return; }
+  const body = { name, category: document.getElementById('hospital_category').value || '기타' };
+  for (const [formField, apiField] of Object.entries(hospFieldMap)) {
+    const el = document.getElementById(formField);
+    body[apiField] = el ? el.value : '';
+  }
+  const r = await fetch('/api/hospitalization/quick-add', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  });
+  const d = await r.json();
+  const status = document.getElementById('hosp-save-status');
+  if (d.updated) status.textContent = '✓ 기존 입원DB 항목 덮어쓰기 완료 (id=' + d.id + ')';
+  else if (d.existed) status.textContent = '✓ 이미 입원DB에 존재합니다.';
+  else status.textContent = '✓ 입원DB에 신규 추가되었습니다. (id=' + d.id + ')';
+  status.style.color = '#0a7';
+});
+
+document.getElementById('btn-hosp-ai').addEventListener('click', async () => {
+  const name = (hospSearch.value || document.getElementById('hospital_name').value).trim();
+  if (!name) { alert('위 "병증/입원 사유" 칸에 먼저 입력하세요.'); return; }
+  const status = document.getElementById('hosp-ai-status');
+  const btn = document.getElementById('btn-hosp-ai');
+  btn.disabled = true;
+  status.textContent = '🤖 Claude에게 문의 중 (웹검색 포함)... 10~60초';
+  status.style.color = '#666';
+  try {
+    const r = await fetch('/api/hospitalization/ai-generate', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ name })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    setHospName(name);
+    if (d.data.category) setHospCat(d.data.category);
+    for (const [formField, apiField] of Object.entries(hospFieldMap)) {
+      const el = document.getElementById(formField);
+      if (el && d.data[apiField]) el.value = d.data[apiField];
+    }
+    window.__autosizeAll && window.__autosizeAll();
+
+    // DB 자동저장
+    const saveBody = { name, category: d.data.category || '기타' };
+    for (const [formField, apiField] of Object.entries(hospFieldMap)) {
+      saveBody[apiField] = d.data[apiField] || '';
+    }
+    try {
+      const sr = await fetch('/api/hospitalization/quick-add', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(saveBody)
+      });
+      const sd = await sr.json();
+      if (sd.existed && sd.updated) {
+        status.textContent = '✓ AI 자동채움 완료 + 기존 입원DB 항목 업데이트됨 (id=' + sd.id + ')';
+      } else if (sd.existed) {
+        status.textContent = '✓ AI 자동채움 완료 (입원DB에 이미 존재)';
+      } else {
+        status.textContent = '✓ AI 자동채움 완료 + 입원DB 신규 저장됨 (id=' + sd.id + ')';
+      }
+      status.style.color = '#0a7';
+    } catch (se) {
+      status.textContent = '✓ AI 자동채움 완료 (DB 저장 실패 — 수동 저장 버튼 사용)';
+      status.style.color = '#d97706';
+    }
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ----- 클립보드 붙여넣기 OCR -----
+document.addEventListener('paste', (e) => {
+  const tag = (document.activeElement?.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
+    const hasImg = Array.from(e.clipboardData?.items || []).some(i => i.type.startsWith('image/'));
+    if (!hasImg) return;
+  }
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg','jpg');
+      const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.getElementById('chart-image').files = dt.files;
+      const status = document.getElementById('chart-ocr-status');
+      status.textContent = '📋 클립보드 이미지 붙여넣기 감지 → 자동 OCR 실행...';
+      status.style.color = '#2563eb';
+      document.getElementById('chart-image').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => document.getElementById('btn-chart-ocr').click(), 100);
+      return;
+    }
+  }
+});
+
+document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
+  const fileEl = document.getElementById('chart-image');
+  const file = fileEl.files[0];
+  if (!file) { alert('이미지 파일을 먼저 선택하세요.'); return; }
+  const status = document.getElementById('chart-ocr-status');
+  const btn = document.getElementById('btn-chart-ocr');
+  btn.disabled = true;
+  status.textContent = '🖼 Claude가 차트 읽는 중... (5~15초)';
+  status.style.color = '#666';
+  try {
+    const fd = new FormData(); fd.append('image', file);
+    const r = await fetch('/api/chart-ocr', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    let filled = 0;
+    for (const [k, v] of Object.entries(d.data)) {
+      if (!v) continue;
+      const el = document.querySelector('[name="' + k + '"]');
+      if (el) { el.value = v; filled++; }
+    }
+    window.__autosizeAll = () => document.querySelectorAll('textarea').forEach(autosize);
 
 const ALL_SURGERIES = [
 {% for s in surgeries %}{ id: {{ s.id }}, name: "{{ s.name|replace('"','\\"') }}", category: "{{ s.category }}" },

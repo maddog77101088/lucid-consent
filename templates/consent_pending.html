@@ -21,7 +21,7 @@
 <table style="width:100%; border-collapse:collapse; font-size:14px;">
   <thead>
     <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
-      <th style="width:90px; padding:12px 14px; text-align:left; font-size:13px; color:#374151;">종류</th>
+      <th style="width:110px; padding:12px 14px; text-align:left; font-size:13px; color:#374151;">종류</th>
       <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">환자</th>
       <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">보호자</th>
       <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">담당 수의사</th>
@@ -38,9 +38,9 @@
         onmouseout="this.style.background='';">
       <td style="padding:14px; vertical-align:middle;">
         {% if r.doc_type == 'imaging' %}
-          <span style="color:#7c3aed; font-weight:600; background:#f3e8ff; padding:3px 8px; border-radius:10px; font-size:12px;">영상검사</span>
+          <span style="color:#7c3aed; font-weight:600; background:#f3e8ff; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">영상검사</span>
         {% else %}
-          <span style="color:#2563eb; font-weight:600; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px;">수술·입원</span>
+          <span style="color:#2563eb; font-weight:600; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">수술·입원</span>
         {% endif %}
       </td>
       <td style="padding:14px 10px; vertical-align:middle; font-weight:600;">{{ r.patient_name or '-' }}</td>

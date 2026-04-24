@@ -135,6 +135,10 @@
 </form>
 
 <script>
+// "동의서 미리보기" 제출 시 새 탭에 preview가 열리며, 현재 작성 탭은 대시보드로 이동
+document.querySelector('form.form-stack').addEventListener('submit', function(){
+  setTimeout(function(){ window.location.replace("{{ url_for('dashboard') }}"); }, 80);
+});
 // ----- 클립보드 붙여넣기 OCR -----
 document.addEventListener('paste', (e) => {
   const tag = (document.activeElement?.tagName || '').toUpperCase();
