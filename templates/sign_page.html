@@ -235,6 +235,29 @@
     </script>
     {% endif %}
 
+    {% if doc_type == 'euthanasia' %}
+    <!-- 안락사 동의서 전용: 사후 장례 방법 -->
+    <div id="euthanasia-extra" style="background:#fee2e2; padding:10px 12px; border-radius:6px; margin-bottom:10px; border:1px solid #fca5a5;">
+      <div style="font-size:12px; font-weight:600; color:#991b1b; margin-bottom:8px;">
+        🕊 사후 장례 방법 (필수 선택)
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; font-size:13px;">
+        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:8px; background:#fff; border-radius:5px; border:1.5px solid #fecaca;">
+          <input type="radio" name="euth_funeral" value="individual" style="margin-top:2px; flex-shrink:0;">
+          <span>장례업체를 통한 <strong>개별 장례</strong>를 의뢰하겠습니다</span>
+        </label>
+        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:8px; background:#fff; border-radius:5px; border:1.5px solid #fecaca;">
+          <input type="radio" name="euth_funeral" value="hospital" style="margin-top:2px; flex-shrink:0;">
+          <span>병원에 <strong>합동화장</strong>을 의뢰하겠습니다</span>
+        </label>
+        <label style="display:flex; align-items:flex-start; gap:8px; cursor:pointer; padding:8px; background:#fff; border-radius:5px; border:1.5px solid #fecaca;">
+          <input type="radio" name="euth_funeral" value="take_home" style="margin-top:2px; flex-shrink:0;">
+          <span>개인적인 장례를 위해 <strong>직접 데리고 가겠습니다</strong></span>
+        </label>
+      </div>
+    </div>
+    {% endif %}
+
     <button type="button" class="panel-toggle" id="panel-toggle"></button>
 
     <div class="pad-row">
@@ -385,6 +408,17 @@
       }
     } catch (e) { /* 접근 실패 시 빈 배열 */ }
 
+    // 안락사 동의서 전용: 사후 장례 방법 수집
+    let euthanasiaInput = null;
+    {% if doc_type == 'euthanasia' %}
+    const funeralEl = document.querySelector('input[name="euth_funeral"]:checked');
+    if (!funeralEl) {
+      alert('사후 장례 방법을 선택해주세요.');
+      return;
+    }
+    euthanasiaInput = { funeral: funeralEl.value };
+    {% endif %}
+
     // 개인정보 동의서 전용 입력 수집
     let privacyInput = null;
     {% if doc_type == 'privacy' %}
@@ -420,6 +454,7 @@
         checked_boxes: checkedBoxes,
       };
       if (privacyInput) payload.privacy_input = privacyInput;
+      if (euthanasiaInput) payload.euthanasia_input = euthanasiaInput;
       const res = await fetch("{{ url_for('sign_submit', token=token) }}", {
         method: 'POST',
         headers: {'Content-Type':'application/json'},

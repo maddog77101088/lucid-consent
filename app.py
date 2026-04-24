@@ -1219,8 +1219,29 @@ def sign_submit(token):
     # privacy_input: doc_type='privacy'일 때 보호자가 모바일에서 입력한 정보
     # (주민번호, 동의체크, 법정대리인 등) → form_data에 _privacy_input 키로 병합
     privacy_input = payload.get("privacy_input") or {}
+    # euthanasia_input: doc_type='euthanasia'일 때 보호자가 선택한 사후 장례 방법
+    euthanasia_input = payload.get("euthanasia_input") or {}
     signed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db = get_db()
+
+    if row["doc_type"] == "euthanasia" and euthanasia_input:
+        # 장례 방법만 whitelist 로 업데이트
+        try:
+            form_data = json.loads(row["form_data"])
+        except (ValueError, TypeError):
+            form_data = {}
+        funeral = (euthanasia_input.get("funeral") or "").strip()
+        if funeral not in ("individual", "hospital", "take_home"):
+            return jsonify({"ok": False, "error": "사후 장례 방법이 올바르지 않습니다."}), 400
+        form_data["funeral"] = funeral
+        db.execute(
+            "UPDATE consent_records SET signature_data=?, signer_name=?, signed_at=?, "
+            "checked_boxes=?, form_data=? WHERE token=?",
+            (b64, signer_name, signed_at, json.dumps(checked_boxes),
+             json.dumps(form_data, ensure_ascii=False), token)
+        )
+        db.commit()
+        return jsonify({"ok": True, "redirect": url_for("sign_complete", token=token)})
 
     if row["doc_type"] == "privacy" and privacy_input:
         # 기존 form_data 읽어서 _privacy_input 병합 후 저장
