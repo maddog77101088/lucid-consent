@@ -1,14 +1,37 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>대시보드</h1>
-<div class="grid-2">
+<h1 style="margin-bottom:8px;">대시보드</h1>
+<p class="muted" style="margin-bottom:24px;">필요한 기능을 카드로 선택하세요.</p>
+
+<!-- 섹션 1: 동의서 작성 -->
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📝 동의서 작성</h2>
+<div class="grid-2" style="margin-bottom:20px;">
   <a class="card big-action" href="{{ url_for('consent_new') }}">
     <div class="big-icon">＋</div>
     <div>
       <h2>새 수술동의서 작성</h2>
-      <p>환자·보호자 정보를 입력하고, 수술을 선택하면 기본양식과 DB 내용이 자동으로 채워집니다.</p>
+      <p>수술·입원 동의서 작성. DB 연동 + AI 자동채움 + 차트 OCR 지원.</p>
     </div>
   </a>
+  <a class="card big-action" href="{{ url_for('imaging_consent_new') }}">
+    <div class="big-icon">🩻</div>
+    <div>
+      <h2>영상 촬영 마취 동의서</h2>
+      <p>CT·MRI·내시경 등 영상 검사 마취 동의서 작성.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('ce_new') }}">
+    <div class="big-icon">💬</div>
+    <div>
+      <h2>보호자안내 CE</h2>
+      <p>차트 OCR 기반 보호자 안내 메시지 / 의뢰병원 진료경과 보고 자동 생성.</p>
+    </div>
+  </a>
+</div>
+
+<!-- 섹션 2: 서명 관리 -->
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🗂 서명 관리</h2>
+<div class="grid-2" style="margin-bottom:20px;">
   <a class="card big-action" href="{{ url_for('consents_pending') }}"
      style="{% if pending_cnt and pending_cnt > 0 %}border:2px solid #059669;{% endif %}">
     <div class="big-icon">📋</div>
@@ -18,24 +41,64 @@
         <span style="background:#059669; color:#fff; padding:2px 10px; border-radius:12px; font-size:14px; margin-left:6px;">{{ pending_cnt }}</span>
         {% endif %}
       </h2>
-      <p>주치의가 미리 작성해둔 서명 대기 동의서 {{ pending_cnt or 0 }}건.<br>
-      진료실에서 QR 띄워 보호자 스마트폰으로 서명받기.</p>
+      <p>주치의가 미리 작성해둔 서명 대기 동의서 {{ pending_cnt or 0 }}건. 진료실에서 QR 띄워 서명받기.</p>
     </div>
   </a>
   <a class="card big-action" href="{{ url_for('consents_history') }}">
     <div class="big-icon">🗃</div>
     <div>
       <h2>서명 완료 동의서</h2>
-      <p>지금까지 서명 완료된 동의서 <strong>{{ signed_cnt or 0 }}건</strong>.<br>
-      환자명·보호자명·수의사로 검색하고 PDF 재출력 가능.</p>
+      <p>지금까지 서명 완료된 동의서 <strong>{{ signed_cnt or 0 }}건</strong>. 환자명·수의사로 검색, PDF 재출력.</p>
     </div>
   </a>
+</div>
+
+<!-- 섹션 3: DB 관리 -->
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🗂 DB 관리</h2>
+<div class="grid-2" style="margin-bottom:20px;">
   <a class="card big-action" href="{{ url_for('surgery_list') }}">
-    <div class="big-icon">🗂</div>
+    <div class="big-icon">🔪</div>
     <div>
       <h2>수술 DB 관리</h2>
       <p>현재 등록된 수술: <strong>{{ total }}건</strong></p>
     </div>
   </a>
+  <a class="card big-action" href="{{ url_for('hospitalization_list') }}">
+    <div class="big-icon">🛏</div>
+    <div>
+      <h2>입원 DB 관리</h2>
+      <p>내과 입원 케이스 템플릿 관리.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('imaging_list') }}">
+    <div class="big-icon">📷</div>
+    <div>
+      <h2>영상검사 DB 관리</h2>
+      <p>CT·MRI 등 영상검사 항목 템플릿 관리.</p>
+    </div>
+  </a>
 </div>
+
+{% if current_user.role == 'admin' %}
+<!-- 섹션 4: 관리자 전용 -->
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">⚙ 관리자 설정</h2>
+<div class="grid-2" style="margin-bottom:20px;">
+  <a class="card big-action" href="{{ url_for('template_edit') }}"
+     style="border-left:3px solid #d97706;">
+    <div class="big-icon">📐</div>
+    <div>
+      <h2>기본양식 편집</h2>
+      <p>동의서 공통 헤더·보호자의 약속·알림 등 병원 기본양식 편집. YouTube 안내영상 URL 설정.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('users') }}"
+     style="border-left:3px solid #d97706;">
+    <div class="big-icon">👥</div>
+    <div>
+      <h2>사용자 관리</h2>
+      <p>수의사 계정 추가·삭제, 비밀번호 초기화, 권한 부여.</p>
+    </div>
+  </a>
+</div>
+{% endif %}
 {% endblock %}

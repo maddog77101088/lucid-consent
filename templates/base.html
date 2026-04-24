@@ -11,23 +11,9 @@
 <header class="topbar no-print">
   <div class="logo">
     <a href="{{ url_for('dashboard') }}">
-      <strong>{{ hospital_short }}</strong>
+      <strong>🏠 {{ hospital_short }}</strong>
     </a>
   </div>
-  <nav>
-    <a href="{{ url_for('consent_new') }}">+ 동의서 작성</a>
-    <a href="{{ url_for('imaging_consent_new') }}">+ 영상 촬영 마취 동의서</a>
-    <a href="{{ url_for('ce_new') }}">+ 보호자안내 CE</a>
-    <a href="{{ url_for('consents_pending') }}">📋 서명 대기</a>
-    <a href="{{ url_for('consents_history') }}">🗃 동의서 이력</a>
-    <a href="{{ url_for('surgery_list') }}">수술 DB</a>
-    <a href="{{ url_for('hospitalization_list') }}">입원 DB</a>
-    <a href="{{ url_for('imaging_list') }}">영상검사 DB</a>
-    {% if current_user.role == 'admin' %}
-      <a href="{{ url_for('template_edit') }}">기본양식 편집</a>
-      <a href="{{ url_for('users') }}">사용자 관리</a>
-    {% endif %}
-  </nav>
   <div class="userbox">
     <span>{{ current_user.name }}{% if current_user.role == 'admin' %} (관리자){% endif %}</span>
     <a href="{{ url_for('change_password') }}">비밀번호 변경</a>
