@@ -8,13 +8,13 @@
 </head>
 <body>
 {% if current_user.id %}
-<header class="topbar no-print">
+<header class="topbar no-print" style="display:flex; align-items:center; justify-content:space-between;">
   <div class="logo">
     <a href="{{ url_for('dashboard') }}">
       <strong>🏠 {{ hospital_short }}</strong>
     </a>
   </div>
-  <div class="userbox">
+  <div class="userbox" style="margin-left:auto; display:flex; align-items:center; gap:14px;">
     <span>{{ current_user.name }}{% if current_user.role == 'admin' %} (관리자){% endif %}</span>
     <a href="{{ url_for('change_password') }}">비밀번호 변경</a>
     <a href="{{ url_for('logout') }}">로그아웃</a>
