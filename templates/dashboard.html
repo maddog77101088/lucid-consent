@@ -48,16 +48,21 @@
       <p>미납 진료비 납입 약속서. 금액·납입기한(자동계산) 명시, 기한 경과 시 법적 절차 고지.</p>
     </div>
   </a>
+</div>
+
+<!-- 섹션 2: 안내문 -->
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📢 안내문</h2>
+<div class="grid-2" style="margin-bottom:20px;">
   <a class="card big-action" href="{{ url_for('ce_new') }}">
     <div class="big-icon">💬</div>
     <div>
-      <h2>보호자안내 CE</h2>
+      <h2>진료안내문 (CE)</h2>
       <p>차트 OCR 기반 보호자 안내 메시지 / 의뢰병원 진료경과 보고 자동 생성.</p>
     </div>
   </a>
 </div>
 
-<!-- 섹션 2: 서명 관리 -->
+<!-- 섹션 3: 서명 관리 -->
 <h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🗂 서명 관리</h2>
 <div class="grid-2" style="margin-bottom:20px;">
   <a class="card big-action" href="{{ url_for('consents_pending') }}"
@@ -81,7 +86,7 @@
   </a>
 </div>
 
-<!-- 섹션 3: DB 관리 -->
+<!-- 섹션 4: DB 관리 -->
 <h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🗂 DB 관리</h2>
 <div class="grid-2" style="margin-bottom:20px;">
   <a class="card big-action" href="{{ url_for('surgery_list') }}">
@@ -108,7 +113,7 @@
 </div>
 
 {% if current_user.role == 'admin' %}
-<!-- 섹션 4: 관리자 전용 -->
+<!-- 섹션 5: 관리자 전용 -->
 <h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">⚙ 관리자 설정</h2>
 <div class="grid-2" style="margin-bottom:20px;">
   <a class="card big-action" href="{{ url_for('template_edit') }}"
