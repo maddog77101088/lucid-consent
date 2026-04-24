@@ -142,9 +142,8 @@
   openBtn.addEventListener('click', createSignLink);
   closeBtn.addEventListener('click', function(){
     hideModal();
-    // 먼저 탭 닫기 시도 (스크립트로 열린 새 탭이면 성공)
-    try { window.close(); } catch(e) {}
-    // close가 실패했을 경우 즉시 대시보드로 이동 (history에 남기지 않음)
+    // 현재 탭(미리보기)을 대시보드로 이동. history에 남기지 않아 뒤로가기로
+    // preview 재진입 불가 → 실수로 같은 토큰 재사용 방지.
     window.location.replace('/');
   });
   modal.addEventListener('click', function(e) {
