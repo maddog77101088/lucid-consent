@@ -1225,9 +1225,9 @@ def api_postop_generate():
     # 상처관리 구조화
     wound_parts = []
     disinfect_label = {
-        "daily": "하루 1회 소독",
-        "alternate": "이틀에 한 번 소독",
-        "asneeded": "필요 시에만 소독 (분비물 있을 때)",
+        "twice": "하루 두 번 소독",
+        "daily": "하루 한 번 소독",
+        "asneeded": "필요 시에만 소독",
         "none": "소독 불필요",
     }.get(wound_disinfect, "")
     if disinfect_label:
