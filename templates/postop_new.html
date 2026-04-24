@@ -4,8 +4,7 @@
 <style>
   /* 수술후 안내문 폼 - 라벨(좌) + 입력칸(우) 나란히 배치, 스크롤 양 최소화 */
   .postop-form label {
-    display: grid;
-    grid-template-columns: 190px 1fr;
+    display: flex;
     align-items: center;
     gap: 12px;
     margin-bottom: 8px;
@@ -14,8 +13,13 @@
     font-weight: 500;
     line-height: 1.4;
   }
+  .postop-form label > .lbl {
+    flex: 0 0 200px;
+    min-width: 200px;
+  }
   .postop-form label > input,
   .postop-form label > select {
+    flex: 1;
     padding: 7px 10px;
     font-size: 14px;
     border: 1.5px solid #d1d5db;
@@ -23,7 +27,6 @@
     box-sizing: border-box;
     font-weight: normal;
     min-width: 0;
-    width: 100%;
   }
   .postop-form label > input:focus,
   .postop-form label > select:focus {
@@ -32,6 +35,10 @@
   /* textarea 라벨은 세로 스택 (label 위, 큰 textarea 아래) */
   .postop-form label:has(> textarea) {
     display: block;
+  }
+  .postop-form label:has(> textarea) > .lbl {
+    display: block;
+    margin-bottom: 4px;
   }
   .postop-form label > textarea {
     display: block;
@@ -59,8 +66,12 @@
   /* 좁은 화면 폴백 */
   @media (max-width: 640px) {
     .postop-form label {
-      grid-template-columns: 1fr;
+      flex-direction: column;
+      align-items: stretch;
       gap: 4px;
+    }
+    .postop-form label > .lbl {
+      flex: none; min-width: 0;
     }
   }
 </style>
@@ -74,7 +85,7 @@
     <!-- 차트 OCR -->
     <section class="card" style="border-left:3px solid #2563eb;">
       <h2>① 차트 OCR (선택)</h2>
-      <label>이미지 <input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp"></label>
+      <label><span class="lbl">이미지</span><input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp"></label>
       <button type="button" id="btn-chart-ocr" class="btn-primary" style="margin-top:6px;">🖼 정보 추출</button>
       <p id="chart-ocr-status" class="muted" style="margin-top:4px; font-size:12px;">💡 차트 캡처 후 <kbd>Ctrl+V</kbd></p>
     </section>
@@ -82,16 +93,16 @@
     <!-- 환자 정보 -->
     <section class="card">
       <h2>② 환자 / 보호자</h2>
-      <label>보호자 성명<input id="guardian_name"></label>
-      <label>환자 이름 *<input id="patient_name" required></label>
-      <label>종<select id="species"><option>Canine (개)</option><option>Feline (고양이)</option><option>기타</option></select></label>
-      <label>나이<input id="age" placeholder="예: 11y 9m"></label>
+      <label><span class="lbl">보호자 성명</span><input id="guardian_name"></label>
+      <label><span class="lbl">환자 이름 *</span><input id="patient_name" required></label>
+      <label><span class="lbl">종</span><select id="species"><option>Canine (개)</option><option>Feline (고양이)</option><option>기타</option></select></label>
+      <label><span class="lbl">나이</span><input id="age" placeholder="예: 11y 9m"></label>
     </section>
 
     <!-- 수술 -->
     <section class="card" style="border-left:3px solid #0891b2;">
       <h2>③ 수술 정보</h2>
-      <label>수술 선택 <span class="muted" style="font-size:12px;">(DB에서 기본 안내 자동 로드)</span>
+      <label><span class="lbl">수술 선택 <span class="muted" style="font-size:11px;">(DB 자동로드)</span></span>
         <select id="surgery_select">
           <option value="">-- 선택 --</option>
           {% for s in surgeries %}
@@ -99,31 +110,27 @@
           {% endfor %}
         </select>
       </label>
-      <label>수술명 (직접 입력 / OCR 채움)<input id="surgery_name" placeholder="예: TPLO, OHE, 슬관절 탈구 교정술"></label>
-      <label>진단명 (선택)<input id="diagnosis" placeholder="예: 좌측 슬관절 탈구 Grade 3"></label>
+      <label><span class="lbl">수술명 <span class="muted" style="font-size:11px;">(직접/OCR)</span></span><input id="surgery_name" placeholder="예: TPLO, OHE, 슬관절 탈구 교정술"></label>
+      <label><span class="lbl">진단명 <span class="muted" style="font-size:11px;">(선택)</span></span><input id="diagnosis" placeholder="예: 좌측 슬관절 탈구 Grade 3"></label>
     </section>
 
     <!-- 처방·관리 -->
     <section class="card" style="border-left:3px solid #0891b2;">
       <h2>④ 처방 · 관리</h2>
-      <label>처방 약물 <span class="muted" style="font-size:12px;">(이름만, 콤마로 구분)</span>
-        <input id="medications" placeholder="예: 항생제, 진통제">
-      </label>
-      <label>복용 일수<input id="med_days" type="number" min="1" max="30" placeholder="7"></label>
-      <label>E-collar (일)<input id="ecollar_days" type="number" min="0" max="60" placeholder="14"></label>
-      <label>활동제한 (일)<input id="activity_limit_days" type="number" min="0" max="90" placeholder="14"></label>
+      <label><span class="lbl">처방 약물 <span class="muted" style="font-size:11px;">(콤마 구분)</span></span><input id="medications" placeholder="예: 항생제, 진통제"></label>
+      <label><span class="lbl">복용 일수</span><input id="med_days" type="number" min="1" max="30" placeholder="7"></label>
+      <label><span class="lbl">E-collar (일)</span><input id="ecollar_days" type="number" min="0" max="60" placeholder="14"></label>
+      <label><span class="lbl">활동제한 (일)</span><input id="activity_limit_days" type="number" min="0" max="90" placeholder="14"></label>
     </section>
 
     <!-- 입원 기간 / 퇴원 상태 -->
     <section class="card" style="border-left:3px solid #0891b2;">
       <h2>⑤ 입원 기간 & 퇴원 당시 상태</h2>
-      <label>수술후 입원일수 <span class="muted" style="font-size:12px;">(0 = 당일 퇴원)</span>
-        <input id="hospitalization_days" type="number" min="0" max="60" value="0" placeholder="0">
-      </label>
+      <label><span class="lbl">수술후 입원일수 <span class="muted" style="font-size:11px;">(0=당일)</span></span><input id="hospitalization_days" type="number" min="0" max="60" value="0" placeholder="0"></label>
       <div style="font-size:13px; color:#6b7280; margin:4px 0 12px;">
         <span id="hosp-hint">💡 0 = 당일 퇴원 시 마취회복·식이 안내 포함</span>
       </div>
-      <label>퇴원 당시 환자 상태 <span class="muted" style="font-size:12px;">(AI가 안내문 톤·주의사항 수준을 조절합니다)</span>
+      <label><span class="lbl">퇴원 당시 상태 <span class="muted" style="font-size:11px;">(톤 조절)</span></span>
         <select id="discharge_status">
           <option value="good">✅ 좋은 경과로 퇴원 (회복 순조로움)</option>
           <option value="delayed">⚠️ 회복이 지연 중 퇴원 (주의 깊은 관찰 필요)</option>
@@ -135,7 +142,7 @@
     <!-- 상처 관리 지침 -->
     <section class="card" style="border-left:3px solid #0891b2;">
       <h2>⑥ 상처 관리 지침</h2>
-      <label>소독 주기
+      <label><span class="lbl">소독 주기</span>
         <select id="wound_disinfect">
           <option value="">-- 선택 안함 --</option>
           <option value="twice">하루 두 번 소독</option>
@@ -144,7 +151,7 @@
           <option value="none">소독 불필요</option>
         </select>
       </label>
-      <label>붕대/드레싱
+      <label><span class="lbl">붕대/드레싱</span>
         <select id="wound_bandage">
           <option value="">-- 선택 안함 --</option>
           <option value="daily">매일 교체</option>
@@ -153,33 +160,35 @@
           <option value="none">붕대 없음</option>
         </select>
       </label>
-      <label>연고 도포
+      <label><span class="lbl">연고 도포</span>
         <select id="wound_ointment">
           <option value="">-- 선택 안함 --</option>
           <option value="yes">연고 처방됨</option>
           <option value="no">연고 없음</option>
         </select>
       </label>
-      <label>연고명 (선택)
-        <input id="wound_ointment_name" placeholder="예: 항생제, 스테로이드">
-      </label>
+      <label><span class="lbl">연고명 <span class="muted" style="font-size:11px;">(선택)</span></span><input id="wound_ointment_name" placeholder="예: 항생제, 스테로이드"></label>
     </section>
 
     <!-- 재진 -->
     <section class="card" style="border-left:3px solid #0891b2;">
       <h2>⑦ 재진 일정</h2>
-      <label>실밥 제거일<input id="suture_remove_date" type="date"></label>
-      <button type="button" id="btn-auto-suture" class="btn-ghost" style="margin-top:4px;">작성일 + 14일로 자동</button>
-      <label>추가 재진 안내 (선택)<input id="followup_note" placeholder="예: 2주 후 재진, 혈액 재검사 필요"></label>
+      <label><span class="lbl">실밥 제거일</span>
+        <span style="flex:1; display:flex; gap:6px;">
+          <input id="suture_remove_date" type="date" style="flex:1;">
+          <button type="button" id="btn-auto-suture" class="btn-ghost" style="white-space:nowrap;">작성일 +14일</button>
+        </span>
+      </label>
+      <label><span class="lbl">추가 재진 안내 <span class="muted" style="font-size:11px;">(선택)</span></span><input id="followup_note" placeholder="예: 2주 후 재진, 혈액 재검사 필요"></label>
     </section>
 
     <!-- DB 기본 안내 + 특이사항 -->
     <section class="card">
       <h2>⑧ AI 참고 정보</h2>
-      <label>수술 DB의 기본 안내 <span class="muted" style="font-size:12px;">(수술 선택 시 자동 채움, 수정 가능)</span>
+      <label><span class="lbl">수술 DB의 기본 안내 <span class="muted" style="font-size:11px;">(자동 채움)</span></span>
         <textarea id="db_postop_notes" rows="3" placeholder="수술을 선택하면 자동으로 채워집니다."></textarea>
       </label>
-      <label>이번 환자 특이사항 (선택)<textarea id="special_notes" rows="2" placeholder="예: 수술 중 예상보다 출혈량 많았음. 당분간 더 주의 깊게 관찰 필요."></textarea></label>
+      <label><span class="lbl">이번 환자 특이사항 <span class="muted" style="font-size:11px;">(선택)</span></span><textarea id="special_notes" rows="2" placeholder="예: 수술 중 예상보다 출혈량 많았음. 당분간 더 주의 깊게 관찰 필요."></textarea></label>
     </section>
 
     <div style="display:flex; gap:8px; margin-top:12px;">
