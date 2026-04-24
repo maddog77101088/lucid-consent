@@ -22,6 +22,7 @@
     <option value="">전체 유형</option>
     <option value="surgery" {% if doc_type == 'surgery' %}selected{% endif %}>수술·입원</option>
     <option value="imaging" {% if doc_type == 'imaging' %}selected{% endif %}>영상검사</option>
+    <option value="privacy" {% if doc_type == 'privacy' %}selected{% endif %}>개인정보</option>
   </select>
   <button type="submit" style="background:#2563eb; color:#fff; border:0; padding:10px 24px;
                                border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
@@ -64,6 +65,8 @@
       <td style="padding:14px; vertical-align:middle;">
         {% if r.doc_type == 'imaging' %}
           <span style="color:#7c3aed; font-weight:600; background:#f3e8ff; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">영상검사</span>
+        {% elif r.doc_type == 'privacy' %}
+          <span style="color:#059669; font-weight:600; background:#d1fae5; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">개인정보</span>
         {% else %}
           <span style="color:#2563eb; font-weight:600; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">수술·입원</span>
         {% endif %}

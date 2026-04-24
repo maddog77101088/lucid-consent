@@ -1276,7 +1276,7 @@ def consents_history():
         sql += " AND (cr.patient_name LIKE ? OR cr.guardian_name LIKE ? OR cr.signer_name LIKE ? OR cr.vet_name LIKE ?)"
         like = f"%{q}%"
         args += [like, like, like, like]
-    if doc_type in ("surgery", "imaging"):
+    if doc_type in ("surgery", "imaging", "privacy"):
         sql += " AND cr.doc_type=?"
         args.append(doc_type)
     sql += " ORDER BY cr.signed_at DESC LIMIT 300"
