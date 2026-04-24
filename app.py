@@ -172,6 +172,13 @@ def init_db():
     cr_cols = [c[1] for c in cur.fetchall()]
     if "checked_boxes" not in cr_cols:
         cur.execute("ALTER TABLE consent_records ADD COLUMN checked_boxes TEXT DEFAULT '[]'")
+    # Soft delete용 컬럼 (admin 전용 삭제 기능)
+    if "deleted_at" not in cr_cols:
+        cur.execute("ALTER TABLE consent_records ADD COLUMN deleted_at TEXT")
+    if "deleted_by" not in cr_cols:
+        cur.execute("ALTER TABLE consent_records ADD COLUMN deleted_by INTEGER")
+    if "delete_reason" not in cr_cols:
+        cur.execute("ALTER TABLE consent_records ADD COLUMN delete_reason TEXT")
     con.commit()
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
@@ -345,10 +352,11 @@ def dashboard():
     counts = {c: db.execute("SELECT COUNT(*) FROM surgeries WHERE category=?", (c,)).fetchone()[0] for c in CATEGORIES}
     pending_cnt = db.execute(
         "SELECT COUNT(*) FROM consent_records WHERE signed_at IS NULL "
+        "AND deleted_at IS NULL "
         "AND datetime(expires_at) > datetime('now', 'localtime')"
     ).fetchone()[0]
     signed_cnt = db.execute(
-        "SELECT COUNT(*) FROM consent_records WHERE signed_at IS NOT NULL"
+        "SELECT COUNT(*) FROM consent_records WHERE signed_at IS NOT NULL AND deleted_at IS NULL"
     ).fetchone()[0]
     return render_template("dashboard.html", counts=counts, total=sum(counts.values()),
                            pending_cnt=pending_cnt, signed_cnt=signed_cnt)
@@ -894,10 +902,10 @@ def imaging_consent_create_sign_link():
 # ----- 보호자 서명 페이지 (로그인 불필요, 토큰 기반) -----
 
 def _load_sign_record(token):
-    """토큰으로 consent_records 조회. 없으면 None."""
+    """토큰으로 consent_records 조회. 삭제된(soft-deleted) 레코드는 None 반환."""
     db = get_db()
     row = db.execute(
-        "SELECT * FROM consent_records WHERE token=?", (token,)
+        "SELECT * FROM consent_records WHERE token=? AND deleted_at IS NULL", (token,)
     ).fetchone()
     return row
 
@@ -1102,6 +1110,7 @@ def consents_pending():
         FROM consent_records cr
         LEFT JOIN users u ON u.id = cr.created_by
         WHERE cr.signed_at IS NULL
+          AND cr.deleted_at IS NULL
           AND datetime(cr.expires_at) > datetime('now', 'localtime')
         ORDER BY cr.created_at DESC
     """).fetchall()
@@ -1123,6 +1132,7 @@ def consents_history():
         FROM consent_records cr
         LEFT JOIN users u ON u.id = cr.created_by
         WHERE cr.signed_at IS NOT NULL
+          AND cr.deleted_at IS NULL
     """
     args = []
     if q:
@@ -1145,7 +1155,7 @@ def api_consent_qr(cid):
     """기존 토큰의 QR을 다시 반환 (대기 리스트 → QR 팝업용)."""
     db = get_db()
     row = db.execute(
-        "SELECT token, expires_at, signed_at FROM consent_records WHERE id=?", (cid,)
+        "SELECT token, expires_at, signed_at FROM consent_records WHERE id=? AND deleted_at IS NULL", (cid,)
     ).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "동의서를 찾을 수 없습니다."}), 404
@@ -1175,7 +1185,7 @@ def api_consent_cancel(cid):
     """대기 중인 서명 요청 취소 (만료 시각을 과거로 설정)."""
     db = get_db()
     row = db.execute(
-        "SELECT signed_at FROM consent_records WHERE id=?", (cid,)
+        "SELECT signed_at FROM consent_records WHERE id=? AND deleted_at IS NULL", (cid,)
     ).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "없습니다."}), 404
@@ -1184,6 +1194,45 @@ def api_consent_cancel(cid):
     db.execute("UPDATE consent_records SET expires_at='2000-01-01 00:00:00' WHERE id=?", (cid,))
     db.commit()
     return jsonify({"ok": True})
+
+
+@app.route("/api/consents/<int:cid>/delete", methods=["POST"])
+@login_required
+@admin_required
+def api_consent_delete(cid):
+    """[관리자 전용] 서명 완료 동의서 soft delete.
+    보안: 환자명 재입력 + 사유 필수. DB에 deleted_at/deleted_by/delete_reason 기록."""
+    db = get_db()
+    row = db.execute(
+        "SELECT id, patient_name, signed_at, deleted_at FROM consent_records WHERE id=?",
+        (cid,)
+    ).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "동의서를 찾을 수 없습니다."}), 404
+    if row["deleted_at"]:
+        return jsonify({"ok": False, "error": "이미 삭제된 동의서입니다."}), 410
+
+    payload = request.get_json(silent=True) or {}
+    confirm_name = (payload.get("patient_name") or "").strip()
+    reason = (payload.get("reason") or "").strip()
+
+    # 환자명 정확 일치 확인 (공백 무시)
+    actual = (row["patient_name"] or "").strip()
+    if not confirm_name:
+        return jsonify({"ok": False, "error": "환자명을 입력해주세요."}), 400
+    if confirm_name != actual:
+        return jsonify({"ok": False,
+                        "error": f"환자명이 일치하지 않습니다. 정확히 '{actual}'을(를) 입력해주세요."}), 400
+    if not reason or len(reason) < 3:
+        return jsonify({"ok": False, "error": "삭제 사유를 3자 이상 입력해주세요."}), 400
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        "UPDATE consent_records SET deleted_at=?, deleted_by=?, delete_reason=? WHERE id=?",
+        (now, session.get("user_id", 0), reason, cid)
+    )
+    db.commit()
+    return jsonify({"ok": True, "deleted_at": now})
 
 
 @app.route("/template", methods=["GET","POST"])
