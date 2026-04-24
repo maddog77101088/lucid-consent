@@ -1,12 +1,47 @@
 {% extends "base.html" %}
 {% block content %}
+
+<style>
+  /* 수술후 안내문 폼 label 정렬 - 라벨과 입력칸이 같은 줄에서 끊기지 않도록 */
+  .postop-form label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #374151;
+    font-weight: 500;
+  }
+  .postop-form label input,
+  .postop-form label select,
+  .postop-form label textarea {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
+    padding: 8px 10px;
+    font-size: 14px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 5px;
+    box-sizing: border-box;
+    font-weight: normal;
+  }
+  .postop-form label input:focus,
+  .postop-form label select:focus,
+  .postop-form label textarea:focus {
+    outline: none; border-color: #2563eb;
+  }
+  .postop-form .card h2 {
+    margin-top: 0;
+    font-size: 15px;
+    color: #1f2937;
+    margin-bottom: 12px;
+  }
+</style>
+
 <h1>수술후 안내문 작성 <span class="muted" style="font-size:14px; font-weight:400;">(AI 자동 생성)</span></h1>
 <p class="muted">환자 정보 + 수술 선택 + 처방·재진 정보를 입력하면 AI가 보호자용 안내문을 작성합니다.</p>
 
-<div style="display:grid; grid-template-columns: 1fr 1fr; gap:16px;">
+<div class="postop-form" style="display:flex; flex-direction:column; gap:16px;">
 
-  <!-- 좌: 입력 폼 -->
-  <div>
+  <!-- 입력 폼 -->
     <!-- 차트 OCR -->
     <section class="card" style="border-left:3px solid #2563eb;">
       <h2>① 차트 OCR (선택)</h2>
@@ -117,13 +152,11 @@
         ✨ AI로 안내문 생성
       </button>
     </div>
-  </div>
 
-  <!-- 우: AI 결과 -->
-  <div>
-    <section class="card" style="position:sticky; top:12px;">
+  <!-- AI 결과 -->
+    <section class="card">
       <h2>📄 생성된 안내문 <span id="gen-status" class="muted" style="font-size:12px; font-weight:normal;"></span></h2>
-      <textarea id="result" rows="28"
+      <textarea id="result" rows="15"
                 placeholder="좌측에 정보 입력 후 [✨ AI로 안내문 생성] 버튼을 눌러주세요."
                 style="width:100%; font-family: -apple-system, 'Malgun Gothic', sans-serif; font-size:13.5px;
                        line-height:1.7; padding:12px; border:1.5px solid #d1d5db; border-radius:6px;
@@ -134,7 +167,6 @@
       </div>
       <p class="muted" style="font-size:11px; margin-top:6px;">※ AI 생성 후 자유롭게 편집 가능. 편집 내용은 복사·인쇄에 반영됩니다.</p>
     </section>
-  </div>
 
 </div>
 
@@ -332,9 +364,5 @@ document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
   });
 </script>
 
-<style>
-  @media (max-width: 900px) {
-    div[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
-  }
-</style>
+
 {% endblock %}
