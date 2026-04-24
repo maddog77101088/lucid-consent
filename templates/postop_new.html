@@ -60,9 +60,59 @@
       </div>
     </section>
 
+    <!-- 입원 기간 -->
+    <section class="card" style="border-left:3px solid #0891b2;">
+      <h2>⑤ 입원 기간</h2>
+      <div class="row-2">
+        <label>수술후 입원일수 <span class="muted" style="font-size:12px;">(0 = 당일 퇴원)</span>
+          <input id="hospitalization_days" type="number" min="0" max="60" value="0" placeholder="0">
+        </label>
+        <div style="display:flex; align-items:center; font-size:13px; color:#6b7280;">
+          <span id="hosp-hint">💡 0 = 당일 퇴원 시 마취회복·식이 안내 포함</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 상처 관리 지침 -->
+    <section class="card" style="border-left:3px solid #0891b2;">
+      <h2>⑥ 상처 관리 지침</h2>
+      <div class="row-2">
+        <label>소독 주기
+          <select id="wound_disinfect">
+            <option value="">-- 선택 안함 --</option>
+            <option value="daily">하루 1회 소독</option>
+            <option value="alternate">이틀에 한 번 소독</option>
+            <option value="asneeded">필요 시에만 (분비물)</option>
+            <option value="none">소독 불필요</option>
+          </select>
+        </label>
+        <label>붕대/드레싱
+          <select id="wound_bandage">
+            <option value="">-- 선택 안함 --</option>
+            <option value="daily">매일 교체</option>
+            <option value="2-3d">2~3일마다 교체</option>
+            <option value="waterproof">방수 스프레이 (교체 불필요)</option>
+            <option value="none">붕대 없음</option>
+          </select>
+        </label>
+      </div>
+      <div class="row-2">
+        <label>연고 도포
+          <select id="wound_ointment">
+            <option value="">-- 선택 안함 --</option>
+            <option value="yes">연고 처방됨</option>
+            <option value="no">연고 없음</option>
+          </select>
+        </label>
+        <label>연고명 (선택)
+          <input id="wound_ointment_name" placeholder="예: Fucidin, Silvadene">
+        </label>
+      </div>
+    </section>
+
     <!-- 재진 -->
     <section class="card" style="border-left:3px solid #0891b2;">
-      <h2>⑤ 재진 일정</h2>
+      <h2>⑦ 재진 일정</h2>
       <div class="row-2">
         <label>실밥 제거일<input id="suture_remove_date" type="date"></label>
         <label>&nbsp;<button type="button" id="btn-auto-suture" class="btn-ghost" style="width:100%;">작성일 + 14일로 자동</button></label>
@@ -72,7 +122,7 @@
 
     <!-- DB 기본 안내 + 특이사항 -->
     <section class="card">
-      <h2>⑥ AI 참고 정보</h2>
+      <h2>⑧ AI 참고 정보</h2>
       <label>수술 DB의 기본 안내 <span class="muted" style="font-size:12px;">(수술 선택 시 자동 채움, 수정 가능)</span>
         <textarea id="db_postop_notes" rows="3" placeholder="수술을 선택하면 자동으로 채워집니다."></textarea>
       </label>
@@ -161,6 +211,11 @@ document.getElementById('btn-generate').addEventListener('click', async function
     followup_note: document.getElementById('followup_note').value.trim(),
     db_postop_notes: document.getElementById('db_postop_notes').value.trim(),
     special_notes: document.getElementById('special_notes').value.trim(),
+    hospitalization_days: document.getElementById('hospitalization_days').value,
+    wound_disinfect: document.getElementById('wound_disinfect').value,
+    wound_ointment: document.getElementById('wound_ointment').value,
+    wound_ointment_name: document.getElementById('wound_ointment_name').value.trim(),
+    wound_bandage: document.getElementById('wound_bandage').value,
   };
 
   try {
@@ -278,6 +333,21 @@ document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+</script>
+
+<script>
+  // 입원일수 힌트 실시간 업데이트
+  document.getElementById('hospitalization_days').addEventListener('input', function(){
+    const n = parseInt(this.value || '0', 10);
+    const hint = document.getElementById('hosp-hint');
+    if (n === 0) {
+      hint.textContent = '💡 당일 퇴원 → 마취회복·식이 단계 안내 포함';
+      hint.style.color = '#0891b2';
+    } else {
+      hint.textContent = `💡 ${n}일 입원 후 퇴원 → 집에서의 관리 포인트 위주`;
+      hint.style.color = '#059669';
+    }
+  });
 </script>
 
 <style>
