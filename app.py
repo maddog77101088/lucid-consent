@@ -899,6 +899,99 @@ def imaging_consent_create_sign_link():
     })
 
 
+# ===================== 개인정보 수집·활용 동의서 =====================
+# 마약류·향정신성의약품 원외처방 시 필수. 보호자가 모바일에서 주민번호 직접 입력.
+
+PRIVACY_FIELDS = [
+    "guardian_id", "guardian_name", "guardian_phone", "guardian_mobile",
+    "guardian_address", "guardian_email",
+    # 환자 식별용 (인쇄본 상단 한 줄)
+    "animal_id", "patient_name", "species", "breed",
+]
+
+
+def _render_privacy_print_from_data(data, db, signature_b64=None, signer_name=None,
+                                    signed_at=None, show_sign_button=False,
+                                    sign_interactive=False, privacy_input=None):
+    """개인정보 수집·활용 동의서 렌더링.
+    privacy_input: 보호자가 모바일에서 입력한 {rrn, sms_ok, mail_ok, ads_ok, legal_name, legal_phone, legal_relation}
+    """
+    # 문서 타이틀
+    doc_title = "개인정보 수집 및 활용 동의서"
+    if signature_b64:
+        data["signature_b64"] = signature_b64
+        data["signer_name"] = signer_name or data.get("guardian_name", "")
+        data["signed_at"] = signed_at or ""
+    sign_form_fields = PRIVACY_FIELDS + ["vet_name", "doc_date"]
+    html = render_template(
+        "privacy_print.html",
+        d=data, doc_title=doc_title,
+        privacy=privacy_input or {},
+        show_sign_button=show_sign_button and not signature_b64,
+        sign_form_fields=sign_form_fields,
+        sign_form_action=url_for("privacy_create_sign_link"),
+        hospital_name=HOSPITAL_NAME,
+    )
+    return html
+
+
+@app.route("/privacy/new", methods=["GET"])
+@login_required
+def privacy_new():
+    return render_template(
+        "privacy_new.html",
+        today=datetime.now().strftime("%Y-%m-%d"),
+        vet_name=session.get("display_name", ""),
+    )
+
+
+@app.route("/privacy/preview", methods=["POST"])
+@login_required
+def privacy_preview():
+    db = get_db()
+    data = {k: request.form.get(k, "") for k in PRIVACY_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["doc_date"] = request.form.get("doc_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return _render_privacy_print_from_data(data, db, show_sign_button=True)
+
+
+@app.route("/privacy/create-sign-link", methods=["POST"])
+@login_required
+def privacy_create_sign_link():
+    """개인정보 동의서 폼 → 서명 토큰 생성."""
+    db = get_db()
+    data = {k: request.form.get(k, "") for k in PRIVACY_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["doc_date"] = request.form.get("doc_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    token = _make_sign_token()
+    expires_at = (datetime.now() + timedelta(hours=SIGN_LINK_TTL_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
+
+    db.execute(
+        """INSERT INTO consent_records
+           (token, doc_type, form_data, patient_name, guardian_name, vet_name,
+            expires_at, created_by)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (token, "privacy", json.dumps(data, ensure_ascii=False),
+         data.get("patient_name", ""), data.get("guardian_name", ""),
+         data.get("vet_name", ""), expires_at, session.get("user_id", 0))
+    )
+    db.commit()
+
+    sign_url = f"{_sign_base_url()}/sign/{token}"
+    return jsonify({
+        "ok": True,
+        "token": token,
+        "url": sign_url,
+        "qr_b64": _qr_base64(sign_url),
+        "expires_at": expires_at,
+        "ttl_hours": SIGN_LINK_TTL_HOURS,
+        "doc_type": "privacy",
+    })
+
+
 # ----- 보호자 서명 페이지 (로그인 불필요, 토큰 기반) -----
 
 def _load_sign_record(token):
@@ -947,6 +1040,8 @@ def sign_page(token):
     if doc_type == "imaging":
         mod_label = (data.get("imaging_modalities") or "").replace(",", "·")
         doc_title = f"영상 촬영 마취 동의서 ({mod_label})" if mod_label else "영상 촬영 마취 동의서"
+    elif doc_type == "privacy":
+        doc_title = "개인정보 수집 및 활용 동의서"
     else:
         pt = data.get("patient_type") or "surgery_hospital"
         if pt == "hospital_only":
@@ -961,9 +1056,11 @@ def sign_page(token):
 
     return render_template("sign_page.html",
                            token=token,
+                           doc_type=doc_type,
                            doc_title=doc_title,
                            patient_name=data.get("patient_name", ""),
                            guardian_name=data.get("guardian_name", ""),
+                           guardian_email=data.get("guardian_email", ""),
                            hospital_name=HOSPITAL_SHORT,
                            expires_at_iso=expires_at_iso)
 
@@ -982,6 +1079,8 @@ def sign_doc_preview(token):
     db = get_db()
     if row["doc_type"] == "imaging":
         return _render_imaging_print_from_data(data, db, sign_interactive=True)
+    if row["doc_type"] == "privacy":
+        return _render_privacy_print_from_data(data, db, sign_interactive=True)
     return _render_consent_print_from_data(data, db, sign_interactive=True)
 
 
@@ -1022,12 +1121,40 @@ def sign_submit(token):
     except (TypeError, ValueError):
         checked_boxes = []
 
+    # privacy_input: doc_type='privacy'일 때 보호자가 모바일에서 입력한 정보
+    # (주민번호, 동의체크, 법정대리인 등) → form_data에 _privacy_input 키로 병합
+    privacy_input = payload.get("privacy_input") or {}
     signed_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db = get_db()
-    db.execute(
-        "UPDATE consent_records SET signature_data=?, signer_name=?, signed_at=?, checked_boxes=? WHERE token=?",
-        (b64, signer_name, signed_at, json.dumps(checked_boxes), token)
-    )
+
+    if row["doc_type"] == "privacy" and privacy_input:
+        # 기존 form_data 읽어서 _privacy_input 병합 후 저장
+        try:
+            form_data = json.loads(row["form_data"])
+        except (ValueError, TypeError):
+            form_data = {}
+        # 허용된 키만 추출 (whitelist)
+        allowed = {"rrn", "email", "sms_ok", "mail_ok", "ads_ok",
+                   "legal_name", "legal_phone", "legal_relation"}
+        clean = {k: (v or "").strip() if isinstance(v, str) else v
+                 for k, v in privacy_input.items() if k in allowed}
+        # 주민번호 간단 검증 (13자리 숫자만)
+        rrn = clean.get("rrn", "").replace("-", "")
+        if rrn and (not rrn.isdigit() or len(rrn) != 13):
+            return jsonify({"ok": False, "error": "주민등록번호 형식이 올바르지 않습니다 (13자리 숫자)."}), 400
+        clean["rrn"] = rrn
+        form_data["_privacy_input"] = clean
+        db.execute(
+            "UPDATE consent_records SET signature_data=?, signer_name=?, signed_at=?, "
+            "checked_boxes=?, form_data=? WHERE token=?",
+            (b64, signer_name, signed_at, json.dumps(checked_boxes),
+             json.dumps(form_data, ensure_ascii=False), token)
+        )
+    else:
+        db.execute(
+            "UPDATE consent_records SET signature_data=?, signer_name=?, signed_at=?, checked_boxes=? WHERE token=?",
+            (b64, signer_name, signed_at, json.dumps(checked_boxes), token)
+        )
     db.commit()
     return jsonify({
         "ok": True,
@@ -1082,6 +1209,16 @@ def sign_pdf(token):
             signer_name=row["signer_name"],
             signed_at=row["signed_at"],
             checked_boxes=checked_boxes,
+        )
+    if row["doc_type"] == "privacy":
+        # form_data 안에 보호자가 모바일에서 입력한 정보가 병합되어 있음 (privacy_input)
+        privacy_input = data.get("_privacy_input") or {}
+        return _render_privacy_print_from_data(
+            data, db,
+            signature_b64=row["signature_data"],
+            signer_name=row["signer_name"],
+            signed_at=row["signed_at"],
+            privacy_input=privacy_input,
         )
     return _render_consent_print_from_data(
         data, db,
@@ -1799,6 +1936,7 @@ CE_GUARDIAN_PROMPT = """당신은 한국 동물병원 원장의 진료 경과를
 - 혈액 검사 상 신장 수치 중 Creatinine이 2.3(정상 0.8~1.6)으로 상승된 것이 확인되었습니다. 탈수 지속되는 경우 신장 수치 상승 심화될 수 있어 원내에서 피하수액 진행하였습니다. 집에서는 물, 습식캔 등을 통해서 음수량 채울 수 있도록 해주세요.
 - 추가적으로 복부 초음파 검사 상 소장 근층 전반적으로 비후되어 있는 것이 확인되었습니다. 만성 장염을 우선 고려할 수 있는 소견으로, 회복 돕기 위해 내복약(위장관보호제, 항구토제, 항생제) 처방하였습니다. 오늘 저녁약부터 급여해주세요.
 - 고양이에서는 식욕 부진 지속되면 탈수, 빈혈 심화 뿐만 아니라 지방간으로 인해 간기능 저하 발생할 수 있습니다. 세침흡인 검사 진행 또는 스테로이드 처방 결정되시면 병원으로 연락 부탁 드립니다."""
+
 
 
 CE_VET_PROMPT = """당신은 한국 동물병원의 수의사가 다른 의뢰 병원 원장님(수의사)에게 보내는 진료 경과 보고 메시지를 작성하는 전문가입니다.

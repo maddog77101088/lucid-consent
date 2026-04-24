@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>{{ doc_title }} - {{ d.guardian_name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='print.css') }}">
+</head>
+<body class="print-body">
+
+<div class="print-toolbar no-print">
+  <button onclick="window.print()">인쇄 / PDF 저장</button>
+  <button onclick="window.close()">닫기</button>
+  {% if show_sign_button %}{% include "_sign_qr_button.html" %}{% endif %}
+  <span class="muted">인쇄 대화상자에서 "PDF로 저장"을 선택하면 PDF로 저장됩니다.</span>
+</div>
+
+<article class="consent-doc">
+  <div style="text-align:center; line-height:1.4;">
+    <h1 style="margin:0 0 6px 0; letter-spacing:4px;">{{ doc_title }}</h1>
+    <div style="font-size:10pt; color:#444;">{{ hospital_name }}</div>
+  </div>
+
+  {% if d.patient_name %}
+  <p class="small" style="text-align:right; margin:10pt 0 4pt; color:#6b7280;">
+    ※ 환자: <strong>{{ d.patient_name }}</strong> ({{ d.species }}{% if d.breed %} / {{ d.breed }}{% endif %}) 관련
+  </p>
+  {% endif %}
+
+  <h4 style="margin-top:14pt;">수집하는 개인정보</h4>
+  <table class="info info-4col">
+    <colgroup><col class="lbl"><col class="val"><col class="lbl"><col class="val"></colgroup>
+    <tr><th>이름</th><td>{{ d.guardian_name }}</td><th>이메일</th><td>{{ privacy.email or d.guardian_email or '' }}</td></tr>
+    <tr><th>전화</th><td>{{ d.guardian_phone }}</td><th>휴대전화</th><td>{{ d.guardian_mobile }}</td></tr>
+    <tr><th>주소</th><td colspan="3">{{ d.guardian_address }}</td></tr>
+    <tr><th>주민등록번호</th><td colspan="3">
+      {% if privacy.rrn %}
+        {{ privacy.rrn[:6] }}-{{ privacy.rrn[6:] }}
+      {% else %}
+        <span class="muted">(보호자 모바일 서명 시 입력)</span>
+      {% endif %}
+    </td></tr>
+  </table>
+
+  <h4>개인정보 수집 및 이용 목적</h4>
+  <p class="small">성명, 주소, 연락처, 이메일 주소, 주민등록번호</p>
+  <ul class="promise-list" style="list-style:disc; padding-left:20pt;">
+    <li>동물병원업무와 수의학정보 안내 등 서비스 이용 안내</li>
+    <li>예정일 안내, 소식 및 고지사항 전달, 불만처리 등을 위한 원활한 의사소통 경로 확보</li>
+    <li>동물병원에서 실시하는 이벤트 및 뉴스레터, 기타 광고성 정보 전달</li>
+    <li><strong>주민등록번호</strong>: 마약류관리법에 따라 병원 외부에서 마약류 투약 시 NIMS(마약류통합관리시스템)에 보호자 주민등록번호 제공</li>
+  </ul>
+
+  <h4>개인정보의 보유 및 이용기간</h4>
+  <p class="small">{{ hospital_name }}는 수집된 고객의 개인정보를 수의사법에 따른 관련서류 보존기간(검안부 및 진료부 1년, 마약류약품을 처방한 기록이 있는 진료부 2년, 진단서 및 폐사진단서의 사본 3년) 이후에도 동물의 기왕력의 확인 등 진료의 정확도를 향상하기 위해 동물이 폐사하는 날까지 진료부 등 관련 서류를 보관하고자 하는바, 이에 따라 보호자의 개인정보 보관 기간도 연장됩니다.</p>
+  <p class="small">정보제공자가 개인정보 삭제를 요청할 경우 즉시 삭제합니다. 단, 타 법령의 규정에 의해 보유하도록 한 기간동안은 보관할 수 있습니다.</p>
+  <ul class="promise-list" style="list-style:disc; padding-left:20pt;">
+    <li>소비자의 불만 또는 분쟁처리에 관한 기록: 3년(전자상거래 등에서의 소비자보호에 관한 법률)</li>
+    <li>신용정보의 수집/처리 및 이용 등에 관한 기록: 3년(신용정보의 이용 및 보호에 관한 법률)</li>
+    <li>본인 확인에 관한 기록: 6개월 (정보통신망 이용촉진 및 정보보호 등에 관한 법률)</li>
+  </ul>
+
+  <h4>개인정보 제공 동의 거부 권리 및 동의 거부에 따른 불이익 내용 또는 제한사항</h4>
+  <p class="small">귀하는 개인정보 제공 동의를 거부할 권리가 있으며, 동의 거부에 따른 불이익은 없습니다. 다만, 동물 진료관련 안내 서비스를 받을 수 없습니다.</p>
+
+  <h4>수신 동의 <span class="muted small">(보호자가 선택)</span></h4>
+  <table class="info" style="width:100%;">
+    <tr>
+      <th style="width:55%;">문자서비스 수신 동의 <span class="muted small">(예정일·소식·고지사항)</span></th>
+      <td>
+        <span class="cb">{% if privacy.sms_ok == 'yes' %}☑{% else %}☐{% endif %}</span> 예 &nbsp;
+        <span class="cb">{% if privacy.sms_ok == 'no' %}☑{% else %}☐{% endif %}</span> 아니오
+      </td>
+    </tr>
+    <tr>
+      <th>정보메일서비스 수신 동의</th>
+      <td>
+        <span class="cb">{% if privacy.mail_ok == 'yes' %}☑{% else %}☐{% endif %}</span> 예 &nbsp;
+        <span class="cb">{% if privacy.mail_ok == 'no' %}☑{% else %}☐{% endif %}</span> 아니오
+      </td>
+    </tr>
+    <tr>
+      <th>광고성 정보 수신 동의</th>
+      <td>
+        <span class="cb">{% if privacy.ads_ok == 'yes' %}☑{% else %}☐{% endif %}</span> 예 &nbsp;
+        <span class="cb">{% if privacy.ads_ok == 'no' %}☑{% else %}☐{% endif %}</span> 아니오
+      </td>
+    </tr>
+  </table>
+  <p class="small" style="margin-top:6pt; color:#6b7280;">※ 만 14세 미만 아동인 경우 법정대리인의 동의가 필요합니다.</p>
+
+  {% if privacy.legal_name %}
+  <h4>법정대리인 동의서</h4>
+  <p class="small">본인은 미성년자의 법정대리인으로 {{ hospital_name }} 서비스 이용 신청에 동의합니다.</p>
+  <table class="info info-4col">
+    <tr><th>법정대리인 성명</th><td>{{ privacy.legal_name }}</td><th>관계</th><td>{{ privacy.legal_relation or '-' }}</td></tr>
+    <tr><th>연락처</th><td colspan="3">{{ privacy.legal_phone or '-' }}</td></tr>
+  </table>
+  {% endif %}
+
+  <p class="small" style="margin-top:14pt;">※ 개인정보 제공자가 동의한 내용 외의 다른 목적으로 활용하지 않으며, 제공된 개인정보의 이용을 거부하고자 할 때에는 개인정보 관리책임자를 통해 열람, 정정, 삭제를 요구할 수 있음.</p>
+
+  <p class="legal" style="margin-top:10pt;">
+    「개인정보보호법」등 관련 법규에 의거하여 상기 본인은 위와 같이 개인정보 수집 및 활용에 동의함.
+  </p>
+
+  <p class="sign-date" style="text-align:center; margin-top:18pt;">{{ d.doc_date }}</p>
+  <p class="sign-target" style="text-align:right; margin-top:14pt;">
+    {% if not d.signature_b64 %}
+    보호자 또는 입원 의뢰인: ________________________ (인)<br>
+    {% endif %}
+    {{ hospital_name }} 귀하
+  </p>
+
+  {% if d.signature_b64 %}
+  <div class="signature-panel" style="margin-top:14pt; padding:10pt 12pt; border:1.5pt solid #059669; border-radius:4pt; page-break-inside: avoid;">
+    <div style="font-size:10pt; color:#059669; font-weight:600; margin-bottom:6pt;">✓ 보호자 전자서명 완료</div>
+    <div style="display:flex; align-items:flex-end; gap:14pt; flex-wrap:wrap;">
+      <div style="flex:1; min-width:200px; border-bottom:1pt solid #111; padding-bottom:2pt;">
+        <img src="data:image/png;base64,{{ d.signature_b64 }}" style="max-width:280px; max-height:90px; display:block;">
+      </div>
+      <div style="min-width:160px;">
+        <div style="font-size:10pt; color:#6b7280;">보호자 (전자서명)</div>
+        <div style="font-size:13pt; font-weight:600;">{{ d.signer_name }}</div>
+        <div style="font-size:9pt; color:#6b7280;">서명일시: {{ d.signed_at }}</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="footer-small muted">
+    {{ hospital_name }} · 문서작성일시 {{ d.created_at }} · 담당 {{ d.vet_name }}
+  </div>
+</article>
+
+{% if sign_interactive %}{% include "_sign_interactive_js.html" %}{% endif %}
+</body>
+</html>
