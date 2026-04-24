@@ -47,10 +47,10 @@
     <label>품종<input name="breed"></label>
   </section>
 
-  <!-- 담당자 -->
+  <!-- 작성일 -->
   <section class="card">
-    <h2>④ 담당자</h2>
-    <label>담당 수의사<input name="vet_name" value="{{ vet_name }}" required></label>
+    <h2>④ 작성일</h2>
+    <input type="hidden" name="vet_name" value="{{ vet_name }}">
     <label>작성일<input name="doc_date" type="date" value="{{ today }}"></label>
   </section>
 
