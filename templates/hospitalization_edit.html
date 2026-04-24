@@ -33,6 +33,9 @@
   <label>비고
     <input name="notes" value="{{ item.notes if item else '' }}">
   </label>
+  <label>퇴원 시 기본 안내 <span class="muted" style="font-weight:normal; font-size:12px;">(내과 퇴원 안내문 AI 생성 시 기본값으로 사용됩니다)</span>
+    <textarea name="discharge_notes" rows="5" placeholder="예) CKD: 신장 처방식 평생 급여, 음수량 충분히 유지, BUN/Crea/SDMA 1주 후 재검. / 당뇨: 인슐린 1일 2회 정시 투여, 떨림·의식저하 시 꿀물 후 즉시 연락. / MMVD: 안정 시 호흡수 1분간 30회 이하 매일 체크.">{{ item.discharge_notes if item else '' }}</textarea>
+  </label>
   <div class="actions">
     <a class="btn-ghost" href="{{ url_for('hospitalization_list') }}">취소</a>
     <button class="btn-primary" type="submit">저장</button>

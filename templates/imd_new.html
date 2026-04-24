@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .imd-form label {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 8px; font-size: 13px;
+    color: #374151; font-weight: 500; line-height: 1.4;
+  }
+  .imd-form label > .lbl { flex: 0 0 200px; min-width: 200px; }
+  .imd-form label > input,
+  .imd-form label > select {
+    flex: 1; padding: 7px 10px; font-size: 14px;
+    border: 1.5px solid #d1d5db; border-radius: 5px;
+    box-sizing: border-box; font-weight: normal; min-width: 0;
+  }
+  .imd-form label > input:focus,
+  .imd-form label > select:focus { outline: none; border-color: #2563eb; }
+  .imd-form label:has(> textarea) { display: block; }
+  .imd-form label:has(> textarea) > .lbl { display: block; margin-bottom: 4px; }
+  .imd-form label > textarea {
+    display: block; width: 100%; margin-top: 4px; padding: 8px 10px;
+    font-size: 14px; border: 1.5px solid #d1d5db; border-radius: 5px;
+    box-sizing: border-box; font-weight: normal;
+  }
+  .imd-form label > textarea:focus { outline: none; border-color: #2563eb; }
+  .imd-form .card { padding: 14px 16px; }
+  .imd-form .card h2 {
+    margin-top: 0; font-size: 15px; color: #1f2937; margin-bottom: 10px;
+  }
+  /* 모니터링 체크박스 그리드 */
+  .monitor-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+  }
+  .monitor-grid label {
+    display: flex !important; align-items: center; gap: 6px;
+    background: #f9fafb; padding: 6px 10px; border-radius: 5px;
+    border: 1px solid #e5e7eb; cursor: pointer; margin-bottom: 0 !important;
+    font-size: 13px; font-weight: normal;
+  }
+  .monitor-grid label:has(input:checked) {
+    background: #dbeafe; border-color: #2563eb; color: #1e40af; font-weight: 500;
+  }
+  .monitor-grid label > input[type="checkbox"] {
+    flex: 0 0 auto; width: auto; margin: 0; padding: 0;
+  }
+  @media (max-width: 640px) {
+    .imd-form label { flex-direction: column; align-items: stretch; gap: 4px; }
+    .imd-form label > .lbl { flex: none; min-width: 0; }
+  }
+</style>
+
+<h1>내과 퇴원 안내문 작성 <span class="muted" style="font-size:14px; font-weight:400;">(AI 자동 생성)</span></h1>
+<p class="muted">진단명 + 처방·재진·모니터링 정보를 입력하면 AI가 보호자용 내과 퇴원 안내문을 작성합니다.</p>
+
+<div class="imd-form" style="display:flex; flex-direction:column; gap:16px;">
+
+  <!-- 차트 OCR -->
+  <section class="card" style="border-left:3px solid #2563eb;">
+    <h2>① 차트 OCR (선택)</h2>
+    <label><span class="lbl">이미지</span>
+      <span style="flex:1; display:flex; gap:6px;">
+        <input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp" style="flex:1;">
+        <button type="button" id="btn-chart-ocr" class="btn-primary" style="white-space:nowrap;">🖼 정보 추출</button>
+      </span>
+    </label>
+    <p id="chart-ocr-status" class="muted" style="margin:4px 0 0 212px; font-size:12px;">💡 차트 캡처 후 <kbd>Ctrl+V</kbd></p>
+  </section>
+
+  <!-- 환자 -->
+  <section class="card">
+    <h2>② 환자 / 보호자</h2>
+    <label><span class="lbl">보호자 성명</span><input id="guardian_name"></label>
+    <label><span class="lbl">환자 이름 *</span><input id="patient_name" required></label>
+    <label><span class="lbl">종</span><select id="species"><option>Canine (개)</option><option>Feline (고양이)</option><option>기타</option></select></label>
+    <label><span class="lbl">나이</span><input id="age" placeholder="예: 11y 9m"></label>
+  </section>
+
+  <!-- 진단 -->
+  <section class="card" style="border-left:3px solid #0891b2;">
+    <h2>③ 진단 정보</h2>
+    <label><span class="lbl">입원 케이스 <span class="muted" style="font-size:11px;">(DB 자동로드)</span></span>
+      <select id="case_select">
+        <option value="">-- 선택 --</option>
+        {% for c in cases %}
+          <option value="{{ c.id }}" data-name="{{ c.name }}">[{{ c.category }}] {{ c.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label><span class="lbl">진단명 *</span><input id="diagnosis" placeholder="예: 만성 신장병 IRIS 2단계, 당뇨, MMVD Stage B2" required></label>
+  </section>
+
+  <!-- 처방 -->
+  <section class="card" style="border-left:3px solid #0891b2;">
+    <h2>④ 약 처방</h2>
+    <label><span class="lbl">처방 약물 <span class="muted" style="font-size:11px;">(콤마 구분)</span></span><input id="medications" placeholder="예: Famotidine, Mirtazapine, Ursodiol, Telmisartan"></label>
+    <label><span class="lbl">복용 기간 <span class="muted" style="font-size:11px;">(자유 입력)</span></span><input id="med_duration" placeholder="예: 7일 / 1개월 / 재진까지 / 평생 지속"></label>
+  </section>
+
+  <!-- 식이 -->
+  <section class="card" style="border-left:3px solid #0891b2;">
+    <h2>⑤ 처방식 / 식이 관리 <span class="muted" style="font-size:12px; font-weight:normal;">(선택)</span></h2>
+    <label><span class="lbl">처방식 종류 / 식이 안내</span><input id="diet" placeholder="예: Royal Canin Renal 1일 60g 2회 / 가수분해식 / 저탄수화물식"></label>
+  </section>
+
+  <!-- 모니터링 -->
+  <section class="card" style="border-left:3px solid #0891b2;">
+    <h2>⑥ 집에서 모니터링할 항목 <span class="muted" style="font-size:12px; font-weight:normal;">(여러 개 선택)</span></h2>
+    <div class="monitor-grid">
+      <label><input type="checkbox" name="monitor" value="식욕"> 🍽 식욕</label>
+      <label><input type="checkbox" name="monitor" value="음수량"> 💧 음수량</label>
+      <label><input type="checkbox" name="monitor" value="구토 / 설사"> 🤢 구토/설사</label>
+      <label><input type="checkbox" name="monitor" value="배뇨 / 배변 양상"> 🚽 배뇨/배변</label>
+      <label><input type="checkbox" name="monitor" value="안정 시 호흡수"> 🫁 호흡수</label>
+      <label><input type="checkbox" name="monitor" value="활동량 / 기력"> 🐾 활동량</label>
+      <label><input type="checkbox" name="monitor" value="체중"> ⚖️ 체중</label>
+      <label><input type="checkbox" name="monitor" value="혈당 측정"> 🩸 혈당</label>
+      <label><input type="checkbox" name="monitor" value="기침"> 😮‍💨 기침</label>
+      <label><input type="checkbox" name="monitor" value="잇몸 색깔"> 👅 잇몸색</label>
+      <label><input type="checkbox" name="monitor" value="복부 팽만"> 🫥 복부팽만</label>
+      <label><input type="checkbox" name="monitor" value="체온"> 🌡 체온</label>
+    </div>
+  </section>
+
+  <!-- 입원기간 + 퇴원상태 -->
+  <section class="card" style="border-left:3px solid #0891b2;">
+    <h2>⑦ 입원 기간 & 퇴원 당시 상태</h2>
+    <label><span class="lbl">입원 일수</span><input id="hospitalization_days" type="number" min="0" max="60" value="3" placeholder="3"></label>
+    <label><span class="lbl">퇴원 당시 상태 <span class="muted" style="font-size:11px;">(톤 조절)</span></span>
+      <select id="discharge_status">
+        <option value="good">✅ 좋은 경과로 퇴원 (회복 순조로움)</option>
+        <option value="delayed">⚠️ 회복이 지연 중 퇴원 (주의 깊은 관찰 필요)</option>
+        <option value="worsening">🚨 상태 악화 중 퇴원 (적극적 관찰 필요)</option>
+      </select>
+    </label>
+  </section>
+
+  <!-- 재진 -->
+  <section class="card" style="border-left:3px solid #0891b2;">
+    <h2>⑧ 재진 일정</h2>
+    <label><span class="lbl">1차 재진일</span>
+      <span style="flex:1; display:flex; gap:6px;">
+        <input id="followup1_date" type="date" style="flex:1;">
+        <button type="button" data-target="followup1_date" data-days="7" class="btn-primary btn-quick-date" style="white-space:nowrap;">+7일</button>
+      </span>
+    </label>
+    <label><span class="lbl">1차 재진 항목</span><input id="followup1_purpose" placeholder="예: 신장 혈액 재검사 (BUN/Crea/SDMA)"></label>
+    <label><span class="lbl">2차 재진일 <span class="muted" style="font-size:11px;">(선택)</span></span>
+      <span style="flex:1; display:flex; gap:6px;">
+        <input id="followup2_date" type="date" style="flex:1;">
+        <button type="button" data-target="followup2_date" data-days="30" class="btn-primary btn-quick-date" style="white-space:nowrap;">+1개월</button>
+      </span>
+    </label>
+    <label><span class="lbl">2차 재진 항목</span><input id="followup2_purpose" placeholder="예: 외래 재진 + 약 처방"></label>
+  </section>
+
+  <!-- AI 참고 정보 -->
+  <section class="card">
+    <h2>⑨ AI 참고 정보</h2>
+    <label><span class="lbl">DB 기본 안내 <span class="muted" style="font-size:11px;">(자동 채움)</span></span>
+      <textarea id="db_discharge_notes" rows="3" placeholder="입원 케이스 선택 시 자동으로 채워집니다."></textarea>
+    </label>
+    <label><span class="lbl">이번 환자 특이사항 <span class="muted" style="font-size:11px;">(선택)</span></span>
+      <textarea id="special_notes" rows="2" placeholder="예: 나이가 많고 다른 합병증 있어 특히 식욕·체중 변화 주의 필요"></textarea>
+    </label>
+  </section>
+
+  <div style="display:flex; gap:8px; margin-top:12px;">
+    <a class="btn-ghost" href="{{ url_for('dashboard') }}" style="flex:0 0 auto;">취소</a>
+    <button type="button" id="btn-generate" class="btn-primary" style="flex:1; padding:12px; font-size:15px; font-weight:600;">
+      ✨ AI로 안내문 생성
+    </button>
+  </div>
+
+  <!-- AI 결과 -->
+  <section class="card">
+    <h2>📄 생성된 안내문 <span id="gen-status" class="muted" style="font-size:12px; font-weight:normal;"></span></h2>
+    <textarea id="result" rows="15"
+              placeholder="좌측에 정보 입력 후 [✨ AI로 안내문 생성] 버튼을 눌러주세요."
+              style="width:100%; font-family: -apple-system, 'Malgun Gothic', sans-serif; font-size:13.5px;
+                     line-height:1.7; padding:12px; border:1.5px solid #d1d5db; border-radius:6px;
+                     white-space:pre-wrap; box-sizing:border-box; resize:vertical;"></textarea>
+    <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+      <button type="button" id="btn-copy" class="btn-ghost" style="flex:1;">📋 복사</button>
+      <button type="button" id="btn-print" class="btn-ghost" style="flex:1;">🖨 인쇄/PDF</button>
+    </div>
+    <p class="muted" style="font-size:11px; margin-top:6px;">※ AI 생성 후 자유롭게 편집 가능. 편집 내용은 복사·인쇄에 반영됩니다.</p>
+  </section>
+
+</div>
+
+<script>
+// ----- 입원 케이스 선택 시 진단명·DB 안내 자동 로드 -----
+document.getElementById('case_select').addEventListener('change', async function(){
+  const hid = this.value;
+  const name = this.options[this.selectedIndex].dataset.name || '';
+  if (name) document.getElementById('diagnosis').value = name;
+  if (!hid) return;
+  try {
+    const r = await fetch(`/api/hospitalization/${hid}/discharge`);
+    const d = await r.json();
+    if (r.ok && d.discharge_notes !== undefined) {
+      document.getElementById('db_discharge_notes').value = d.discharge_notes;
+    }
+  } catch (e) {}
+});
+
+// ----- 재진일 빠른 설정 (오늘 +N일) -----
+document.querySelectorAll('.btn-quick-date').forEach(btn => {
+  btn.addEventListener('click', function(){
+    const target = document.getElementById(this.dataset.target);
+    const days = parseInt(this.dataset.days, 10);
+    const today = new Date('{{ today }}');
+    today.setDate(today.getDate() + days);
+    target.value = today.toISOString().slice(0, 10);
+  });
+});
+
+// ----- AI 생성 -----
+document.getElementById('btn-generate').addEventListener('click', async function(){
+  const btn = this;
+  const status = document.getElementById('gen-status');
+  const result = document.getElementById('result');
+  const patient = document.getElementById('patient_name').value.trim();
+  const dx = document.getElementById('diagnosis').value.trim();
+  if (!patient) { alert('환자 이름을 입력해주세요.'); return; }
+  if (!dx) { alert('진단명을 입력해주세요.'); return; }
+
+  btn.disabled = true;
+  status.textContent = '🤖 Claude가 안내문 작성 중... (10~30초)';
+  status.style.color = '#2563eb';
+
+  const monitoring_items = Array.from(document.querySelectorAll('input[name="monitor"]:checked'))
+                                .map(el => el.value);
+
+  const payload = {
+    patient_name: patient,
+    guardian_name: document.getElementById('guardian_name').value.trim(),
+    species: document.getElementById('species').value,
+    age: document.getElementById('age').value.trim(),
+    diagnosis: dx,
+    medications: document.getElementById('medications').value.trim(),
+    med_duration: document.getElementById('med_duration').value.trim(),
+    diet: document.getElementById('diet').value.trim(),
+    monitoring_items: monitoring_items,
+    followup1_date: document.getElementById('followup1_date').value,
+    followup1_purpose: document.getElementById('followup1_purpose').value.trim(),
+    followup2_date: document.getElementById('followup2_date').value,
+    followup2_purpose: document.getElementById('followup2_purpose').value.trim(),
+    hospitalization_days: document.getElementById('hospitalization_days').value,
+    discharge_status: document.getElementById('discharge_status').value,
+    db_discharge_notes: document.getElementById('db_discharge_notes').value.trim(),
+    special_notes: document.getElementById('special_notes').value.trim(),
+  };
+
+  try {
+    const r = await fetch('/api/imd/generate', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '생성 실패');
+    result.value = d.text;
+    status.textContent = '✓ 완료 (편집 가능)';
+    status.style.color = '#059669';
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#dc2626';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ----- 복사 -----
+document.getElementById('btn-copy').addEventListener('click', async function(){
+  const text = document.getElementById('result').value;
+  if (!text) { alert('복사할 내용이 없습니다.'); return; }
+  try {
+    await navigator.clipboard.writeText(text);
+    this.textContent = '✓ 복사됨';
+    setTimeout(() => this.textContent = '📋 복사', 1500);
+  } catch (e) {
+    alert('복사 실패 - 수동으로 복사해주세요.');
+  }
+});
+
+// ----- 인쇄 -----
+document.getElementById('btn-print').addEventListener('click', function(){
+  const text = document.getElementById('result').value;
+  if (!text) { alert('인쇄할 내용이 없습니다.'); return; }
+  const patient = document.getElementById('patient_name').value.trim() || '환자';
+  const w = window.open('', '_blank');
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8">
+    <title>내과 퇴원 안내문 - ${patient}</title>
+    <style>
+      @page { margin: 20mm 18mm; }
+      body { font-family: -apple-system, "Malgun Gothic", sans-serif; line-height: 1.75; font-size: 11pt; }
+      h1 { font-size: 16pt; border-bottom: 2pt solid #0891b2; padding-bottom: 6pt; }
+      pre { white-space: pre-wrap; font-family: inherit; font-size: 11pt; }
+      .footer { margin-top: 20pt; font-size: 9pt; color: #666; text-align: center; border-top: 1pt solid #ccc; padding-top: 8pt; }
+    </style></head><body>
+    <h1>🩺 내과 퇴원 안내문 — ${patient}</h1>
+    <pre>${text.replace(/</g,'&lt;')}</pre>
+    <div class="footer">24시루시드동물메디컬센터 · 서울 강북구 월계로 3 · TEL 02-941-7900</div>
+    <script>window.onload=()=>window.print();<\\/script>
+    </body></html>`);
+  w.document.close();
+});
+
+// ----- 차트 OCR -----
+document.addEventListener('paste', (e) => {
+  const tag = (document.activeElement?.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
+    const hasImg = Array.from(e.clipboardData?.items || []).some(i => i.type.startsWith('image/'));
+    if (!hasImg) return;
+  }
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      const file = new File([blob], `clipboard-${Date.now()}.png`, { type: blob.type });
+      const dt = new DataTransfer(); dt.items.add(file);
+      document.getElementById('chart-image').files = dt.files;
+      document.getElementById('chart-ocr-status').textContent = '📋 클립보드 이미지 감지 → OCR 실행...';
+      setTimeout(() => document.getElementById('btn-chart-ocr').click(), 100);
+      return;
+    }
+  }
+});
+
+document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
+  const fileEl = document.getElementById('chart-image');
+  const file = fileEl.files[0];
+  if (!file) { alert('이미지 파일을 먼저 선택하세요.'); return; }
+  const status = document.getElementById('chart-ocr-status');
+  const btn = document.getElementById('btn-chart-ocr');
+  btn.disabled = true;
+  status.textContent = '🖼 Claude가 차트 읽는 중...';
+  try {
+    const fd = new FormData(); fd.append('image', file);
+    const r = await fetch('/api/chart-ocr', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    let filled = 0;
+    const map = { guardian_name:'guardian_name', patient_name:'patient_name', species:'species', age:'age' };
+    for (const [k, v] of Object.entries(d.data)) {
+      if (!v) continue;
+      const id = map[k] || k;
+      const el = document.getElementById(id);
+      if (el) { el.value = v; filled++; }
+    }
+    status.textContent = '✓ ' + filled + '개 필드 자동입력';
+    status.style.color = '#0a7';
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}

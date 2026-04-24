@@ -184,6 +184,11 @@ def init_db():
     sg_cols = [c[1] for c in cur.fetchall()]
     if "post_op_notes" not in sg_cols:
         cur.execute("ALTER TABLE surgeries ADD COLUMN post_op_notes TEXT DEFAULT ''")
+    # hospitalizations 마이그레이션: discharge_notes (내과 퇴원 기본 안내)
+    cur.execute("PRAGMA table_info(hospitalizations)")
+    hp_cols = [c[1] for c in cur.fetchall()]
+    if "discharge_notes" not in hp_cols:
+        cur.execute("ALTER TABLE hospitalizations ADD COLUMN discharge_notes TEXT DEFAULT ''")
     con.commit()
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
@@ -1313,6 +1318,172 @@ def api_surgery_postop(sid):
     if not row: return jsonify({"error": "not found"}), 404
     return jsonify({"post_op_notes": row["post_op_notes"] or ""})
 
+# ===================== 내과 퇴원 안내문 (AI 자동생성) =====================
+# 입원 DB의 discharge_notes + 환자 진단·처방·모니터링 → Claude 로 보호자용 내과 퇴원 안내문 작성.
+
+IMD_PROMPT = """당신은 한국 동물병원의 수의사가 내과 입원 치료 후 퇴원하는 환자의 보호자에게 전달할 안내문을 작성하는 전문가입니다.
+
+**톤과 양식 (매우 중요)**:
+- 첫 줄: "[환자이름] 보호자님께"
+- 둘째 줄(빈 줄)
+- 셋째 줄: "[환자이름]는 [입원기간]일간 입원 치료 후 오늘 퇴원합니다. 집에서의 관리 안내드립니다."
+- 이후 각 섹션은 이모지 제목 + "-" 글머리 본문
+- 부드럽고 안심되는 어투. 보호자가 차근차근 따라할 수 있도록 구체적으로.
+- 전문 용어 대신 쉬운 말 (예: "BUN 상승" → "신장 수치가 약간 높음", "경구 투여" → "먹이기")
+
+**섹션 순서 (빠지지 않게)**:
+1. 📌 진단 및 현재 상태 (한두 문장 요약, 보호자가 이해할 수 있게)
+2. 💊 약 복용 (처방된 약 이름·횟수·기간 정확히. 만성투약은 "재진까지" "지속적으로" 등 자연스럽게 표현)
+3. 🍽 처방식 / 식이 관리 (처방식 있으면 종류·양·횟수. 없으면 일반 식이 주의점)
+4. 👀 집에서 관찰할 항목 (입력된 모니터링 항목들을 보호자가 매일 체크할 수 있게 풀어쓰기.
+   각 항목별로 "정상 범위" 또는 "이렇게 하면 됨" 가이드 포함. 예: 호흡수 = "안정 시 1분간 30회 이하")
+5. 🚨 즉시 연락할 응급 증상 (해당 진단명에 특화된 응급 신호. 보호자가 알아차릴 수 있도록 구체적으로.
+   진단명별 예: 신부전→구토 지속·식욕 완전 X / 심장병→호흡곤란·잇몸 청색증 / 당뇨→떨림·의식저하 / 췌장염→심한 구토·복통)
+6. 📅 다음 내원 일정 (입력된 1차/2차 재진 정확히 반영)
+7. 마무리 (궁금한 점 언제든 연락 + 병원 전화번호)
+
+**퇴원 당시 상태에 따른 톤 조절**:
+- "좋은 경과로 퇴원": 안심되는 톤. "잘 회복했어요" 느낌.
+- "회복 지연 중": 차분히 주의 깊게. 응급 증상 기준 낮게.
+- "상태 악화 중": 정직하고 진지하게. 안심시키지 말고 적극적 관찰 강조.
+
+**출력 규칙**:
+- 마크다운 코드블록·헤더(#) 금지. 이모지 + 줄글만.
+- 입력된 정보(약 이름·기간·날짜)는 정확히 반영.
+- 입력에 없는 정보는 추측 금지. 일반적 상식 수준만 추가.
+- 마지막 줄: "궁금한 점이 있으시면 언제든 병원으로 연락 주세요. 02-941-7900 · 24시 루시드 동물병원"
+"""
+
+
+@app.route("/imd/new", methods=["GET"])
+@login_required
+def imd_new():
+    db = get_db()
+    cases = db.execute(
+        "SELECT id,name,category FROM hospitalizations ORDER BY category,name"
+    ).fetchall()
+    return render_template("imd_new.html",
+                           cases=cases,
+                           today=datetime.now().strftime("%Y-%m-%d"),
+                           vet_name=session.get("display_name", ""))
+
+
+@app.route("/api/imd/generate", methods=["POST"])
+@login_required
+def api_imd_generate():
+    """내과 퇴원 안내문 AI 생성."""
+    if requests is None:
+        return jsonify({"error": "'requests' 패키지 미설치"}), 500
+    data = request.get_json() or {}
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수 미설정"}), 400
+
+    patient = (data.get("patient_name") or "").strip()
+    guardian = (data.get("guardian_name") or "").strip()
+    species = (data.get("species") or "").strip()
+    age = (data.get("age") or "").strip()
+    diagnosis = (data.get("diagnosis") or "").strip()
+    medications = (data.get("medications") or "").strip()
+    med_duration = (data.get("med_duration") or "").strip()
+    diet = (data.get("diet") or "").strip()
+    monitoring_items = data.get("monitoring_items") or []
+    if isinstance(monitoring_items, str):
+        monitoring_items = [monitoring_items]
+    followup1_date = (data.get("followup1_date") or "").strip()
+    followup1_purpose = (data.get("followup1_purpose") or "").strip()
+    followup2_date = (data.get("followup2_date") or "").strip()
+    followup2_purpose = (data.get("followup2_purpose") or "").strip()
+    hospitalization_days = (data.get("hospitalization_days") or "").strip()
+    discharge_status = (data.get("discharge_status") or "good").strip()
+    db_discharge_notes = (data.get("db_discharge_notes") or "").strip()
+    special_notes = (data.get("special_notes") or "").strip()
+
+    if not patient or not diagnosis:
+        return jsonify({"error": "환자명과 진단명은 필수입니다."}), 400
+
+    meta = []
+    if patient: meta.append(f"- 환자 이름: {patient}")
+    if species: meta.append(f"- 종: {species}")
+    if age: meta.append(f"- 나이: {age}")
+    if guardian: meta.append(f"- 보호자: {guardian}")
+    meta.append(f"- 진단명: {diagnosis}")
+
+    extra = []
+    if hospitalization_days:
+        extra.append(f"- 입원 기간: {hospitalization_days}일")
+    status_label = {
+        "good": "좋은 경과로 퇴원 — 회복 순조로움. 안심되는 톤.",
+        "delayed": "회복 지연 중 — 평소보다 주의 깊은 관찰 필요. 응급 기준 낮게.",
+        "worsening": "상태 악화 중 — 적극적 관찰 필요. 안심시키지 말고 정직하게.",
+    }.get(discharge_status, "")
+    if status_label:
+        extra.append(f"- 퇴원 당시 환자 상태: {status_label}")
+
+    if medications:
+        extra.append(f"- 처방 약물: {medications}" + (f" (복용 기간: {med_duration})" if med_duration else ""))
+    if diet:
+        extra.append(f"- 처방식 / 식이 관리: {diet}")
+    if monitoring_items:
+        extra.append(f"- 보호자가 집에서 매일 모니터링할 항목: {', '.join(monitoring_items)}")
+    if followup1_date or followup1_purpose:
+        f1 = f"1차 재진: {followup1_date}" + (f" ({followup1_purpose})" if followup1_purpose else "")
+        extra.append(f"- {f1}")
+    if followup2_date or followup2_purpose:
+        f2 = f"2차 재진: {followup2_date}" + (f" ({followup2_purpose})" if followup2_purpose else "")
+        extra.append(f"- {f2}")
+
+    user_msg_parts = ["[환자 및 진단 정보]", "\n".join(meta)]
+    if extra:
+        user_msg_parts += ["\n[이번 환자의 처방·관리 조건]", "\n".join(extra)]
+    if db_discharge_notes:
+        user_msg_parts += ["\n[병원 DB의 해당 진단 기본 퇴원 안내]", db_discharge_notes]
+    if special_notes:
+        user_msg_parts += ["\n[이번 환자 특이사항]", special_notes]
+    user_msg_parts.append("\n위 정보를 모두 반영하여 보호자용 내과 퇴원 안내문을 작성해주세요.")
+    user_msg = "\n".join(user_msg_parts)
+
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 4000,
+                "system": IMD_PROMPT,
+                "messages": [{"role": "user", "content": user_msg}],
+            },
+            timeout=90,
+        )
+        if r.status_code != 200:
+            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
+        body = r.json()
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith(("text","markdown","md")):
+                text = text.split("\n", 1)[1] if "\n" in text else ""
+            text = text.strip().rstrip("`").strip()
+        return jsonify({"ok": True, "text": text})
+    except Exception as e:
+        return jsonify({"error": f"AI 요청 실패: {e}"}), 500
+
+
+@app.route("/api/hospitalization/<int:hid>/discharge", methods=["GET"])
+@login_required
+def api_hospitalization_discharge(hid):
+    """입원 DB 의 discharge_notes 만 반환 (imd 폼에서 케이스 선택 시)."""
+    row = get_db().execute("SELECT discharge_notes FROM hospitalizations WHERE id=?", (hid,)).fetchone()
+    if not row: return jsonify({"error": "not found"}), 404
+    return jsonify({"discharge_notes": row["discharge_notes"] or ""})
+
+
+
 
 
 # ===================== 안락사 동의서 =====================
@@ -2002,7 +2173,8 @@ def users():
 # ===================== 입원 DB (hospitalizations) =====================
 
 HOSP_FIELDS = ["name","category","purpose_effect","complications",
-               "estimated_cost","hospitalization","expected_duration","notes"]
+               "estimated_cost","hospitalization","expected_duration","notes",
+               "discharge_notes"]
 
 
 @app.route("/hospitalizations")
@@ -2031,8 +2203,8 @@ def hospitalization_new():
         try:
             get_db().execute("""INSERT INTO hospitalizations
                 (name,category,purpose_effect,complications,
-                 estimated_cost,hospitalization,expected_duration,notes)
-                VALUES (?,?,?,?,?,?,?,?)""",
+                 estimated_cost,hospitalization,expected_duration,notes,discharge_notes)
+                VALUES (?,?,?,?,?,?,?,?,?)""",
                 tuple(d[k] for k in HOSP_FIELDS))
             get_db().commit()
             flash("입원 케이스가 DB에 추가되었습니다.", "ok")
@@ -2053,7 +2225,7 @@ def hospitalization_edit(hid):
         d = _form_to_hosp()
         db.execute("""UPDATE hospitalizations SET name=?,category=?,purpose_effect=?,
             complications=?,estimated_cost=?,hospitalization=?,expected_duration=?,
-            notes=?,updated_at=datetime('now') WHERE id=?""",
+            notes=?,discharge_notes=?,updated_at=datetime('now') WHERE id=?""",
             tuple(d[k] for k in HOSP_FIELDS) + (hid,))
         db.commit()
         flash("수정되었습니다.", "ok")
