@@ -25,6 +25,7 @@
     <option value="privacy" {% if doc_type == 'privacy' %}selected{% endif %}>개인정보</option>
     <option value="euthanasia" {% if doc_type == 'euthanasia' %}selected{% endif %}>안락사</option>
     <option value="discharge" {% if doc_type == 'discharge' %}selected{% endif %}>퇴원서약</option>
+    <option value="payment" {% if doc_type == 'payment' %}selected{% endif %}>미수금</option>
   </select>
   <button type="submit" style="background:#2563eb; color:#fff; border:0; padding:10px 24px;
                                border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
@@ -73,6 +74,8 @@
           <span style="color:#dc2626; font-weight:600; background:#fee2e2; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">안락사</span>
         {% elif r.doc_type == 'discharge' %}
           <span style="color:#d97706; font-weight:600; background:#fef3c7; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">퇴원서약</span>
+        {% elif r.doc_type == 'payment' %}
+          <span style="color:#be185d; font-weight:600; background:#fce7f3; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">미수금</span>
         {% else %}
           <span style="color:#2563eb; font-weight:600; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">수술·입원</span>
         {% endif %}

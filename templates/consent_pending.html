@@ -45,6 +45,8 @@
           <span style="color:#dc2626; font-weight:600; background:#fee2e2; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">안락사</span>
         {% elif r.doc_type == 'discharge' %}
           <span style="color:#d97706; font-weight:600; background:#fef3c7; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">퇴원서약</span>
+        {% elif r.doc_type == 'payment' %}
+          <span style="color:#be185d; font-weight:600; background:#fce7f3; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">미수금</span>
         {% else %}
           <span style="color:#2563eb; font-weight:600; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px; white-space:nowrap;">수술·입원</span>
         {% endif %}

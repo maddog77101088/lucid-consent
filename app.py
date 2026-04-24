@@ -989,6 +989,112 @@ def discharge_create_sign_link():
     })
 
 
+# ===================== 치료비 미수금 지불 서약서 =====================
+# 미납 진료비에 대한 납입 약속 서약서. 작성일 + 유예일수 → 납입기한 자동 계산.
+
+PAYMENT_FIELDS = [
+    "guardian_id", "guardian_name", "guardian_phone", "guardian_mobile",
+    "guardian_address",
+    "animal_id", "patient_name", "species", "breed",
+    "unpaid_amount", "grace_days", "reason",
+]
+
+
+def _compute_due_date(doc_date_str, grace_days):
+    """작성일(YYYY-MM-DD) + 유예일수 → 납입 기한 (date + 표시문자열)."""
+    try:
+        base = datetime.strptime(doc_date_str, "%Y-%m-%d")
+        days = int(grace_days or 0)
+        if days < 1: days = 0
+        due = base + timedelta(days=days)
+        weekday = ['월','화','수','목','금','토','일'][due.weekday()]
+        return due.strftime("%Y-%m-%d"), f"{due.year}년 {due.month:02d}월 {due.day:02d}일 ({weekday})"
+    except (ValueError, TypeError):
+        return "", ""
+
+
+def _render_payment_print_from_data(data, db, signature_b64=None, signer_name=None,
+                                    signed_at=None, show_sign_button=False,
+                                    sign_interactive=False):
+    """치료비 미수금 지불 서약서 렌더링."""
+    doc_title = "치료비 미수금 지불 서약서"
+    # 납입기한 계산 (작성일 + grace_days)
+    due_iso, due_disp = _compute_due_date(data.get("doc_date", ""), data.get("grace_days", 0))
+    data["due_date_iso"] = due_iso
+    data["due_date_display"] = due_disp
+    if signature_b64:
+        data["signature_b64"] = signature_b64
+        data["signer_name"] = signer_name or data.get("guardian_name", "")
+        data["signed_at"] = signed_at or ""
+    sign_form_fields = PAYMENT_FIELDS + ["vet_name", "doc_date"]
+    return render_template(
+        "payment_print.html",
+        d=data, doc_title=doc_title,
+        show_sign_button=show_sign_button and not signature_b64,
+        sign_interactive=sign_interactive,
+        sign_form_fields=sign_form_fields,
+        sign_form_action=url_for("payment_create_sign_link"),
+        hospital_name=HOSPITAL_NAME,
+    )
+
+
+@app.route("/payment/new", methods=["GET"])
+@login_required
+def payment_new():
+    return render_template(
+        "payment_new.html",
+        today=datetime.now().strftime("%Y-%m-%d"),
+        vet_name=session.get("display_name", ""),
+    )
+
+
+@app.route("/payment/preview", methods=["POST"])
+@login_required
+def payment_preview():
+    db = get_db()
+    data = {k: request.form.get(k, "") for k in PAYMENT_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["doc_date"] = request.form.get("doc_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+    return _render_payment_print_from_data(data, db, show_sign_button=True)
+
+
+@app.route("/payment/create-sign-link", methods=["POST"])
+@login_required
+def payment_create_sign_link():
+    """미수금 서약서 폼 → 서명 토큰 생성."""
+    db = get_db()
+    data = {k: request.form.get(k, "") for k in PAYMENT_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["doc_date"] = request.form.get("doc_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    token = _make_sign_token()
+    expires_at = (datetime.now() + timedelta(hours=SIGN_LINK_TTL_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
+
+    db.execute(
+        """INSERT INTO consent_records
+           (token, doc_type, form_data, patient_name, guardian_name, vet_name,
+            expires_at, created_by)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (token, "payment", json.dumps(data, ensure_ascii=False),
+         data.get("patient_name", ""), data.get("guardian_name", ""),
+         data.get("vet_name", ""), expires_at, session.get("user_id", 0))
+    )
+    db.commit()
+
+    sign_url = f"{_sign_base_url()}/sign/{token}"
+    return jsonify({
+        "ok": True,
+        "token": token,
+        "url": sign_url,
+        "qr_b64": _qr_base64(sign_url),
+        "expires_at": expires_at,
+        "ttl_hours": SIGN_LINK_TTL_HOURS,
+        "doc_type": "payment",
+    })
+
+
 # ===================== 안락사 동의서 =====================
 # 안락사 결정 환자용. 사후 장례 방법 선택 포함.
 
@@ -1227,6 +1333,8 @@ def sign_page(token):
         doc_title = "안락사 동의서"
     elif doc_type == "discharge":
         doc_title = "퇴원 요청 및 서약서"
+    elif doc_type == "payment":
+        doc_title = "치료비 미수금 지불 서약서"
     else:
         pt = data.get("patient_type") or "surgery_hospital"
         if pt == "hospital_only":
@@ -1270,6 +1378,8 @@ def sign_doc_preview(token):
         return _render_euthanasia_print_from_data(data, db, sign_interactive=True)
     if row["doc_type"] == "discharge":
         return _render_discharge_print_from_data(data, db, sign_interactive=True)
+    if row["doc_type"] == "payment":
+        return _render_payment_print_from_data(data, db, sign_interactive=True)
     return _render_consent_print_from_data(data, db, sign_interactive=True)
 
 
@@ -1444,6 +1554,13 @@ def sign_pdf(token):
             signer_name=row["signer_name"],
             signed_at=row["signed_at"],
         )
+    if row["doc_type"] == "payment":
+        return _render_payment_print_from_data(
+            data, db,
+            signature_b64=row["signature_data"],
+            signer_name=row["signer_name"],
+            signed_at=row["signed_at"],
+        )
     return _render_consent_print_from_data(
         data, db,
         signature_b64=row["signature_data"],
@@ -1500,7 +1617,7 @@ def consents_history():
         sql += " AND (cr.patient_name LIKE ? OR cr.guardian_name LIKE ? OR cr.signer_name LIKE ? OR cr.vet_name LIKE ?)"
         like = f"%{q}%"
         args += [like, like, like, like]
-    if doc_type in ("surgery", "imaging", "privacy", "euthanasia", "discharge"):
+    if doc_type in ("surgery", "imaging", "privacy", "euthanasia", "discharge", "payment"):
         sql += " AND cr.doc_type=?"
         args.append(doc_type)
     sql += " ORDER BY cr.signed_at DESC LIMIT 300"

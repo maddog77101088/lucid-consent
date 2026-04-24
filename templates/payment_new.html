@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>치료비 미수금 지불 서약서 작성</h1>
+<p class="muted">미납된 진료비에 대한 납입 약속 서약서. OCR로 기본정보 입력 후 QR로 보호자 스마트폰에서 서명.</p>
+
+<form method="post" action="{{ url_for('payment_preview') }}" target="_blank" class="form-stack">
+
+  <!-- 차트 OCR -->
+  <section class="card" style="border-left:3px solid #2563eb;">
+    <h2>① 차트 스크린샷 업로드 (선택) <span class="muted" style="font-weight:normal;font-size:12px;">PMS365 등 차트 캡처 이미지 업로드 시 보호자·동물 정보 자동 추출</span></h2>
+    <div class="row-2">
+      <label>이미지 파일 선택 <span class="muted" style="font-weight:normal;font-size:11px;">(또는 Print Screen 후 아무 곳에나 Ctrl+V)</span>
+        <input type="file" id="chart-image" accept="image/png,image/jpeg,image/webp">
+      </label>
+      <div style="display:flex;align-items:end;">
+        <button type="button" id="btn-chart-ocr" class="btn-primary">🖼 차트에서 정보 추출</button>
+      </div>
+    </div>
+    <p id="chart-ocr-status" class="muted" style="margin-top:4px;">💡 차트 캡처 후 <kbd>Ctrl+V</kbd> 하면 자동 OCR 실행됩니다.</p>
+  </section>
+
+  <!-- 보호자 정보 -->
+  <section class="card">
+    <h2>② 보호자 정보</h2>
+    <div class="row-3">
+      <label>보호자 ID (차트)<input name="guardian_id" placeholder="예: 348001"></label>
+      <label>보호자 성명 *<input name="guardian_name" required></label>
+      <label>&nbsp;</label>
+    </div>
+    <div class="row-3">
+      <label>전화<input name="guardian_phone"></label>
+      <label>휴대전화 *<input name="guardian_mobile" required placeholder="010-0000-0000"></label>
+      <label>&nbsp;</label>
+    </div>
+    <label>주소<input name="guardian_address" placeholder="예: 서울특별시 성북구 ○○동 ○○아파트 ○동 ○호"></label>
+  </section>
+
+  <!-- 동물 정보 -->
+  <section class="card">
+    <h2>③ 동물(환자) 정보</h2>
+    <div class="row-3">
+      <label>동물 ID (차트)<input name="animal_id"></label>
+      <label>이름 *<input name="patient_name" required></label>
+      <label>종<select name="species"><option>Canine (개)</option><option>Feline (고양이)</option><option>기타</option></select></label>
+    </div>
+    <label>품종<input name="breed"></label>
+  </section>
+
+  <!-- 미수금 정보 -->
+  <section class="card" style="border-left:3px solid #be185d;">
+    <h2>④ 미수금 정보 <span class="muted" style="font-weight:normal;font-size:12px;">(핵심 항목 — 입력값이 동의서 본문에 표시됩니다)</span></h2>
+    <div class="row-2">
+      <label>미납 진료비 (원) *
+        <input name="unpaid_amount" type="number" min="0" step="1" required
+               placeholder="예: 850000" style="font-size:17px; font-weight:600; letter-spacing:0.5px;">
+      </label>
+      <label>납입 기한 (일 이내) *
+        <input name="grace_days" type="number" min="1" max="365" value="30" required
+               style="font-size:17px; font-weight:600;">
+      </label>
+    </div>
+    <div id="due-date-preview" class="muted" style="margin-top:6px; font-size:13px; color:#be185d;">
+      → 납입 기한일: <strong id="due-date-display">--</strong>
+    </div>
+    <label style="margin-top:12px;">미납 사유 / 진료 내역 <span class="muted" style="font-weight:normal;font-size:12px;">(선택)</span>
+      <textarea name="reason" rows="2" placeholder="예: 2026-04-10 응급수술 진료비 중 일부 미납" style="resize:vertical;"></textarea>
+    </label>
+  </section>
+
+  <!-- 작성일 -->
+  <section class="card">
+    <h2>⑤ 작성일</h2>
+    <input type="hidden" name="vet_name" value="{{ vet_name }}">
+    <label>작성일<input id="doc-date-input" name="doc_date" type="date" value="{{ today }}"></label>
+  </section>
+
+  <div class="actions">
+    <a class="btn-ghost" href="{{ url_for('dashboard') }}">취소</a>
+    <button class="btn-primary" type="submit">📄 동의서 미리보기</button>
+  </div>
+</form>
+
+<script>
+  // 작성일 + 납입기한 → 기한일 실시간 미리보기
+  function updateDueDate() {
+    const d = document.getElementById('doc-date-input').value;
+    const n = parseInt(document.querySelector('[name="grace_days"]').value || '0', 10);
+    const disp = document.getElementById('due-date-display');
+    if (!d || !n || n < 1) { disp.textContent = '--'; return; }
+    const dt = new Date(d);
+    dt.setDate(dt.getDate() + n);
+    const yyyy = dt.getFullYear();
+    const mm = String(dt.getMonth()+1).padStart(2,'0');
+    const dd = String(dt.getDate()).padStart(2,'0');
+    const days = ['일','월','화','수','목','금','토'][dt.getDay()];
+    disp.textContent = `${yyyy}년 ${mm}월 ${dd}일 (${days})`;
+  }
+  document.getElementById('doc-date-input').addEventListener('input', updateDueDate);
+  document.querySelector('[name="grace_days"]').addEventListener('input', updateDueDate);
+  updateDueDate();
+
+  // submit 시 현재 탭은 대시보드로
+  document.querySelector('form.form-stack').addEventListener('submit', function(){
+    setTimeout(function(){ window.location.replace("{{ url_for('dashboard') }}"); }, 80);
+  });
+</script>
+
+<script>
+// ----- 차트 OCR -----
+document.addEventListener('paste', (e) => {
+  const tag = (document.activeElement?.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
+    const hasImg = Array.from(e.clipboardData?.items || []).some(i => i.type.startsWith('image/'));
+    if (!hasImg) return;
+  }
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      e.preventDefault();
+      const blob = item.getAsFile();
+      if (!blob) continue;
+      const ext = (blob.type.split('/')[1] || 'png').replace('jpeg','jpg');
+      const file = new File([blob], `clipboard-${Date.now()}.${ext}`, { type: blob.type });
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      document.getElementById('chart-image').files = dt.files;
+      const status = document.getElementById('chart-ocr-status');
+      status.textContent = '📋 클립보드 이미지 감지 → 자동 OCR 실행...';
+      status.style.color = '#2563eb';
+      setTimeout(() => document.getElementById('btn-chart-ocr').click(), 100);
+      return;
+    }
+  }
+});
+
+document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
+  const fileEl = document.getElementById('chart-image');
+  const file = fileEl.files[0];
+  if (!file) { alert('이미지 파일을 먼저 선택하세요.'); return; }
+  const status = document.getElementById('chart-ocr-status');
+  const btn = document.getElementById('btn-chart-ocr');
+  btn.disabled = true;
+  status.textContent = '🖼 Claude가 차트 읽는 중... (5~15초)';
+  status.style.color = '#666';
+  try {
+    const fd = new FormData(); fd.append('image', file);
+    const r = await fetch('/api/chart-ocr', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || '실패');
+    let filled = 0;
+    for (const [k, v] of Object.entries(d.data)) {
+      if (!v) continue;
+      const el = document.querySelector('[name="' + k + '"]');
+      if (el) { el.value = v; filled++; }
+    }
+    status.textContent = '✓ ' + filled + '개 필드 자동입력 완료.';
+    status.style.color = '#0a7';
+  } catch (e) {
+    status.textContent = '✗ ' + e.message;
+    status.style.color = '#c33';
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+{% endblock %}
