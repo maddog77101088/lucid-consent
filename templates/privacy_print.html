@@ -8,12 +8,14 @@
 </head>
 <body class="print-body">
 
+{% if not sign_interactive %}
 <div class="print-toolbar no-print">
   <button onclick="window.print()">인쇄 / PDF 저장</button>
   <button onclick="window.close()">닫기</button>
   {% if show_sign_button %}{% include "_sign_qr_button.html" %}{% endif %}
   <span class="muted">인쇄 대화상자에서 "PDF로 저장"을 선택하면 PDF로 저장됩니다.</span>
 </div>
+{% endif %}
 
 <article class="consent-doc">
   <div style="text-align:center; line-height:1.4;">

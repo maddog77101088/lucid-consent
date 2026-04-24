@@ -152,8 +152,6 @@
           title="동의서 내용"></iframe>
 
   <div class="sign-panel collapsed" id="sign-panel">
-    <button type="button" class="panel-toggle" id="panel-toggle"></button>
-
     <div class="name-row">
       <label>보호자 성함</label>
       <input type="text" id="signer-name" placeholder="서명자 성함을 입력해주세요"
@@ -188,22 +186,22 @@
           <label style="display:flex; justify-content:space-between; align-items:center;">
             <span>📱 문자서비스 수신</span>
             <span>
-              <label style="margin-right:8px;"><input type="radio" name="priv_sms" value="yes"> 예</label>
-              <label><input type="radio" name="priv_sms" value="no" checked> 아니오</label>
+              <label style="margin-right:8px;"><input type="radio" name="priv_sms" value="yes" checked> 예</label>
+              <label><input type="radio" name="priv_sms" value="no"> 아니오</label>
             </span>
           </label>
           <label style="display:flex; justify-content:space-between; align-items:center;">
             <span>📧 정보메일 수신</span>
             <span>
-              <label style="margin-right:8px;"><input type="radio" name="priv_mail" value="yes"> 예</label>
-              <label><input type="radio" name="priv_mail" value="no" checked> 아니오</label>
+              <label style="margin-right:8px;"><input type="radio" name="priv_mail" value="yes" checked> 예</label>
+              <label><input type="radio" name="priv_mail" value="no"> 아니오</label>
             </span>
           </label>
           <label style="display:flex; justify-content:space-between; align-items:center;">
             <span>📢 광고성 정보 수신</span>
             <span>
-              <label style="margin-right:8px;"><input type="radio" name="priv_ads" value="yes"> 예</label>
-              <label><input type="radio" name="priv_ads" value="no" checked> 아니오</label>
+              <label style="margin-right:8px;"><input type="radio" name="priv_ads" value="yes" checked> 예</label>
+              <label><input type="radio" name="priv_ads" value="no"> 아니오</label>
             </span>
           </label>
         </div>
@@ -239,6 +237,8 @@
       })();
     </script>
     {% endif %}
+
+    <button type="button" class="panel-toggle" id="panel-toggle"></button>
 
     <div class="pad-area">
       <canvas id="pad"></canvas>

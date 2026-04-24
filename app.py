@@ -928,6 +928,7 @@ def _render_privacy_print_from_data(data, db, signature_b64=None, signer_name=No
         d=data, doc_title=doc_title,
         privacy=privacy_input or {},
         show_sign_button=show_sign_button and not signature_b64,
+        sign_interactive=sign_interactive,
         sign_form_fields=sign_form_fields,
         sign_form_action=url_for("privacy_create_sign_link"),
         hospital_name=HOSPITAL_NAME,
