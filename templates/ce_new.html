@@ -91,6 +91,7 @@ async function generate() {
   const ref_vet_name = document.getElementById('ref-vet-name').value.trim();
   const patient_name = document.getElementById('patient_name').value.trim();
   const guardian_name = document.getElementById('guardian_name').value.trim();
+  const guardian_mobile = (document.getElementById('guardian_mobile')?.value || '').trim();
   const btn = document.getElementById('btn-ce-generate');
   const status = document.getElementById('ce-status');
   const resultCard = document.getElementById('result-card');
@@ -121,6 +122,7 @@ async function generate() {
             doc_type: 'ce',
             patient_name: patient_name,
             guardian_name: guardian_name || '',
+            guardian_phone: guardian_mobile || '',
             doc_body: d.text,
           })
         });

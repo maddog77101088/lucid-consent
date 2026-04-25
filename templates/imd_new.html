@@ -73,6 +73,7 @@
   <section class="card">
     <h2>② 환자 / 보호자</h2>
     <label><span class="lbl">보호자 성명</span><input id="guardian_name"></label>
+    <label><span class="lbl">보호자 휴대전화 <span class="muted" style="font-size:11px;">(카톡 안부용)</span></span><input id="guardian_mobile" placeholder="010-0000-0000"></label>
     <label><span class="lbl">환자 이름 *</span><input id="patient_name" required></label>
     <label><span class="lbl">종</span><select id="species"><option>Canine (개)</option><option>Feline (고양이)</option><option>기타</option></select></label>
     <label><span class="lbl">나이</span><input id="age" placeholder="예: 11y 9m"></label>
@@ -288,6 +289,7 @@ document.getElementById('btn-generate').addEventListener('click', async function
   const payload = {
     patient_name: patient,
     guardian_name: document.getElementById('guardian_name').value.trim(),
+    guardian_mobile: document.getElementById('guardian_mobile').value.trim(),
     species: document.getElementById('species').value,
     age: document.getElementById('age').value.trim(),
     diagnosis: dx,
@@ -325,6 +327,7 @@ document.getElementById('btn-generate').addEventListener('click', async function
           doc_type: 'imd',
           patient_name: payload.patient_name,
           guardian_name: payload.guardian_name,
+          guardian_phone: payload.guardian_mobile || '',
           diagnosis: payload.diagnosis,
           doc_body: d.text,
         })
@@ -436,7 +439,7 @@ document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || '실패');
     let filled = 0;
-    const map = { guardian_name:'guardian_name', patient_name:'patient_name', species:'species', age:'age' };
+    const map = { guardian_name:'guardian_name', guardian_mobile:'guardian_mobile', guardian_phone:'guardian_mobile', patient_name:'patient_name', species:'species', age:'age' };
     for (const [k, v] of Object.entries(d.data)) {
       if (!v) continue;
       const id = map[k] || k;
