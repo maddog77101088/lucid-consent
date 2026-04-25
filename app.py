@@ -1790,8 +1790,12 @@ def happy_calls_list():
         like = f"%{q}%"
         args += [like, like, like]
 
-    # 정렬: 진행 중인 것은 오래된 것부터 (먼저 처리), 나머지는 최근 순
-    if status_filter in ("active", "pending_draft", "drafted", "approved", "sent"):
+    # 정렬: 진행중(작성/발송대기/발송완료)이 위, 종료된 것은 아래. 같은 그룹은 오래된 것부터
+    if status_filter == "active":
+        sql += """ ORDER BY
+                   CASE WHEN hc.status='done' THEN 1 ELSE 0 END,
+                   hc.scheduled_date ASC, hc.created_at ASC"""
+    elif status_filter in ("pending_draft", "drafted", "approved", "sent"):
         sql += " ORDER BY hc.scheduled_date ASC, hc.created_at ASC"
     else:
         sql += " ORDER BY hc.scheduled_date DESC, hc.created_at DESC"
