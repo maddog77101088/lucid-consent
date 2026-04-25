@@ -1689,6 +1689,9 @@ def api_happy_call_create():
     scheduled = (datetime.now() + timedelta(days=days_offset)).strftime("%Y-%m-%d")
 
     db = get_db()
+    # doc_body 는 참고용 짧은 요약만 저장 (전체 본문은 patient_documents에서 조회)
+    full_body = (data.get("doc_body") or "").strip()
+    body_summary = full_body[:300] + ("..." if len(full_body) > 300 else "") if full_body else ""
     cur = db.execute(
         """INSERT INTO happy_calls
            (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
@@ -1702,7 +1705,7 @@ def api_happy_call_create():
          (data.get("vet_name") or session.get("display_name", "")).strip(),
          session.get("user_id"),
          scheduled,
-         (data.get("doc_body") or "").strip(),
+         body_summary,
          session.get("user_id", 0))
     )
     db.commit()
@@ -2087,43 +2090,40 @@ def api_happy_call_generate_draft(hc_id):
     if not row:
         return jsonify({"ok": False, "error": "not found"}), 404
 
-    # 환자 정보
+    # 환자 정보 (안내문 본문은 절대 포함 안 함 - 카톡은 짧은 안부만)
     patient = row["patient_name"] or ""
     guardian = row["guardian_name"] or ""
     diagnosis = row["diagnosis"] or ""
     doc_type = row["doc_type"]
-    doc_body = row["doc_body"] or ""
 
-    # patient_documents 에서 관련 history 추가 조회 (있으면 reference)
-    history_rows = db.execute(
-        """SELECT doc_type, diagnosis, structured_data FROM patient_documents
-           WHERE patient_name=? ORDER BY created_at DESC LIMIT 5""", (patient,)
-    ).fetchall()
-    history_summary = []
-    for h in history_rows:
-        sd = {}
-        if h["structured_data"]:
-            try: sd = json.loads(h["structured_data"])
-            except: pass
-        meds = sd.get("medications", "")
-        status = sd.get("discharge_status", "")
-        if meds or status:
-            history_summary.append(f"- {h['doc_type']}: {h['diagnosis'] or ''} (약: {meds}, 퇴원상태: {status})")
+    # patient_documents 에서 핵심 정보만 추출 (약물·퇴원상태)
+    history_meds = ""
+    history_status = ""
+    history_row = db.execute(
+        """SELECT structured_data FROM patient_documents
+           WHERE patient_name=? AND doc_type IN ('postop','imd','ce')
+           ORDER BY created_at DESC LIMIT 1""", (patient,)
+    ).fetchone()
+    if history_row and history_row["structured_data"]:
+        try:
+            sd = json.loads(history_row["structured_data"])
+            history_meds = sd.get("medications", "") or ""
+            history_status = sd.get("discharge_status", "") or ""
+        except (ValueError, TypeError):
+            pass
 
     user_msg_parts = [
-        f"[환자 정보]",
+        f"[환자 정보 - 짧은 카톡 안부 작성용]",
         f"- 환자 이름: {patient}",
         f"- 보호자: {guardian}",
         f"- 진단/수술명: {diagnosis}",
         f"- 안내문 유형: {HAPPYCALL_DOC_LABELS.get(doc_type, doc_type)}",
     ]
-    if history_summary:
-        user_msg_parts += ["\n[이 환자의 최근 history]"] + history_summary
-    if doc_body:
-        # 안내문 본문 첫 800자만
-        body_excerpt = doc_body[:800] + ("..." if len(doc_body) > 800 else "")
-        user_msg_parts += ["\n[보낸 안내문 요약]", body_excerpt]
-    user_msg_parts.append("\n위 정보를 바탕으로 보호자에게 보낼 카톡 안부 메시지를 작성해주세요.")
+    if history_status:
+        status_map = {"good": "좋은 경과로 퇴원", "delayed": "회복 지연 중 퇴원", "worsening": "상태 악화 중 퇴원"}
+        user_msg_parts.append(f"- 퇴원 당시 상태: {status_map.get(history_status, history_status)}")
+    user_msg_parts.append("\n위 정보로 6줄 이내의 짧은 카톡 안부를 작성해주세요. {SURVEY_URL} 자리표시자 반드시 포함.")
+    user_msg_parts.append("절대로 안내문 본문을 카피하거나 진단/약물 정보를 메시지에 나열하지 마세요. 안내문은 어제 이미 보냈습니다.")
     user_msg = "\n".join(user_msg_parts)
 
     try:

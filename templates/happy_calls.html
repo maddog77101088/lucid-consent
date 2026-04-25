@@ -111,17 +111,29 @@
         {% if r.status == 'pending_draft' %}
           <button class="btn-act" data-act="generate" data-hcid="{{ r.id }}"
                   style="background:#dc2626; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
-            🤖 AI 초안 생성
+            🤖 AI 초안
+          </button>
+          <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
+            ✏️ 직접작성
           </button>
         {% elif r.status == 'drafted' %}
           <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
                   style="background:#d97706; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
             ✏️ 검수·승인
           </button>
+          <button class="btn-act" data-act="generate" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#dc2626; border:1px solid #fca5a5; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
+            🔁 재생성
+          </button>
         {% elif r.status == 'approved' %}
           <button class="btn-act" data-act="send" data-hcid="{{ r.id }}"
                   style="background:#2563eb; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
             📤 발송하기
+          </button>
+          <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
+            ✏️ 다시 편집
           </button>
         {% elif r.status == 'sent' %}
           <button class="btn-act" data-act="reply" data-hcid="{{ r.id }}"
@@ -130,10 +142,16 @@
           </button>
           <button class="btn-status" data-status="noreply" data-hcid="{{ r.id }}"
                   style="background:#fff; color:#6b7280; border:1px solid #d1d5db; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">📵 무응답</button>
+          <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">👁</button>
         {% else %}
           <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
                   style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
             👁 보기
+          </button>
+          <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#6b7280; border:1px solid #d1d5db; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
+            ✏️ 편집
           </button>
         {% endif %}
       </td>
@@ -192,29 +210,36 @@
     }
   }
 
-  // 2) 검수·승인 (주치의)
+  // 2) 검수·승인 (주치의) - 빈 메시지면 직접 작성 가능 / 기존 메시지 자유 편집
   async function actReview(hcid){
     currentHcid = hcid;
-    modalTitle.textContent = '✏️ 카톡 안부 검수·승인 (주치의)';
-    modalBody.innerHTML = '<div style="text-align:center; padding:20px; color:#6b7280;">로딩...</div>';
     modalActions.innerHTML = '';
+    modalBody.innerHTML = '<div style="text-align:center; padding:20px; color:#6b7280;">로딩...</div>';
     show();
     try {
       const d = await fetchDetail(hcid);
       const draft = d.approved_message || d.draft_message || '';
+      const isEmpty = !draft;
+      modalTitle.textContent = isEmpty ? '✏️ 메시지 직접 작성' : '✏️ 메시지 검수·편집';
+      const tipBox = isEmpty
+        ? `<div style="background:#fef3c7; padding:10px 14px; border-radius:6px; margin-bottom:10px; font-size:12.5px; color:#92400e;">
+             💡 빈 상태에서 직접 작성하거나 [🤖 AI 초안 생성]으로 시작할 수 있어요.
+           </div>`
+        : `<p style="margin:0 0 8px; font-size:13px; color:#4b5563;">
+             <strong>${d.patient_name}</strong> 보호자님께 보낼 메시지입니다. 자유롭게 편집 후 [✅ 승인]하세요.
+           </p>`;
       modalBody.innerHTML = `
-        <p style="margin:0 0 8px; font-size:13px; color:#4b5563;">
-          <strong>${d.patient_name}</strong> 보호자님께 보낼 메시지입니다. 자유롭게 첨삭한 후 [✅ 승인] 누르면 코디 발송 대기 목록으로 이동합니다.
-        </p>
-        <textarea id="m-edit" rows="12" style="width:100%; padding:12px; font-size:14px; line-height:1.7;
-                  border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical;">${draft}</textarea>
-        <p style="font-size:11px; color:#9ca3af; margin-top:6px;">💡 보내기 전 환자 이름·약물·진단 등 정확성 다시 확인해주세요.</p>
+        ${tipBox}
+        <textarea id="m-edit" rows="12" placeholder="🐾 [환자]이 보호자님,&#10;어제 [퇴원/진단] 잘 지나셨나요?&#10;..."
+                  style="width:100%; padding:12px; font-size:14px; line-height:1.7;
+                         border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical;">${draft}</textarea>
+        <p style="font-size:11px; color:#9ca3af; margin-top:6px;">💡 카톡 안부는 짧게 (5~7줄). 안내문 본문은 어제 이미 보냈습니다.</p>
       `;
       modalActions.innerHTML = `
         <button onclick="document.getElementById('modal').style.display='none'"
                 style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>
-        <button id="m-regen" style="background:#fef3c7; color:#92400e; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:500;">🔁 AI 다시 생성</button>
-        <button id="m-approve" style="background:#059669; color:#fff; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:600;">✅ 승인 (발송 대기로)</button>
+        <button id="m-regen" style="background:#fef3c7; color:#92400e; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:500;">🤖 AI ${isEmpty ? '초안' : '재생성'}</button>
+        <button id="m-approve" style="background:#059669; color:#fff; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:600;">✅ 저장·승인</button>
       `;
       document.getElementById('m-regen').onclick = () => actGenerate(hcid);
       document.getElementById('m-approve').onclick = async () => {
@@ -225,7 +250,7 @@
           body: JSON.stringify({approved_message: text})
         });
         const j = await r.json();
-        if (!r.ok || !j.ok) { alert('승인 실패: ' + (j.error || '')); return; }
+        if (!r.ok || !j.ok) { alert('저장 실패: ' + (j.error || '')); return; }
         hide(); location.reload();
       };
     } catch (e) {
