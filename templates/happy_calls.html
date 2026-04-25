@@ -129,24 +129,16 @@
         {% endif %}
       </td>
       <td style="padding:10px 8px; text-align:right; white-space:nowrap;">
-        {% if r.status == 'pending_draft' and r.draft_message %}
-          {# AI 초안 또는 직접작성 도중 저장만 하고 승인 안 한 경우 — 이어서 검수·승인 #}
-          <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
-                  style="background:#d97706; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
-            ✏️ 검수·승인
-          </button>
+        {% if r.status == 'pending_draft' %}
+          {# draft_message 가 있어도 동일 버튼 — [✏️ 직접작성] 누르면 기존 초안 자동으로 모달에 뜸 #}
           <button class="btn-act" data-act="generate" data-hcid="{{ r.id }}"
-                  style="background:#fff; color:#dc2626; border:1px solid #fca5a5; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
-            🔁 재생성
-          </button>
-        {% elif r.status == 'pending_draft' %}
-          <button class="btn-act" data-act="generate" data-hcid="{{ r.id }}"
+                  data-has-draft="{{ '1' if r.draft_message else '0' }}"
                   style="background:#dc2626; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
-            🤖 AI 초안
+            🤖 AI 초안{% if r.draft_message %} (재){% endif %}
           </button>
           <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
                   style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
-            ✏️ 직접작성
+            ✏️ {% if r.draft_message %}이어서 편집{% else %}직접작성{% endif %}
           </button>
           <button class="btn-status" data-status="next_day_revisit" data-hcid="{{ r.id }}"
                   title="익일에 직접 재진하므로 카톡 안부 스킵"
@@ -226,9 +218,12 @@
     return j.data;
   }
 
-  // 1) AI 초안 생성
-  async function actGenerate(hcid){
-    if (!confirm('AI가 카톡 안부 초안을 작성합니다. 진행할까요?')) return;
+  // 1) AI 초안 생성 (또는 재생성)
+  async function actGenerate(hcid, hasDraft){
+    const msg = hasDraft
+      ? '이미 작성된 초안이 있습니다. 새로 생성하면 덮어씁니다.\n계속할까요? (취소하면 [✏️ 이어서 편집]을 이용하세요)'
+      : 'AI가 카톡 안부 초안을 작성합니다. 진행할까요?';
+    if (!confirm(msg)) return;
     currentHcid = hcid;
     modalTitle.textContent = '🤖 AI 초안 생성 중...';
     modalBody.innerHTML = '<div style="text-align:center; padding:40px; color:#6b7280;">Claude 가 메시지 작성 중... (10~20초)</div>';
@@ -416,7 +411,7 @@
     btn.addEventListener('click', function(){
       const act = this.dataset.act;
       const hcid = this.dataset.hcid;
-      if (act === 'generate') actGenerate(hcid);
+      if (act === 'generate') actGenerate(hcid, this.dataset.hasDraft === '1');
       else if (act === 'review') actReview(hcid);
       else if (act === 'send') actSend(hcid);
       else if (act === 'reply') actReply(hcid);
