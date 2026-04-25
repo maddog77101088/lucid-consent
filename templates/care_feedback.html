@@ -9,10 +9,6 @@
 
 <!-- 분류 통계 카드 -->
 <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; margin:16px 0;">
-  <a href="?cls=urgent" style="background:#fee2e2; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'urgent' %}#dc2626{% else %}transparent{% endif %};">
-    <div style="font-size:24px; font-weight:700; color:#991b1b;">🚨 {{ stats.worsening + stats.medication }}</div>
-    <div style="font-size:12px; color:#7f1d1d; margin-top:4px;">긴급 검토 필요</div>
-  </a>
   <a href="?cls=worsening" style="background:#fef3c7; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'worsening' %}#dc2626{% else %}transparent{% endif %};">
     <div style="font-size:24px; font-weight:700; color:#dc2626;">{{ stats.worsening }}</div>
     <div style="font-size:12px; color:#92400e; margin-top:4px;">상태 악화</div>
