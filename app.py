@@ -2057,7 +2057,7 @@ def care_feedback():
     db = get_db()
     # 24시간 이내 피드백만 (그 이후는 자동 보관 처리되어 페이지에 안 보임)
     cutoff = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-    # 무응답 기준: 발송완료(sent)인데 24시간 지나도 답장 없음
+    # 무응답(24h+): 발송완료(sent)인데 24시간 지나도 답장 없음
     if cls_filter == "noresponse":
         sql = """SELECT hc.*, u.display_name AS vet_display
                  FROM happy_calls hc
@@ -2067,6 +2067,16 @@ def care_feedback():
                    AND hc.sent_at <= ?"""
         args = [cutoff]
         sql += " ORDER BY hc.sent_at ASC LIMIT 200"
+    # 답장 대기 중(24h 이내): 발송완료(sent)인데 아직 24시간 안 지남
+    elif cls_filter == "pending_reply":
+        sql = """SELECT hc.*, u.display_name AS vet_display
+                 FROM happy_calls hc
+                 LEFT JOIN users u ON u.id = hc.assignee_id
+                 WHERE hc.status='sent'
+                   AND hc.sent_at IS NOT NULL
+                   AND hc.sent_at > ?"""
+        args = [cutoff]
+        sql += " ORDER BY hc.sent_at DESC LIMIT 200"
     else:
         sql = """SELECT hc.*, u.display_name AS vet_display
                  FROM happy_calls hc
@@ -2095,6 +2105,12 @@ def care_feedback():
     stats["noresponse"] = db.execute(
         """SELECT COUNT(*) FROM happy_calls
            WHERE status='sent' AND sent_at IS NOT NULL AND sent_at <= ?""",
+        (cutoff,)
+    ).fetchone()[0]
+    # 답장 대기 중 카운트: 발송 후 24시간 이내 sent (아직 시간 남음)
+    stats["pending_reply"] = db.execute(
+        """SELECT COUNT(*) FROM happy_calls
+           WHERE status='sent' AND sent_at IS NOT NULL AND sent_at > ?""",
         (cutoff,)
     ).fetchone()[0]
     return render_template("care_feedback.html",

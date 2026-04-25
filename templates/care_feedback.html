@@ -33,6 +33,10 @@
     <div style="font-size:24px; font-weight:700; color:#6b7280;">{{ stats.other }}</div>
     <div style="font-size:12px; color:#4b5563; margin-top:4px;">기타 질문</div>
   </a>
+  <a href="?cls=pending_reply" style="background:#dbeafe; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'pending_reply' %}#2563eb{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#1e40af;">⏳ {{ stats.pending_reply }}</div>
+    <div style="font-size:12px; color:#1e3a8a; margin-top:4px;">답장 대기중 (24h이내)</div>
+  </a>
   <a href="?cls=noresponse" style="background:#fef2f2; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'noresponse' %}#9ca3af{% else %}transparent{% endif %};">
     <div style="font-size:24px; font-weight:700; color:#6b7280;">📵 {{ stats.noresponse }}</div>
     <div style="font-size:12px; color:#4b5563; margin-top:4px;">무응답 (24h+)</div>
@@ -63,7 +67,9 @@
 
 <div style="display:flex; flex-direction:column; gap:10px;">
   {% for r in rows %}
-  {% if r.status == 'sent' %}
+  {% if r.status == 'sent' and cls_filter == 'pending_reply' %}
+    {% set bg, fg, label = ('#dbeafe', '#1e40af', '⏳ 답장 대기중') %}
+  {% elif r.status == 'sent' %}
     {% set bg, fg, label = ('#fef2f2', '#6b7280', '📵 무응답 (24h+)') %}
   {% else %}
     {% set bg, fg, label = cls_styles.get(r.ai_classification, ('#f3f4f6', '#6b7280', r.ai_classification or '미분류')) %}
