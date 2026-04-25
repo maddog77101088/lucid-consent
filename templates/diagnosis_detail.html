@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}{{ diagnosis }} 케이스 - {{ hospital_short }}{% endblock %}
+{% block content %}
+<a href="{{ url_for('diagnoses_list') }}" style="color:#6b7280; font-size:13px; text-decoration:none;">← 진단 목록</a>
+<h1 style="margin:6px 0 4px;">🏷 {{ diagnosis }}</h1>
+<p class="muted">이 진단의 모든 케이스 ({{ rows|length }}건). 추후 처방·결과·예후 패턴 분석에 활용됩니다.</p>
+
+<div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow:hidden; margin-top:16px;">
+<table style="width:100%; border-collapse:collapse; font-size:14px;">
+  <thead>
+    <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
+      <th style="width:130px; padding:12px 14px; text-align:left; font-size:13px;">날짜</th>
+      <th style="width:130px; padding:12px 10px; text-align:left; font-size:13px;">유형</th>
+      <th style="width:120px; padding:12px 10px; text-align:left; font-size:13px;">환자</th>
+      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px;">차트ID</th>
+      <th style="padding:12px 10px; text-align:left; font-size:13px;">제목</th>
+      <th style="width:100px; padding:12px 10px; text-align:left; font-size:13px;">담당</th>
+      <th style="width:80px; padding:12px 14px; text-align:right; font-size:13px;"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr style="border-bottom:1px solid #f3f4f6;"
+        onmouseover="this.style.background='#f9fafb';"
+        onmouseout="this.style.background='';">
+      <td style="padding:12px 14px; color:#6b7280; font-size:12px;">{{ r.created_at[:16] }}</td>
+      <td style="padding:12px 10px; font-size:12px;">{{ doc_labels.get(r.doc_type, r.doc_type) }}</td>
+      <td style="padding:12px 10px; font-weight:600;">{{ r.patient_name }}</td>
+      <td style="padding:12px 10px;">
+        {% if r.patient_chart_id %}
+          <code style="background:#f3f4f6; padding:2px 6px; border-radius:3px; font-size:11px;">{{ r.patient_chart_id }}</code>
+        {% else %}-{% endif %}
+      </td>
+      <td style="padding:12px 10px; color:#4b5563;">{{ r.title or '-' }}</td>
+      <td style="padding:12px 10px; color:#6b7280; font-size:12px;">{{ r.vet_name or '-' }}</td>
+      <td style="padding:12px 14px; text-align:right;">
+        {% if r.patient_chart_id %}
+          {% set key = r.patient_chart_id %}
+        {% else %}
+          {% set key = 'NAME:' ~ r.patient_name %}
+        {% endif %}
+        <a href="{{ url_for('patient_detail', patient_key=key) }}"
+           style="background:#2563eb; color:#fff; padding:6px 12px; border-radius:4px;
+                  font-size:12px; font-weight:600; text-decoration:none;">→ 환자</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
