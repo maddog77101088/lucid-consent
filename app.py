@@ -211,6 +211,38 @@ def init_db():
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_happycall_date ON happy_calls(scheduled_date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_happycall_status ON happy_calls(status)")
+    # 통합 환자 문서 테이블 (환자별·질환별 히스토리 + 미래 AI 추천용)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS patient_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_type TEXT NOT NULL,
+            patient_chart_id TEXT,
+            patient_name TEXT NOT NULL,
+            species TEXT,
+            breed TEXT,
+            age TEXT,
+            sex TEXT,
+            guardian_name TEXT,
+            guardian_phone TEXT,
+            diagnosis TEXT,
+            surgery_id INTEGER,
+            hospitalization_id INTEGER,
+            tags TEXT,
+            title TEXT,
+            body TEXT,
+            structured_data TEXT,
+            vet_name TEXT,
+            related_consent_token TEXT,
+            related_happycall_id INTEGER,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_chart ON patient_documents(patient_chart_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_name ON patient_documents(patient_name)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_doctype ON patient_documents(doc_type)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_created ON patient_documents(created_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_diagnosis ON patient_documents(diagnosis)")
     con.commit()
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
@@ -930,6 +962,17 @@ def imaging_consent_create_sign_link():
          data.get("vet_name", ""), expires_at, session.get("user_id", 0))
     )
     db.commit()
+    _save_patient_document(
+        "consent_imaging", data.get("patient_name", ""),
+        species=data.get("species",""), breed=data.get("breed",""),
+        age=data.get("age",""), sex=data.get("sex",""),
+        guardian_name=data.get("guardian_name",""), guardian_phone=data.get("guardian_mobile",""),
+        diagnosis=data.get("imaging_modalities", "") if "imaging_modalities" else "",
+        title="영상검사 동의서",
+        tags=data.get("imaging_modalities", ""),
+        related_consent_token=token,
+        structured_data=data,
+    )
 
     sign_url = f"{_sign_base_url()}/sign/{token}"
     return jsonify({
@@ -1020,6 +1063,17 @@ def discharge_create_sign_link():
          data.get("vet_name", ""), expires_at, session.get("user_id", 0))
     )
     db.commit()
+    _save_patient_document(
+        "consent_discharge", data.get("patient_name", ""),
+        species=data.get("species",""), breed=data.get("breed",""),
+        age=data.get("age",""), sex=data.get("sex",""),
+        guardian_name=data.get("guardian_name",""), guardian_phone=data.get("guardian_mobile",""),
+        diagnosis=data.get("diagnosis", "") if "diagnosis" else "",
+        title="퇴원 요청 및 서약서",
+        tags="조기퇴원",
+        related_consent_token=token,
+        structured_data=data,
+    )
 
     sign_url = f"{_sign_base_url()}/sign/{token}"
     return jsonify({
@@ -1126,6 +1180,17 @@ def payment_create_sign_link():
          data.get("vet_name", ""), expires_at, session.get("user_id", 0))
     )
     db.commit()
+    _save_patient_document(
+        "consent_payment", data.get("patient_name", ""),
+        species=data.get("species",""), breed=data.get("breed",""),
+        age=data.get("age",""), sex=data.get("sex",""),
+        guardian_name=data.get("guardian_name",""), guardian_phone=data.get("guardian_mobile",""),
+        diagnosis=data.get("", "") if "" else "",
+        title="치료비 미수금 지불 서약서",
+        tags="미수금",
+        related_consent_token=token,
+        structured_data=data,
+    )
 
     sign_url = f"{_sign_base_url()}/sign/{token}"
     return jsonify({
@@ -1338,6 +1403,27 @@ def api_postop_generate():
             if text.startswith(("text","markdown","md")):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
+        # 통합 환자 문서 저장
+        _save_patient_document(
+            "postop", patient,
+            species=species, age=age,
+            guardian_name=guardian,
+            diagnosis=(diagnosis or surgery_name),
+            title=surgery_name,
+            body=text,
+            tags=surgery_name,
+            structured_data={
+                "surgery_name": surgery_name, "diagnosis": diagnosis,
+                "medications": medications, "med_days": med_days,
+                "ecollar_days": ecollar_days, "activity_limit_days": activity_limit_days,
+                "suture_remove_date": suture_remove_date, "followup_note": followup_note,
+                "hospitalization_days": hospitalization_days,
+                "discharge_status": discharge_status,
+                "wound_disinfect": wound_disinfect, "wound_ointment": wound_ointment,
+                "wound_ointment_name": wound_ointment_name, "wound_bandage": wound_bandage,
+                "special_notes": special_notes,
+            },
+        )
         return jsonify({"ok": True, "text": text})
     except Exception as e:
         return jsonify({"error": f"AI 요청 실패: {e}"}), 500
@@ -1502,6 +1588,26 @@ def api_imd_generate():
             if text.startswith(("text","markdown","md")):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
+        # 통합 환자 문서 저장
+        _save_patient_document(
+            "imd", patient,
+            species=species, age=age,
+            guardian_name=guardian,
+            diagnosis=diagnosis,
+            title=diagnosis,
+            body=text,
+            tags=diagnosis,
+            structured_data={
+                "diagnosis": diagnosis,
+                "medications": medications, "med_duration": med_duration,
+                "diet": diet, "monitoring_items": monitoring_items,
+                "followup1_date": followup1_date, "followup1_purpose": followup1_purpose,
+                "followup2_date": followup2_date, "followup2_purpose": followup2_purpose,
+                "hospitalization_days": hospitalization_days,
+                "discharge_status": discharge_status,
+                "special_notes": special_notes,
+            },
+        )
         return jsonify({"ok": True, "text": text})
     except Exception as e:
         return jsonify({"error": f"AI 요청 실패: {e}"}), 500
@@ -1563,7 +1669,19 @@ def api_happy_call_create():
          session.get("user_id", 0))
     )
     db.commit()
-    return jsonify({"ok": True, "id": cur.lastrowid, "scheduled_date": scheduled})
+    hc_id = cur.lastrowid
+    _save_patient_document(
+        "happycall", patient,
+        guardian_name=(data.get("guardian_name") or "").strip(),
+        guardian_phone=(data.get("guardian_phone") or "").strip(),
+        diagnosis=(data.get("diagnosis") or "").strip(),
+        title=f"해피콜 ({HAPPYCALL_DOC_LABELS.get(doc_type, doc_type)})",
+        body=(data.get("doc_body") or "").strip(),
+        tags=(data.get("diagnosis") or "").strip(),
+        related_happycall_id=hc_id,
+        structured_data={"scheduled_date": scheduled, "source_doc_type": doc_type},
+    )
+    return jsonify({"ok": True, "id": hc_id, "scheduled_date": scheduled})
 
 
 @app.route("/happy-calls", methods=["GET"])
@@ -1671,6 +1789,159 @@ def api_happy_call_detail(hc_id):
         return jsonify({"ok": False, "error": "not found"}), 404
     return jsonify({"ok": True, "data": dict(row)})
 
+# ===================== 통합 환자 문서 시스템 =====================
+# 모든 동의서/안내문/해피콜을 환자별·질환별로 조회하기 위한 통합 저장소.
+
+PD_DOC_TYPE_LABELS = {
+    "consent_surgery":   "📄 수술·입원 동의서",
+    "consent_imaging":   "🩻 영상검사 동의서",
+    "consent_privacy":   "🔐 개인정보 동의서",
+    "consent_euthanasia":"🕊 안락사 동의서",
+    "consent_discharge": "🚪 퇴원 서약서",
+    "consent_payment":   "🧾 미수금 서약서",
+    "ce":      "💬 진료안내문(CE)",
+    "postop":  "🏥 수술후 안내문",
+    "imd":     "🩺 내과 퇴원 안내문",
+    "happycall":"📞 해피콜",
+}
+
+
+def _save_patient_document(doc_type, patient_name, *,
+                           patient_chart_id="", species="", breed="", age="", sex="",
+                           guardian_name="", guardian_phone="",
+                           diagnosis="", surgery_id=None, hospitalization_id=None,
+                           tags="", title="", body="", structured_data=None,
+                           vet_name="", related_consent_token="", related_happycall_id=None):
+    """모든 문서를 patient_documents 에 통합 저장. 실패해도 raise 안 함."""
+    try:
+        if not patient_name:
+            return None
+        if structured_data is not None and not isinstance(structured_data, str):
+            structured_data = json.dumps(structured_data, ensure_ascii=False)
+        db = get_db()
+        cur = db.execute(
+            """INSERT INTO patient_documents
+               (doc_type, patient_chart_id, patient_name, species, breed, age, sex,
+                guardian_name, guardian_phone, diagnosis, surgery_id, hospitalization_id,
+                tags, title, body, structured_data, vet_name,
+                related_consent_token, related_happycall_id, created_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (doc_type, (patient_chart_id or "").strip(), patient_name.strip(),
+             species or "", breed or "", age or "", sex or "",
+             guardian_name or "", guardian_phone or "",
+             diagnosis or "", surgery_id, hospitalization_id,
+             tags or "", title or "", body or "", structured_data or "",
+             vet_name or session.get("display_name", ""),
+             related_consent_token or "", related_happycall_id,
+             session.get("user_id", 0))
+        )
+        db.commit()
+        return cur.lastrowid
+    except Exception as _e:
+        # 저장 실패해도 본 작업은 진행 (best-effort)
+        return None
+
+
+@app.route("/patients", methods=["GET"])
+@login_required
+def patients_list():
+    """환자 검색 + 환자 목록 (최근 활동순). 차트ID 또는 환자명으로 그룹핑."""
+    q = (request.args.get("q") or "").strip()
+    db = get_db()
+    sql = """
+        SELECT
+            COALESCE(NULLIF(patient_chart_id, ''), 'NAME:' || patient_name) AS group_key,
+            patient_chart_id,
+            patient_name,
+            MAX(species) AS species,
+            MAX(breed) AS breed,
+            MAX(guardian_name) AS guardian_name,
+            COUNT(*) AS doc_count,
+            MAX(created_at) AS last_activity,
+            GROUP_CONCAT(DISTINCT diagnosis) AS diagnoses
+        FROM patient_documents
+        WHERE 1=1
+    """
+    args = []
+    if q:
+        sql += " AND (patient_name LIKE ? OR patient_chart_id LIKE ? OR diagnosis LIKE ? OR guardian_name LIKE ?)"
+        like = f"%{q}%"
+        args += [like, like, like, like]
+    sql += " GROUP BY group_key ORDER BY last_activity DESC LIMIT 200"
+    rows = db.execute(sql, args).fetchall()
+    return render_template("patients_list.html", rows=rows, q=q)
+
+
+@app.route("/patients/<path:patient_key>", methods=["GET"])
+@login_required
+def patient_detail(patient_key):
+    """환자 상세 — 모든 문서 시간순. patient_key 는 차트ID 또는 'NAME:이름'."""
+    db = get_db()
+    if patient_key.startswith("NAME:"):
+        name = patient_key[5:]
+        rows = db.execute(
+            """SELECT * FROM patient_documents
+               WHERE patient_name=? AND (patient_chart_id IS NULL OR patient_chart_id='')
+               ORDER BY created_at DESC""", (name,)
+        ).fetchall()
+        chart_id = ""
+        patient_name = name
+    else:
+        rows = db.execute(
+            "SELECT * FROM patient_documents WHERE patient_chart_id=? ORDER BY created_at DESC",
+            (patient_key,)
+        ).fetchall()
+        chart_id = patient_key
+        patient_name = rows[0]["patient_name"] if rows else "(이름 없음)"
+    if not rows:
+        abort(404)
+    return render_template("patient_detail.html",
+                           rows=rows, patient_name=patient_name,
+                           chart_id=chart_id, patient_key=patient_key,
+                           doc_labels=PD_DOC_TYPE_LABELS)
+
+
+@app.route("/diagnoses", methods=["GET"])
+@login_required
+def diagnoses_list():
+    """진단·질환별 그룹 (자유 텍스트 진단명을 그대로 그룹키로 사용)."""
+    q = (request.args.get("q") or "").strip()
+    db = get_db()
+    sql = """
+        SELECT
+            diagnosis,
+            COUNT(*) AS doc_count,
+            COUNT(DISTINCT COALESCE(NULLIF(patient_chart_id,''), 'NAME:'||patient_name)) AS patient_count,
+            MAX(created_at) AS last_activity,
+            GROUP_CONCAT(DISTINCT doc_type) AS doc_types
+        FROM patient_documents
+        WHERE diagnosis IS NOT NULL AND TRIM(diagnosis) <> ''
+    """
+    args = []
+    if q:
+        sql += " AND diagnosis LIKE ?"
+        args.append(f"%{q}%")
+    sql += " GROUP BY diagnosis ORDER BY doc_count DESC, last_activity DESC LIMIT 300"
+    rows = db.execute(sql, args).fetchall()
+    return render_template("diagnoses_list.html", rows=rows, q=q)
+
+
+@app.route("/diagnoses/<path:diagnosis>", methods=["GET"])
+@login_required
+def diagnosis_detail(diagnosis):
+    """특정 진단명의 모든 환자 케이스."""
+    db = get_db()
+    rows = db.execute(
+        """SELECT * FROM patient_documents
+           WHERE diagnosis=? ORDER BY created_at DESC""",
+        (diagnosis,)
+    ).fetchall()
+    return render_template("diagnosis_detail.html",
+                           rows=rows, diagnosis=diagnosis,
+                           doc_labels=PD_DOC_TYPE_LABELS)
+
+
+
 
 
 
@@ -1754,6 +2025,17 @@ def euthanasia_create_sign_link():
          data.get("vet_name", ""), expires_at, session.get("user_id", 0))
     )
     db.commit()
+    _save_patient_document(
+        "consent_euthanasia", data.get("patient_name", ""),
+        species=data.get("species",""), breed=data.get("breed",""),
+        age=data.get("age",""), sex=data.get("sex",""),
+        guardian_name=data.get("guardian_name",""), guardian_phone=data.get("guardian_mobile",""),
+        diagnosis=data.get("", "") if "" else "",
+        title="안락사 동의서",
+        tags="안락사",
+        related_consent_token=token,
+        structured_data=data,
+    )
 
     sign_url = f"{_sign_base_url()}/sign/{token}"
     return jsonify({
@@ -1848,6 +2130,17 @@ def privacy_create_sign_link():
          data.get("vet_name", ""), expires_at, session.get("user_id", 0))
     )
     db.commit()
+    _save_patient_document(
+        "consent_privacy", data.get("patient_name", ""),
+        species=data.get("species",""), breed=data.get("breed",""),
+        age=data.get("age",""), sex=data.get("sex",""),
+        guardian_name=data.get("guardian_name",""), guardian_phone=data.get("guardian_mobile",""),
+        diagnosis=data.get("", "") if "" else "",
+        title="개인정보 수집·활용 동의서",
+        tags="",
+        related_consent_token=token,
+        structured_data=data,
+    )
 
     sign_url = f"{_sign_base_url()}/sign/{token}"
     return jsonify({
@@ -2960,6 +3253,15 @@ def api_ce_generate():
             if text.startswith(("text", "markdown", "md")):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
+        # 통합 환자 문서 저장 (보호자 모드만)
+        if mode == "guardian" and patient_name:
+            _save_patient_document(
+                "ce", patient_name,
+                guardian_name=guardian_name,
+                title="진료안내문",
+                body=text,
+                structured_data={"mode": mode, "ref_vet_name": ref_vet_name},
+            )
         return jsonify({"ok": True, "text": text, "mode": mode})
     except Exception as e:
         return jsonify({"error": f"AI 요청 실패: {e}"}), 500
