@@ -8,16 +8,18 @@
 <p class="muted">안내문 작성 시 자동 등록됩니다. <strong>주치의가 AI 초안 → 첨삭·승인</strong>하면, <strong>코디가 카카오 비즈채널로 발송</strong> 후 답장을 기록합니다.</p>
 
 <!-- 워크플로 안내 -->
-<div style="background:#f9fafb; padding:10px 14px; border-radius:8px; margin:14px 0; font-size:12px; color:#4b5563; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-  <span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:8px; font-weight:600;">📝 초안 대기</span>
+<div style="background:#f9fafb; padding:10px 14px; border-radius:8px; margin:14px 0; font-size:12px; color:#4b5563; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+  <span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:8px; font-weight:600;">📝 초안대기</span>
   <span style="color:#9ca3af;">→</span>
-  <span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:8px; font-weight:600;">🤖 검수 중</span>
+  <span style="background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:8px; font-weight:600;">✅ 발송대기</span>
   <span style="color:#9ca3af;">→</span>
-  <span style="background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:8px; font-weight:600;">✅ 발송 대기</span>
+  <span style="background:#d1fae5; color:#047857; padding:2px 8px; border-radius:8px; font-weight:600;">📤 발송완료</span>
   <span style="color:#9ca3af;">→</span>
-  <span style="background:#d1fae5; color:#047857; padding:2px 8px; border-radius:8px; font-weight:600;">📤 발송됨</span>
+  <span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:8px; font-weight:600;">💬 분류된 답장</span>
   <span style="color:#9ca3af;">→</span>
-  <span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:8px; font-weight:600;">💬 답장</span>
+  <span style="background:#f3f4f6; color:#6b7280; padding:2px 8px; border-radius:8px; font-weight:600;">✓ 종료</span>
+  <span style="color:#9ca3af;">·</span>
+  <span style="background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:8px; font-weight:600;">🔁 익일재안부</span>
 </div>
 
 <form method="get" action="{{ url_for('happy_calls_list') }}"
@@ -30,15 +32,20 @@
                               border:1.5px solid #d1d5db; border-radius:6px;
                               background:#fff; cursor:pointer;">
     <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🔥 진행중 (전체)</option>
-    <option value="pending_draft" {% if status_filter == 'pending_draft' %}selected{% endif %}>📝 초안 대기 (주치의)</option>
-    <option value="drafted" {% if status_filter == 'drafted' %}selected{% endif %}>🤖 검수 중 (주치의)</option>
-    <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>✅ 발송 대기 (코디)</option>
-    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>📤 발송됨 (답장 대기)</option>
-    <option value="replied" {% if status_filter == 'replied' %}selected{% endif %}>💬 답장 받음</option>
-    <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✓ 완료</option>
+    <option value="pending_draft" {% if status_filter == 'pending_draft' %}selected{% endif %}>📝 초안대기 (주치의)</option>
+    <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>✅ 발송대기 (코디)</option>
+    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>📤 발송완료 (답장 대기)</option>
+    <option value="replied" {% if status_filter == 'replied' %}selected{% endif %}>💬 답장 (전체 분류)</option>
+    <option value="cls_urgent" {% if status_filter == 'cls_urgent' %}selected{% endif %}>🚨 긴급검토필요 (악화+약물)</option>
+    <option value="cls_worsening" {% if status_filter == 'cls_worsening' %}selected{% endif %}>🔥 상태악화</option>
+    <option value="cls_medication" {% if status_filter == 'cls_medication' %}selected{% endif %}>💊 약 부작용/거부</option>
+    <option value="cls_delayed" {% if status_filter == 'cls_delayed' %}selected{% endif %}>⚠️ 회복지연</option>
+    <option value="cls_good" {% if status_filter == 'cls_good' %}selected{% endif %}>✅ 정상회복</option>
+    <option value="cls_other" {% if status_filter == 'cls_other' %}selected{% endif %}>❓ 기타질문</option>
+    <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✓ 종료</option>
     <option value="noreply" {% if status_filter == 'noreply' %}selected{% endif %}>📵 무응답</option>
     <option value="canceled" {% if status_filter == 'canceled' %}selected{% endif %}>❌ 취소</option>
-    <option value="next_day_revisit" {% if status_filter == 'next_day_revisit' %}selected{% endif %}>🔁 익일재진 (스킵)</option>
+    <option value="next_day_revisit" {% if status_filter == 'next_day_revisit' %}selected{% endif %}>🔁 익일재안부</option>
     <option value="all" {% if status_filter == 'all' %}selected{% endif %}>전체</option>
   </select>
   <select name="doc_type" style="padding:10px 12px; font-size:14px;
@@ -57,12 +64,20 @@
   'pending_draft': ('#fee2e2', '#991b1b', '📝 초안대기'),
   'drafted': ('#fef3c7', '#92400e', '🤖 검수중'),
   'approved': ('#dbeafe', '#1e40af', '✅ 발송대기'),
-  'sent': ('#d1fae5', '#047857', '📤 발송됨'),
+  'sent': ('#d1fae5', '#047857', '📤 발송완료'),
   'replied': ('#e0e7ff', '#3730a3', '💬 답장'),
-  'done': ('#f3f4f6', '#6b7280', '✓ 완료'),
+  'done': ('#f3f4f6', '#6b7280', '✓ 종료'),
   'noreply': ('#fef2f2', '#9ca3af', '📵 무응답'),
   'canceled': ('#f3f4f6', '#9ca3af', '❌ 취소'),
-  'next_day_revisit': ('#ede9fe', '#6d28d9', '🔁 익일재진'),
+  'next_day_revisit': ('#ede9fe', '#6d28d9', '🔁 익일재안부'),
+} %}
+{# replied 상태인 경우 ai_classification 기반으로 라벨 변환 #}
+{% set cls_styles = {
+  'worsening':  ('#fee2e2', '#991b1b', '🔥 상태악화'),
+  'medication': ('#fef3c7', '#d97706', '💊 약 부작용/거부'),
+  'delayed':    ('#fefce8', '#854d0e', '⚠️ 회복지연'),
+  'good':       ('#d1fae5', '#047857', '✅ 정상회복'),
+  'other':      ('#f3f4f6', '#6b7280', '❓ 기타질문'),
 } %}
 
 {% if not rows %}
@@ -85,7 +100,11 @@
   </thead>
   <tbody>
     {% for r in rows %}
-    {% set bg, fg, label = status_styles.get(r.status, ('#f3f4f6', '#6b7280', r.status)) %}
+    {% if r.status == 'replied' and r.ai_classification %}
+      {% set bg, fg, label = cls_styles.get(r.ai_classification, status_styles['replied']) %}
+    {% else %}
+      {% set bg, fg, label = status_styles.get(r.status, ('#f3f4f6', '#6b7280', r.status)) %}
+    {% endif %}
     <tr data-hcid="{{ r.id }}" style="border-bottom:1px solid #f3f4f6;">
       <td style="padding:10px 8px;">
         <span style="background:{{ bg }}; color:{{ fg }}; padding:3px 8px; border-radius:8px; font-size:11px; font-weight:600; white-space:nowrap;">{{ label }}</span>
@@ -155,6 +174,11 @@
                   style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
             👁 보기
           </button>
+        {% elif r.status == 'replied' %}
+          <button class="btn-status" data-status="done" data-hcid="{{ r.id }}"
+                  style="background:#059669; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">✓ 종료</button>
+          <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">👁 상세</button>
         {% else %}
           <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
                   style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">

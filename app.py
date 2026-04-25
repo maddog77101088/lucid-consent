@@ -1751,6 +1751,12 @@ def happy_calls_list():
         args.append(status_filter)
     elif status_filter == "active":
         sql += " AND hc.status IN ('pending_draft', 'drafted', 'approved', 'sent')"
+    elif status_filter == "cls_urgent":
+        # 긴급검토필요 = 상태악화 + 약 부작용/거부 (replied 중에서)
+        sql += " AND hc.status='replied' AND hc.ai_classification IN ('worsening','medication')"
+    elif status_filter in ("cls_worsening", "cls_medication", "cls_delayed", "cls_good", "cls_other"):
+        sql += " AND hc.status='replied' AND hc.ai_classification=?"
+        args.append(status_filter[4:])  # 'cls_' 떼기
     elif status_filter == "all":
         pass
     if doc_type_filter in ("ce", "postop", "imd"):
