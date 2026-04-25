@@ -1710,17 +1710,6 @@ def api_happy_call_create():
     )
     db.commit()
     hc_id = cur.lastrowid
-    _save_patient_document(
-        "happycall", patient,
-        guardian_name=(data.get("guardian_name") or "").strip(),
-        guardian_phone=(data.get("guardian_phone") or "").strip(),
-        diagnosis=(data.get("diagnosis") or "").strip(),
-        title=f"해피콜 ({HAPPYCALL_DOC_LABELS.get(doc_type, doc_type)})",
-        body=(data.get("doc_body") or "").strip(),
-        tags=(data.get("diagnosis") or "").strip(),
-        related_happycall_id=hc_id,
-        structured_data={"scheduled_date": scheduled, "source_doc_type": doc_type},
-    )
     return jsonify({"ok": True, "id": hc_id, "scheduled_date": scheduled})
 
 
