@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>회복 안부 설문 - 24시루시드 동물병원</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: #f5f6f8; color: #1f2937;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 16px; }
+  .header {
+    background: linear-gradient(135deg, #2563eb 0%, #0891b2 100%);
+    color: #fff; padding: 20px 18px; border-radius: 12px;
+    margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,.08);
+  }
+  .header h1 { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
+  .header p { margin: 0; font-size: 13px; opacity: 0.95; line-height: 1.5; }
+  .card {
+    background: #fff; padding: 18px 18px 14px; border-radius: 12px;
+    margin-bottom: 14px; box-shadow: 0 2px 6px rgba(0,0,0,.05);
+  }
+  .q-title {
+    font-size: 15px; font-weight: 600; color: #1f2937;
+    margin: 0 0 12px;
+  }
+  .q-options { display: flex; flex-direction: column; gap: 8px; }
+  .q-options label {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; background: #f9fafb;
+    border: 2px solid #e5e7eb; border-radius: 8px;
+    cursor: pointer; font-size: 14px; transition: all 0.15s;
+  }
+  .q-options label:has(input:checked) {
+    background: #dbeafe; border-color: #2563eb; color: #1e40af; font-weight: 600;
+  }
+  .q-options input[type="radio"] {
+    width: 20px; height: 20px; flex-shrink: 0; margin: 0;
+    accent-color: #2563eb;
+  }
+  textarea#free-comment {
+    width: 100%; padding: 12px; font-size: 14px; line-height: 1.6;
+    border: 2px solid #e5e7eb; border-radius: 8px;
+    box-sizing: border-box; font-family: inherit; resize: vertical;
+    min-height: 80px;
+  }
+  textarea:focus, .q-options label:focus-within { outline: none; border-color: #2563eb; }
+  .submit-btn {
+    width: 100%; padding: 16px; font-size: 16px; font-weight: 700;
+    background: #059669; color: #fff; border: 0; border-radius: 12px;
+    cursor: pointer; margin-top: 8px;
+    box-shadow: 0 4px 12px rgba(5,150,105,0.3);
+  }
+  .submit-btn:hover { background: #047857; }
+  .submit-btn:disabled { background: #9ca3af; cursor: not-allowed; box-shadow: none; }
+  .call-btn {
+    display: block; text-align: center; padding: 14px; font-size: 15px;
+    background: #fff; color: #2563eb; border: 2px solid #2563eb;
+    border-radius: 12px; text-decoration: none; font-weight: 600;
+    margin-top: 12px;
+  }
+  .complete-card {
+    background: #fff; padding: 30px 20px; border-radius: 12px;
+    text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,.05);
+  }
+  .complete-card h2 { color: #059669; margin: 0 0 10px; }
+  .complete-card p { color: #4b5563; line-height: 1.7; margin: 8px 0; }
+  .error-card {
+    background: #fef2f2; padding: 30px 20px; border-radius: 12px;
+    text-align: center; color: #991b1b; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  {% if error %}
+    <div class="error-card">
+      <h2>⚠️ {{ error }}</h2>
+      <p style="margin-top:14px; color:#4b5563; font-weight:normal; font-size:14px;">
+        문의: 02-941-7900<br>24시 루시드 동물병원
+      </p>
+    </div>
+
+  {% elif already_submitted %}
+    <div class="complete-card">
+      <h2>✅ 이미 답변하셨어요</h2>
+      <p>{{ patient_name }} 보호자님, 답변 감사합니다.</p>
+      <p>주치의가 검토 후 필요하면 연락드리겠습니다. 🙏</p>
+      <a href="tel:02-941-7900" class="call-btn">📞 02-941-7900 전화하기</a>
+    </div>
+
+  {% else %}
+
+  <div class="header">
+    <h1>🐾 {{ patient_name }} 안부 설문</h1>
+    <p>{{ guardian_name }}님, 1분만 시간 내주시면 주치의가 보고 도와드릴게요.</p>
+  </div>
+
+  <form id="survey-form">
+
+    <div class="card">
+      <div class="q-title">🍽 식욕은 어떠신가요?</div>
+      <div class="q-options">
+        <label><input type="radio" name="appetite" value="평소대로 잘 먹어요" required> 평소대로 잘 먹어요</label>
+        <label><input type="radio" name="appetite" value="평소보다 적게 먹어요"> 평소보다 적게 먹어요</label>
+        <label><input type="radio" name="appetite" value="거의 안 먹어요"> 거의 안 먹어요</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="q-title">🐾 활동량/기운은?</div>
+      <div class="q-options">
+        <label><input type="radio" name="activity" value="활발해요" required> 활발해요</label>
+        <label><input type="radio" name="activity" value="평소보다 처져요"> 평소보다 처져요</label>
+        <label><input type="radio" name="activity" value="많이 무기력해요"> 많이 무기력해요</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="q-title">💊 약 복용은?</div>
+      <div class="q-options">
+        <label><input type="radio" name="medication" value="잘 먹어요" required> 잘 먹어요</label>
+        <label><input type="radio" name="medication" value="가끔 뱉어요"> 가끔 뱉어요</label>
+        <label><input type="radio" name="medication" value="거부해요"> 거부해요</label>
+        <label><input type="radio" name="medication" value="처방 약 없음"> 처방 약 없음</label>
+      </div>
+    </div>
+
+    {% set dx = (diagnosis or '')|lower %}
+    {% if 'ckd' in dx or '신장' in dx or '신부전' in dx %}
+    <div class="card">
+      <div class="q-title">💧 음수량은?</div>
+      <div class="q-options">
+        <label><input type="radio" name="water" value="평소대로 잘 마셔요"> 평소대로 잘 마셔요</label>
+        <label><input type="radio" name="water" value="평소보다 적게 마셔요"> 평소보다 적게 마셔요</label>
+        <label><input type="radio" name="water" value="거의 안 마셔요"> 거의 안 마셔요</label>
+      </div>
+    </div>
+    {% elif 'mmvd' in dx or '심장' in dx or 'chf' in dx %}
+    <div class="card">
+      <div class="q-title">🫁 호흡은 어떠세요? (안정 시 기준)</div>
+      <div class="q-options">
+        <label><input type="radio" name="breathing" value="평소대로"> 평소대로 안정적</label>
+        <label><input type="radio" name="breathing" value="조금 빠른 듯"> 조금 빠른 듯</label>
+        <label><input type="radio" name="breathing" value="확실히 빠르거나 헐떡임"> 확실히 빠르거나 헐떡임</label>
+      </div>
+    </div>
+    {% elif '췌장' in dx or 'pancreatitis' in dx %}
+    <div class="card">
+      <div class="q-title">🤢 구토/복통은?</div>
+      <div class="q-options">
+        <label><input type="radio" name="vomit" value="없음"> 없음</label>
+        <label><input type="radio" name="vomit" value="가끔 토함"> 가끔 토함</label>
+        <label><input type="radio" name="vomit" value="여러 번 토함"> 여러 번 토함</label>
+      </div>
+    </div>
+    {% elif '당뇨' in dx or 'diabetes' in dx %}
+    <div class="card">
+      <div class="q-title">⚡ 떨림이나 의식 저하 있나요?</div>
+      <div class="q-options">
+        <label><input type="radio" name="hypoglycemia" value="없음"> 없음, 평소대로</label>
+        <label><input type="radio" name="hypoglycemia" value="조금 떨림"> 조금 떨리는 듯</label>
+        <label><input type="radio" name="hypoglycemia" value="떨림+의식 흐려짐"> 떨리고 의식 흐려짐 (응급)</label>
+      </div>
+    </div>
+    {% elif doc_type == 'postop' %}
+    <div class="card">
+      <div class="q-title">🩹 수술 부위 상태는?</div>
+      <div class="q-options">
+        <label><input type="radio" name="wound" value="깨끗하고 정상"> 깨끗하고 정상</label>
+        <label><input type="radio" name="wound" value="살짝 붉음"> 살짝 붉거나 부음</label>
+        <label><input type="radio" name="wound" value="분비물 있거나 핥음"> 분비물 있거나 자꾸 핥음</label>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="card">
+      <div class="q-title">💬 추가하고 싶은 말 있으세요? (선택)</div>
+      <textarea id="free-comment" name="comment" placeholder="자유롭게 적어주세요. 예: 어제 저녁부터 자꾸 토했어요"></textarea>
+    </div>
+
+    <div class="card">
+      <div class="q-title">📞 통화로 자세히 안내받기 원하세요?</div>
+      <div class="q-options">
+        <label><input type="radio" name="want_call" value="아니오 괜찮아요" required> 아니오, 답변만으로 충분해요</label>
+        <label><input type="radio" name="want_call" value="네 통화 원함"> 네, 병원에서 전화 주세요</label>
+      </div>
+    </div>
+
+    <button type="button" id="btn-submit" class="submit-btn">✅ 답변 보내기</button>
+    <a href="tel:02-941-7900" class="call-btn">📞 직접 전화 (02-941-7900)</a>
+
+  </form>
+
+  <div id="loading-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:999; align-items:center; justify-content:center;">
+    <div style="background:#fff; padding:20px 28px; border-radius:8px; text-align:center;">
+      <div style="width:32px; height:32px; border:3px solid #e5e7eb; border-top-color:#2563eb; border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 10px;"></div>
+      답변 저장 중...
+    </div>
+  </div>
+
+  <script>
+  document.getElementById('btn-submit').addEventListener('click', async function(){
+    const form = document.getElementById('survey-form');
+    const fd = new FormData(form);
+    const responses = {};
+    for (const [k, v] of fd.entries()) {
+      if (v && v.trim()) responses[k] = v.trim();
+    }
+    // 필수 라디오 검증
+    const required = ['appetite', 'activity', 'medication', 'want_call'];
+    for (const r of required) {
+      if (!responses[r]) {
+        alert('모든 필수 항목에 답해주세요.');
+        return;
+      }
+    }
+    this.disabled = true;
+    document.getElementById('loading-overlay').style.display = 'flex';
+    try {
+      const r = await fetch("{{ url_for('care_survey_submit', token=token) }}", {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({responses: responses})
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || '저장 실패');
+      // 완료 화면
+      document.querySelector('.wrap').innerHTML = `
+        <div class="complete-card" style="background:#fff; padding:30px 20px; border-radius:12px; text-align:center;">
+          <h2 style="color:#059669; margin:0 0 14px;">✅ 답변 감사합니다!</h2>
+          <p style="color:#4b5563; line-height:1.7;">{{ patient_name }} 보호자님,<br>주치의가 검토 후 필요하면 연락드릴게요.</p>
+          <p style="color:#6b7280; font-size:13px; margin-top:18px;">🙏 24시 루시드 동물병원</p>
+          <a href="tel:02-941-7900" style="display:block; text-align:center; padding:14px; font-size:15px; background:#fff; color:#2563eb; border:2px solid #2563eb; border-radius:12px; text-decoration:none; font-weight:600; margin-top:18px;">📞 02-941-7900 전화하기</a>
+        </div>`;
+    } catch (e) {
+      document.getElementById('loading-overlay').style.display = 'none';
+      this.disabled = false;
+      alert('저장 실패: ' + e.message);
+    }
+  });
+  </script>
+
+  {% endif %}
+
+</div>
+
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
+</body>
+</html>

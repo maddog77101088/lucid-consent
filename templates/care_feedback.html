@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}안부 응답 피드백 - {{ hospital_short }}{% endblock %}
+{% block content %}
+<h1 style="display:flex; align-items:center; gap:10px;">
+  📊 카톡 안부 응답 피드백
+  <span class="muted" style="font-size:13px; font-weight:400;">({{ rows|length }}건 표시)</span>
+</h1>
+<p class="muted">보호자가 답변한 안부 설문 결과 — AI가 자동 분류한 결과를 검토하고 후속 조치하세요.</p>
+
+<!-- 분류 통계 카드 -->
+<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; margin:16px 0;">
+  <a href="?cls=urgent" style="background:#fee2e2; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'urgent' %}#dc2626{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#991b1b;">🚨 {{ stats.worsening + stats.medication }}</div>
+    <div style="font-size:12px; color:#7f1d1d; margin-top:4px;">긴급 검토 필요</div>
+  </a>
+  <a href="?cls=worsening" style="background:#fef3c7; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'worsening' %}#dc2626{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#dc2626;">{{ stats.worsening }}</div>
+    <div style="font-size:12px; color:#92400e; margin-top:4px;">상태 악화</div>
+  </a>
+  <a href="?cls=medication" style="background:#fef3c7; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'medication' %}#d97706{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#d97706;">{{ stats.medication }}</div>
+    <div style="font-size:12px; color:#92400e; margin-top:4px;">약 부작용/거부</div>
+  </a>
+  <a href="?cls=delayed" style="background:#fefce8; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'delayed' %}#ca8a04{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#ca8a04;">{{ stats.delayed }}</div>
+    <div style="font-size:12px; color:#854d0e; margin-top:4px;">회복 지연</div>
+  </a>
+  <a href="?cls=good" style="background:#d1fae5; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'good' %}#059669{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#059669;">{{ stats.good }}</div>
+    <div style="font-size:12px; color:#065f46; margin-top:4px;">정상 회복</div>
+  </a>
+  <a href="?cls=other" style="background:#f3f4f6; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'other' %}#6b7280{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#6b7280;">{{ stats.other }}</div>
+    <div style="font-size:12px; color:#4b5563; margin-top:4px;">기타 질문</div>
+  </a>
+  <a href="?cls=all" style="background:#fff; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'all' %}#2563eb{% else %}#e5e7eb{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#2563eb;">📋</div>
+    <div style="font-size:12px; color:#4b5563; margin-top:4px;">전체 보기</div>
+  </a>
+</div>
+
+{% if not rows %}
+  <div class="card" style="padding:40px; text-align:center; color:#6b7280; background:#fff; border-radius:8px;">
+    {% if cls_filter == 'urgent' %}
+      🎉 긴급 검토 필요한 응답이 없습니다.
+    {% else %}
+      해당 분류의 응답이 아직 없습니다.
+    {% endif %}
+  </div>
+{% else %}
+
+{% set cls_styles = {
+  'good':       ('#d1fae5', '#047857', '✅ 정상회복'),
+  'delayed':    ('#fef3c7', '#92400e', '⚠️ 지연'),
+  'worsening':  ('#fee2e2', '#991b1b', '🚨 악화'),
+  'medication': ('#fef3c7', '#d97706', '💊 약물 이슈'),
+  'other':      ('#f3f4f6', '#6b7280', '❓ 기타'),
+} %}
+
+<div style="display:flex; flex-direction:column; gap:10px;">
+  {% for r in rows %}
+  {% set bg, fg, label = cls_styles.get(r.ai_classification, ('#f3f4f6', '#6b7280', r.ai_classification or '미분류')) %}
+  <div style="background:#fff; border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow:hidden; border-left:4px solid {{ fg }};">
+    <div style="padding:14px 16px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px;">
+        <div>
+          <span style="background:{{ bg }}; color:{{ fg }}; padding:3px 10px; border-radius:10px; font-size:12px; font-weight:600;">{{ label }}</span>
+          <span style="font-weight:600; font-size:15px; margin-left:6px;">🐾 {{ r.patient_name }}</span>
+          <span style="color:#6b7280; font-size:13px;">{% if r.guardian_name %} · {{ r.guardian_name }}{% endif %}</span>
+        </div>
+        <div style="font-size:11px; color:#9ca3af;">{{ r.survey_submitted_at[:16] if r.survey_submitted_at else '' }}</div>
+      </div>
+      {% if r.diagnosis %}
+        <div style="font-size:13px; color:#4b5563; margin-bottom:8px;">진단: <strong>{{ r.diagnosis }}</strong></div>
+      {% endif %}
+      {% if r.ai_summary %}
+        <div style="background:#f9fafb; padding:10px 12px; border-radius:6px; font-size:13px; line-height:1.6; margin-top:6px;">
+          🤖 <strong>AI 요약:</strong> {{ r.ai_summary }}
+        </div>
+      {% endif %}
+      <details style="margin-top:8px;">
+        <summary style="cursor:pointer; font-size:12px; color:#2563eb;">📋 보호자 응답 상세 보기</summary>
+        <div style="background:#f9fafb; padding:10px 12px; border-radius:6px; margin-top:6px; font-size:12.5px; line-height:1.7;">
+          {% if r.survey_responses %}
+            {% set resp = r.survey_responses|tojson|safe %}
+            <pre style="white-space:pre-wrap; font-family:inherit; margin:0;">{{ r.survey_responses }}</pre>
+          {% endif %}
+        </div>
+      </details>
+      {% if r.guardian_phone %}
+        <div style="margin-top:8px;">
+          <a href="tel:{{ r.guardian_phone }}" style="display:inline-block; background:#2563eb; color:#fff; padding:6px 14px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:600;">📞 {{ r.guardian_phone }} 전화</a>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endif %}
+
+{% endblock %}

@@ -222,9 +222,15 @@ def init_db():
         ("sent_at", "ALTER TABLE happy_calls ADD COLUMN sent_at TEXT"),
         ("sent_by", "ALTER TABLE happy_calls ADD COLUMN sent_by INTEGER"),
         ("reply_received_at", "ALTER TABLE happy_calls ADD COLUMN reply_received_at TEXT"),
+        ("survey_token", "ALTER TABLE happy_calls ADD COLUMN survey_token TEXT"),
+        ("survey_responses", "ALTER TABLE happy_calls ADD COLUMN survey_responses TEXT"),
+        ("survey_submitted_at", "ALTER TABLE happy_calls ADD COLUMN survey_submitted_at TEXT"),
+        ("ai_classification", "ALTER TABLE happy_calls ADD COLUMN ai_classification TEXT"),
+        ("ai_summary", "ALTER TABLE happy_calls ADD COLUMN ai_summary TEXT"),
     ]:
         if col not in hc_cols:
             cur.execute(ddl)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_happycall_survey_token ON happy_calls(survey_token)")
     con.commit()
     # 통합 환자 문서 테이블 (환자별·질환별 히스토리 + 미래 AI 추천용)
     cur.execute("""
@@ -449,6 +455,13 @@ def dashboard():
     hc_approved = db.execute(
         "SELECT COUNT(*) FROM happy_calls WHERE status='approved'"
     ).fetchone()[0]
+    # 긴급 응답 (응급/약부작용) - 주치의 피드백 필요
+    hc_urgent = db.execute(
+        """SELECT COUNT(*) FROM happy_calls
+           WHERE survey_submitted_at IS NOT NULL
+             AND ai_classification IN ('worsening','medication')
+             AND status='replied'"""
+    ).fetchone()[0]
     # 호환성을 위해 기존 필드도 유지 (legacy)
     hc_today = hc_pending_draft + hc_drafted
     hc_overdue = hc_approved
@@ -457,7 +470,8 @@ def dashboard():
                            hc_today=hc_today, hc_overdue=hc_overdue,
                            hc_pending_draft=hc_pending_draft,
                            hc_drafted=hc_drafted,
-                           hc_approved=hc_approved)
+                           hc_approved=hc_approved,
+                           hc_urgent=hc_urgent)
 
 
 @app.route("/surgeries")
@@ -1808,40 +1822,254 @@ def api_happy_call_update(hc_id):
 @app.route("/api/happy-calls/<int:hc_id>", methods=["GET"])
 @login_required
 def api_happy_call_detail(hc_id):
-    """단건 상세 (doc_body 포함) - 모달에서 사용."""
-    row = get_db().execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    """단건 상세 (doc_body 포함) - 모달에서 사용. {SURVEY_URL} 자동 치환."""
+    db = get_db()
+    row = db.execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
     if not row:
         return jsonify({"ok": False, "error": "not found"}), 404
-    return jsonify({"ok": True, "data": dict(row)})
+    d = dict(row)
+    # 토큰 없으면 생성
+    if not d.get("survey_token"):
+        token = _make_survey_token()
+        db.execute("UPDATE happy_calls SET survey_token=? WHERE id=?", (token, hc_id))
+        db.commit()
+        d["survey_token"] = token
+    survey_url = f"{_sign_base_url()}/care/{d['survey_token']}"
+    d["survey_url"] = survey_url
+    # 메시지에서 {SURVEY_URL} 치환
+    for k in ("draft_message", "approved_message"):
+        if d.get(k) and "{SURVEY_URL}" in d[k]:
+            d[k] = d[k].replace("{SURVEY_URL}", survey_url)
+    return jsonify({"ok": True, "data": d})
 
 # ===================== 카톡 안부 (해피콜 카톡 워크플로) =====================
 # pending_draft → drafted → approved → sent → replied → done
 # 주치의가 AI초안 만들어 첨삭 후 승인 → 코디가 카톡으로 발송 → 답장 기록
 
-KAKAO_HC_PROMPT = """당신은 한국 24시루시드 동물병원의 코디네이터가 보호자에게 보낼 카톡 안부 메시지를 작성하는 전문가입니다.
+KAKAO_HC_PROMPT = """당신은 한국 24시루시드 동물병원의 코디네이터가 보호자에게 보낼 짧은 카톡 안부 메시지를 작성하는 전문가입니다.
 
-**톤과 양식 (매우 중요)**:
-- 친근하고 따뜻한 카톡 톤. 너무 길지 않게 (5~7줄).
-- 이모지 적절히 사용 (과하지 않게, 1~3개 정도).
-- 첫 줄: "🐾 [환자]이 보호자님, 24시루시드 동물병원입니다." (조사는 받침에 맞춰서)
-- 마지막 줄: "조금이라도 걱정되는 점 있으시면 이 채팅으로 답장 주시거나 02-941-7900 으로 전화 주세요. 언제든 도와드리겠습니다. 🙏"
+**메시지 형식 (매우 짧게, 4~6줄)**:
+- 친근한 카톡 톤. 절대 길지 않게.
+- 첫 줄: "🐾 [환자]이 보호자님,"
+- 둘째 줄: "어제 [수술/진단/입원] 잘 지나셨나요?"
+- 셋째 줄: 짧은 한 줄 안부 (1줄)
+- 넷째 줄(빈 줄)
+- 다섯째 줄: "[환자] 상태 1분 설문 부탁드려요 👇"
+- 여섯째 줄: "{SURVEY_URL}" (반드시 이 자리표시자 그대로 사용)
+- 마지막 줄: "답변 어려우시면 02-941-7900 연락주세요. 🙏"
 
-**메시지 구성**:
-1. 인사 + 병원 소개
-2. [수술명/진단명] 후 안부 (한 줄)
-3. 보호자가 점검할 핵심 항목 3가지 (환자 상황에 맞춤, 이모지 포함)
-4. 답장/문의 안내
-
-**환자 상태별 톤**:
-- "좋은 경과로 퇴원": 안심되는 따뜻한 톤
-- "회복이 지연 중 퇴원": 차분히 주의 깊게, 작은 변화도 알려달라는 부탁
-- "상태 악화 중 퇴원": 진지하고 적극적, "조금이라도 이상하면 즉시 연락"
+**환자 상태별 톤 조절**:
+- "좋은 경과": "잘 회복되고 있는지 궁금해요"
+- "회복 지연": "오늘은 어떠신지 꼭 알려주세요"
+- "상태 악화": "오늘 컨디션 꼭 확인 부탁드려요" (진지한 톤)
 
 **출력 규칙**:
-- 마크다운·코드블록·헤더 금지. 일반 카톡 메시지처럼 자연스럽게.
-- 입력된 진단/수술/처방 정확히 반영. 추측 금지.
-- 7줄 이내로 간결하게.
+- 마크다운·헤더 금지. 일반 카톡처럼.
+- 절대 7줄 초과 금지.
+- 자세한 안내 (약물·재진 등) 금지 (안내문은 어제 이미 보냄).
+- 환자 이름의 받침에 맞춰 조사 자연스럽게 ("유솔이가/샤미가").
+- {SURVEY_URL} 자리표시자는 반드시 그대로 둘 것 (시스템이 실제 URL로 치환).
 """
+
+
+
+
+
+# ===================== 카톡 안부 설문 시스템 =====================
+# 보호자가 받는 짧은 카톡 메시지에 들어가는 설문 링크 + 응답 수집 + AI 분류
+
+CARE_SURVEY_PROMPT = """당신은 한국 동물병원의 수의사가 보호자의 안부 설문 응답을 분석하는 전문가입니다.
+보호자가 답한 항목들을 보고 환자 상태를 분류해주세요.
+
+**분류 카테고리 (반드시 다음 중 하나만)**:
+- good: 정상 회복. 모든 항목 정상 또는 미세한 변화만.
+- delayed: 회복 지연. 한두 항목에서 평소보다 좋지 않음. 추가 관찰 필요.
+- worsening: 상태 악화 또는 응급. 다수 항목 비정상, 심한 증상, 또는 응급 신호 있음.
+- medication: 약 복용 거부/부작용 등 약물 관련 이슈가 주요 문제.
+- other: 위 카테고리에 안 맞는 추가 질문/일정 변경 등.
+
+**출력 형식 (반드시 JSON, 다른 텍스트 금지)**:
+{"classification": "good|delayed|worsening|medication|other", "summary": "2-3문장 요약 (수의사가 한눈에 파악하도록)", "needs_action": true|false, "action_suggestion": "추천 후속 액션 (1문장)"}
+
+예시:
+- 정상회복: {"classification":"good","summary":"식욕·활동량 모두 정상이며 약 복용도 잘 됨. 큰 문제 없어 보임.","needs_action":false,"action_suggestion":"별도 액션 불필요, 종료"}
+- 지연: {"classification":"delayed","summary":"식욕이 평소의 절반 정도이며 활동량이 처져있다고 보호자 답변. 약 복용은 양호.","needs_action":true,"action_suggestion":"내일 재안부 등록 권장"}
+- 악화: {"classification":"worsening","summary":"식욕 거의 없고 무기력. 구토 발생. 보호자가 통화 원함.","needs_action":true,"action_suggestion":"주치의 긴급 알림 + 재내원 권유"}
+"""
+
+
+def _make_survey_token():
+    """설문 페이지용 토큰 생성 (24자)."""
+    return secrets.token_urlsafe(18)
+
+
+@app.route("/api/happy-calls/<int:hc_id>/generate-survey-link", methods=["POST"])
+@login_required
+def api_happy_call_generate_survey_link(hc_id):
+    """설문 토큰 생성 (없으면) + URL 반환. 카톡 메시지 자동치환에 사용."""
+    db = get_db()
+    row = db.execute("SELECT survey_token FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    token = row["survey_token"]
+    if not token:
+        token = _make_survey_token()
+        db.execute("UPDATE happy_calls SET survey_token=? WHERE id=?", (token, hc_id))
+        db.commit()
+    survey_url = f"{_sign_base_url()}/care/{token}"
+    return jsonify({"ok": True, "token": token, "url": survey_url})
+
+
+@app.route("/care/<token>", methods=["GET"])
+def care_survey_page(token):
+    """보호자가 보는 모바일 설문 페이지 (로그인 불필요)."""
+    db = get_db()
+    row = db.execute(
+        """SELECT hc.*, u.display_name AS vet_display
+           FROM happy_calls hc
+           LEFT JOIN users u ON u.id = hc.assignee_id
+           WHERE hc.survey_token=?""",
+        (token,)
+    ).fetchone()
+    if not row:
+        return render_template("care_survey.html", error="유효하지 않은 링크입니다."), 404
+    # 만료 체크 (7일)
+    if row["created_at"]:
+        try:
+            created = datetime.strptime(row["created_at"][:19], "%Y-%m-%d %H:%M:%S")
+            if (datetime.now() - created).days > 7:
+                return render_template("care_survey.html", error="만료된 링크입니다 (7일 경과)."), 410
+        except ValueError:
+            pass
+    if row["survey_submitted_at"]:
+        return render_template("care_survey.html",
+                               already_submitted=True,
+                               patient_name=row["patient_name"]), 200
+    return render_template(
+        "care_survey.html",
+        token=token,
+        patient_name=row["patient_name"],
+        guardian_name=row["guardian_name"],
+        diagnosis=row["diagnosis"],
+        doc_type=row["doc_type"],
+        doc_label=HAPPYCALL_DOC_LABELS.get(row["doc_type"], ""),
+    )
+
+
+@app.route("/care/<token>/submit", methods=["POST"])
+def care_survey_submit(token):
+    """보호자가 설문 제출 → 저장 + 즉시 AI 분류 + 분류별 자동 액션."""
+    db = get_db()
+    row = db.execute("SELECT * FROM happy_calls WHERE survey_token=?", (token,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "유효하지 않은 링크"}), 404
+    if row["survey_submitted_at"]:
+        return jsonify({"ok": False, "error": "이미 응답한 설문입니다"}), 409
+
+    payload = request.get_json() or {}
+    responses = payload.get("responses") or {}
+    if not isinstance(responses, dict):
+        return jsonify({"ok": False, "error": "응답 형식 오류"}), 400
+
+    submitted_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # AI 분류 (실패해도 응답 저장은 됨)
+    classification, summary, needs_action, action_suggestion = "other", "", False, ""
+    try:
+        if requests is not None:
+            api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+            if api_key:
+                resp_text = "\n".join([f"- {k}: {v}" for k, v in responses.items() if v])
+                user_msg = f"환자: {row['patient_name']}\n진단/수술: {row['diagnosis']}\n\n[설문 응답]\n{resp_text}\n\n위 응답을 분석해 분류해주세요."
+                r = requests.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+                    json={"model": "claude-sonnet-4-6", "max_tokens": 600,
+                          "system": CARE_SURVEY_PROMPT,
+                          "messages": [{"role": "user", "content": user_msg}]},
+                    timeout=30,
+                )
+                if r.status_code == 200:
+                    body = r.json()
+                    text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+                    text = "\n".join(text_parts).strip()
+                    if text.startswith("```"):
+                        text = text.split("```", 2)[1].strip().lstrip("json").strip()
+                    parsed = json.loads(text)
+                    classification = parsed.get("classification", "other")
+                    summary = parsed.get("summary", "")
+                    needs_action = bool(parsed.get("needs_action", False))
+                    action_suggestion = parsed.get("action_suggestion", "")
+    except Exception as _e:
+        pass
+
+    db.execute(
+        """UPDATE happy_calls SET survey_responses=?, survey_submitted_at=?,
+           ai_classification=?, ai_summary=?, status='replied', reply_received_at=?,
+           call_memo=? WHERE id=?""",
+        (json.dumps(responses, ensure_ascii=False), submitted_at,
+         classification, summary, submitted_at,
+         f"[AI 분류: {classification}] {summary}\n→ {action_suggestion}",
+         row["id"])
+    )
+    db.commit()
+
+    # 분류별 자동 액션
+    if classification == "good":
+        # 정상회복 → 자동 종료
+        db.execute("UPDATE happy_calls SET status='done', completed_at=? WHERE id=?",
+                   (submitted_at, row["id"]))
+        db.commit()
+    elif classification == "delayed":
+        # 지연 → 다음날 재안부 자동 등록
+        try:
+            next_scheduled = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+            db.execute(
+                """INSERT INTO happy_calls
+                   (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
+                    vet_name, assignee_id, scheduled_date, status, doc_body, created_by)
+                   VALUES (?,?,?,?,?,?,?,?,'pending_draft',?,?)""",
+                (row["doc_type"], row["patient_name"], row["guardian_name"],
+                 row["guardian_phone"], row["diagnosis"], row["vet_name"],
+                 row["assignee_id"], next_scheduled,
+                 f"[자동 재안부] 이전 안부 응답: {summary}", row["created_by"])
+            )
+            db.commit()
+        except Exception:
+            pass
+    # worsening → 별도 액션 없이 그대로 두면 대시보드 빨간 뱃지로 표시됨
+
+    return jsonify({"ok": True, "classification": classification})
+
+
+# ===== 주치의 피드백 페이지 =====
+
+@app.route("/feedback", methods=["GET"])
+@login_required
+def care_feedback():
+    """카톡 안부 응답 결과 - 분류별·환자별 보기 (주치의용)."""
+    cls_filter = (request.args.get("cls") or "all").strip()
+    db = get_db()
+    sql = """SELECT hc.*, u.display_name AS vet_display
+             FROM happy_calls hc
+             LEFT JOIN users u ON u.id = hc.assignee_id
+             WHERE hc.survey_submitted_at IS NOT NULL"""
+    args = []
+    if cls_filter in ("good", "delayed", "worsening", "medication", "other"):
+        sql += " AND hc.ai_classification=?"
+        args.append(cls_filter)
+    elif cls_filter == "urgent":
+        sql += " AND hc.ai_classification IN ('worsening', 'medication')"
+    sql += " ORDER BY hc.survey_submitted_at DESC LIMIT 200"
+    rows = db.execute(sql, args).fetchall()
+    # 통계
+    stats = {}
+    for c in ("good", "delayed", "worsening", "medication", "other"):
+        stats[c] = db.execute(
+            "SELECT COUNT(*) FROM happy_calls WHERE ai_classification=?", (c,)
+        ).fetchone()[0]
+    return render_template("care_feedback.html",
+                           rows=rows, cls_filter=cls_filter, stats=stats)
 
 
 @app.route("/api/happy-calls/<int:hc_id>/generate-draft", methods=["POST"])

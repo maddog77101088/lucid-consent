@@ -74,7 +74,7 @@
 </div>
 
 <!-- 섹션 3: 카톡 안부 -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📱 카톡 안부</h2>
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📱 카톡 안부 + 응답 피드백</h2>
 <div class="grid-2" style="margin-bottom:20px;">
   <a class="card big-action" href="{{ url_for('happy_calls_list') }}"
      style="{% if hc_drafted and hc_drafted > 0 %}border:2px solid #d97706;{% elif hc_approved and hc_approved > 0 %}border:2px solid #2563eb;{% endif %}">
@@ -91,7 +91,19 @@
           <span style="background:#dbeafe; color:#1e40af; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📤 발송 {{ hc_approved }}</span>
         {% endif %}
       </h2>
-      <p>안내문 작성 시 자동 등록 → 주치의가 AI 초안 첨삭·승인 → 코디가 카카오 비즈채널로 발송 → 답장 기록.</p>
+      <p>퇴원 익일 짧은 안부 카톡 + 설문 링크 → 보호자 응답 자동 분류.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('care_feedback') }}"
+     style="{% if hc_urgent and hc_urgent > 0 %}border:2px solid #dc2626;{% endif %}">
+    <div class="big-icon">📊</div>
+    <div>
+      <h2>안부 응답 피드백
+        {% if hc_urgent and hc_urgent > 0 %}
+          <span style="background:#dc2626; color:#fff; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">🚨 긴급 {{ hc_urgent }}</span>
+        {% endif %}
+      </h2>
+      <p>보호자 설문 응답을 AI가 분류 → 정상회복/지연/악화 자동 판별. 긴급 건 우선 검토.</p>
     </div>
   </a>
 </div>
