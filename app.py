@@ -231,6 +231,8 @@ def init_db():
         if col not in hc_cols:
             cur.execute(ddl)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_happycall_survey_token ON happy_calls(survey_token)")
+    # 기존 'drafted' 상태 데이터 마이그레이션: 'pending_draft' 로 통합 (검수중 상태 폐기)
+    cur.execute("UPDATE happy_calls SET status='pending_draft' WHERE status='drafted'")
     con.commit()
     # 통합 환자 문서 테이블 (환자별·질환별 히스토리 + 미래 AI 추천용)
     cur.execute("""
@@ -2163,9 +2165,10 @@ def api_happy_call_generate_draft(hc_id):
             if text.startswith(("text","markdown","md")):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
-        # DB 에 draft_message 저장 + status 변경
+        # DB 에 draft_message 만 저장 (status 는 변경하지 않음 — 검수중 잔재 방지)
+        # 주치의가 [✅ 저장·승인] 누를 때 비로소 status='approved' 로 진행
         db.execute(
-            "UPDATE happy_calls SET draft_message=?, status='drafted' WHERE id=?",
+            "UPDATE happy_calls SET draft_message=? WHERE id=?",
             (text, hc_id)
         )
         db.commit()

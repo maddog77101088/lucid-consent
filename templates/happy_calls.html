@@ -129,7 +129,17 @@
         {% endif %}
       </td>
       <td style="padding:10px 8px; text-align:right; white-space:nowrap;">
-        {% if r.status == 'pending_draft' %}
+        {% if r.status == 'pending_draft' and r.draft_message %}
+          {# AI 초안 또는 직접작성 도중 저장만 하고 승인 안 한 경우 — 이어서 검수·승인 #}
+          <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
+                  style="background:#d97706; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
+            ✏️ 검수·승인
+          </button>
+          <button class="btn-act" data-act="generate" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#dc2626; border:1px solid #fca5a5; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
+            🔁 재생성
+          </button>
+        {% elif r.status == 'pending_draft' %}
           <button class="btn-act" data-act="generate" data-hcid="{{ r.id }}"
                   style="background:#dc2626; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
             🤖 AI 초안
@@ -140,16 +150,7 @@
           </button>
           <button class="btn-status" data-status="next_day_revisit" data-hcid="{{ r.id }}"
                   title="익일에 직접 재진하므로 카톡 안부 스킵"
-                  style="background:#fff; color:#6d28d9; border:1px solid #c4b5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🔁 익일재진</button>
-        {% elif r.status == 'drafted' %}
-          <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
-                  style="background:#d97706; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
-            ✏️ 검수·승인
-          </button>
-          <button class="btn-act" data-act="generate" data-hcid="{{ r.id }}"
-                  style="background:#fff; color:#dc2626; border:1px solid #fca5a5; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
-            🔁 재생성
-          </button>
+                  style="background:#fff; color:#6d28d9; border:1px solid #c4b5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🔁 익일재안부</button>
         {% elif r.status == 'approved' %}
           <button class="btn-act" data-act="send" data-hcid="{{ r.id }}"
                   style="background:#2563eb; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
