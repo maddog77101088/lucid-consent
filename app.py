@@ -1806,7 +1806,8 @@ def api_happy_call_update(hc_id):
     for k in ("status", "call_memo", "guardian_phone", "scheduled_date"):
         if k in data:
             val = data[k]
-            if k == "status" and val not in ("pending", "done", "noreply", "canceled", "next_day_revisit", "pending_draft"):
+            if k == "status" and val not in ("pending", "done", "noreply", "canceled",
+                                              "next_day_revisit", "pending_draft", "sent"):
                 continue
             fields.append(f"{k}=?")
             args.append((val or "").strip() if isinstance(val, str) else val)
@@ -2056,19 +2057,30 @@ def care_feedback():
     db = get_db()
     # 24시간 이내 피드백만 (그 이후는 자동 보관 처리되어 페이지에 안 보임)
     cutoff = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-    sql = """SELECT hc.*, u.display_name AS vet_display
-             FROM happy_calls hc
-             LEFT JOIN users u ON u.id = hc.assignee_id
-             WHERE hc.survey_submitted_at IS NOT NULL
-               AND hc.survey_submitted_at >= ?
-               AND hc.status='replied'"""
-    args = [cutoff]
-    if cls_filter in ("good", "delayed", "worsening", "medication", "other"):
-        sql += " AND hc.ai_classification=?"
-        args.append(cls_filter)
-    elif cls_filter == "urgent":
-        sql += " AND hc.ai_classification IN ('worsening', 'medication')"
-    sql += " ORDER BY hc.survey_submitted_at DESC LIMIT 200"
+    # 무응답 기준: 발송완료(sent)인데 24시간 지나도 답장 없음
+    if cls_filter == "noresponse":
+        sql = """SELECT hc.*, u.display_name AS vet_display
+                 FROM happy_calls hc
+                 LEFT JOIN users u ON u.id = hc.assignee_id
+                 WHERE hc.status='sent'
+                   AND hc.sent_at IS NOT NULL
+                   AND hc.sent_at <= ?"""
+        args = [cutoff]
+        sql += " ORDER BY hc.sent_at ASC LIMIT 200"
+    else:
+        sql = """SELECT hc.*, u.display_name AS vet_display
+                 FROM happy_calls hc
+                 LEFT JOIN users u ON u.id = hc.assignee_id
+                 WHERE hc.survey_submitted_at IS NOT NULL
+                   AND hc.survey_submitted_at >= ?
+                   AND hc.status='replied'"""
+        args = [cutoff]
+        if cls_filter in ("good", "delayed", "worsening", "medication", "other"):
+            sql += " AND hc.ai_classification=?"
+            args.append(cls_filter)
+        elif cls_filter == "urgent":
+            sql += " AND hc.ai_classification IN ('worsening', 'medication')"
+        sql += " ORDER BY hc.survey_submitted_at DESC LIMIT 200"
     rows = db.execute(sql, args).fetchall()
     # 통계 (24시간 이내, replied 만)
     stats = {}
@@ -2079,6 +2091,12 @@ def care_feedback():
                  AND survey_submitted_at >= ?""",
             (c, cutoff)
         ).fetchone()[0]
+    # 무응답 카운트: 발송 후 24시간 경과한 sent
+    stats["noresponse"] = db.execute(
+        """SELECT COUNT(*) FROM happy_calls
+           WHERE status='sent' AND sent_at IS NOT NULL AND sent_at <= ?""",
+        (cutoff,)
+    ).fetchone()[0]
     return render_template("care_feedback.html",
                            rows=rows, cls_filter=cls_filter, stats=stats)
 
