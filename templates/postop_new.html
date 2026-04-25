@@ -106,13 +106,15 @@
     <!-- 수술 -->
     <section class="card" style="border-left:3px solid #0891b2;">
       <h2>③ 수술 정보</h2>
-      <label><span class="lbl">수술 선택 <span class="muted" style="font-size:11px;">(DB 자동로드)</span></span>
-        <select id="surgery_select">
-          <option value="">-- 선택 --</option>
-          {% for s in surgeries %}
-            <option value="{{ s.id }}" data-name="{{ s.name }}">[{{ s.category }}] {{ s.name }}</option>
-          {% endfor %}
-        </select>
+      <label><span class="lbl">수술 검색 <span class="muted" style="font-size:11px;">(타이핑 검색)</span></span>
+        <span class="combobox" style="position:relative; flex:1;">
+          <input type="text" id="surgery_search" placeholder="🔍 수술명 또는 분류 입력 (예: TPLO, 정형)" autocomplete="off"
+                 style="width:100%; padding:7px 10px; font-size:14px; border:1.5px solid #d1d5db; border-radius:5px; box-sizing:border-box;">
+          <input type="hidden" id="surgery_select" value="">
+          <div id="surgery_dropdown" style="position:absolute; top:100%; left:0; right:0; background:white;
+               border:1.5px solid #2563eb; border-top:none; max-height:280px; overflow-y:auto; display:none; z-index:100;
+               box-shadow:0 4px 8px rgba(0,0,0,0.1); border-radius:0 0 5px 5px;"></div>
+        </span>
       </label>
       <label><span class="lbl">수술명 <span class="muted" style="font-size:11px;">(직접/OCR)</span></span><input id="surgery_name" placeholder="예: TPLO, OHE, 슬관절 탈구 교정술"></label>
       <label><span class="lbl">진단명 <span class="muted" style="font-size:11px;">(선택)</span></span><input id="diagnosis" placeholder="예: 좌측 슬관절 탈구 Grade 3"></label>
@@ -211,10 +213,11 @@
                        line-height:1.7; padding:12px; border:1.5px solid #d1d5db; border-radius:6px;
                        white-space:pre-wrap; box-sizing:border-box; resize:vertical;"></textarea>
       <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+        <button type="button" id="btn-save" class="btn-primary" style="flex:1.5; font-weight:600;">💾 저장</button>
         <button type="button" id="btn-copy" class="btn-ghost" style="flex:1;">📋 복사</button>
         <button type="button" id="btn-print" class="btn-ghost" style="flex:1;">🖨 인쇄/PDF</button>
       </div>
-      <p class="muted" style="font-size:11px; margin-top:6px;">※ AI 생성 후 자유롭게 편집 가능. 편집 내용은 복사·인쇄에 반영됩니다.</p>
+      <p class="muted" style="font-size:11px; margin-top:6px;">※ AI 생성 시 자동 저장됨. 편집 후 [💾 저장]으로 업데이트. 저장된 안내문은 환자 히스토리에서 다시 열 수 있습니다.</p>
     </section>
 
 </div>
@@ -223,20 +226,67 @@
 <div id="print-area" style="display:none;"></div>
 
 <script>
-// ----- 수술 선택 시 DB 기본 안내 자동 로드 -----
-document.getElementById('surgery_select').addEventListener('change', async function(){
-  const sid = this.value;
-  const name = this.options[this.selectedIndex].dataset.name || '';
-  if (name) document.getElementById('surgery_name').value = name;
-  if (!sid) return;
-  try {
-    const r = await fetch(`/api/surgery/${sid}/postop`);
-    const d = await r.json();
-    if (r.ok && d.post_op_notes !== undefined) {
-      document.getElementById('db_postop_notes').value = d.post_op_notes;
+// ----- 수술 검색 콤보박스 -----
+const surgeryData = [
+  {% for s in surgeries %}
+    {id: "{{ s.id }}", name: {{ s.name|tojson }}, category: {{ s.category|tojson }}},
+  {% endfor %}
+];
+
+(function(){
+  const search = document.getElementById('surgery_search');
+  const hidden = document.getElementById('surgery_select');
+  const dropdown = document.getElementById('surgery_dropdown');
+
+  async function loadSurgeryDB(sid, name){
+    if (name) document.getElementById('surgery_name').value = name;
+    hidden.value = sid;
+    if (!sid) return;
+    try {
+      const r = await fetch(`/api/surgery/${sid}/postop`);
+      const d = await r.json();
+      if (r.ok && d.post_op_notes !== undefined) {
+        document.getElementById('db_postop_notes').value = d.post_op_notes;
+      }
+    } catch (e) {}
+  }
+
+  function render(filter){
+    const f = (filter || '').toLowerCase().trim();
+    const filtered = !f ? surgeryData : surgeryData.filter(d =>
+      d.name.toLowerCase().includes(f) || d.category.toLowerCase().includes(f)
+    );
+    if (filtered.length === 0) {
+      dropdown.innerHTML = '<div style="padding:10px 14px; color:#9ca3af; font-size:13px;">검색 결과 없음 — 직접 입력해주세요</div>';
+    } else {
+      dropdown.innerHTML = filtered.slice(0, 50).map(d =>
+        `<div class="cb-item" data-id="${d.id}" data-name="${d.name.replace(/"/g, '&quot;')}"
+             style="padding:8px 12px; cursor:pointer; border-bottom:1px solid #f3f4f6; font-size:13px;">
+           <span style="color:#6b7280; font-size:11px;">[${d.category}]</span> <strong>${d.name}</strong>
+         </div>`
+      ).join('');
+      if (filtered.length > 50) {
+        dropdown.innerHTML += `<div style="padding:6px 12px; color:#9ca3af; font-size:11px;">+${filtered.length - 50}개 더 있음 — 검색어 좁혀주세요</div>`;
+      }
     }
-  } catch (e) { /* ignore */ }
-});
+    dropdown.style.display = 'block';
+    dropdown.querySelectorAll('.cb-item').forEach(el => {
+      el.addEventListener('mouseenter', () => el.style.background = '#dbeafe');
+      el.addEventListener('mouseleave', () => el.style.background = '');
+      el.addEventListener('click', () => {
+        search.value = el.dataset.name;
+        loadSurgeryDB(el.dataset.id, el.dataset.name);
+        dropdown.style.display = 'none';
+      });
+    });
+  }
+
+  search.addEventListener('input', () => render(search.value));
+  search.addEventListener('focus', () => render(search.value));
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.combobox')) dropdown.style.display = 'none';
+  });
+})();
 
 // ----- 실밥제거일 자동 계산 -----
 document.getElementById('btn-auto-suture').addEventListener('click', function(){
@@ -291,7 +341,8 @@ document.getElementById('btn-generate').addEventListener('click', async function
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || '생성 실패');
     result.value = d.text;
-    status.textContent = '✓ 완료 (편집 가능)';
+    window._currentDocId = d.doc_id || null;
+    status.textContent = '✓ 완료 · 💾 자동 저장됨 (편집 후 다시 [저장] 누르세요)';
     status.style.color = '#059669';
     // 해피콜 자동 등록 (수술후 기본 2일 뒤)
     try {
@@ -312,6 +363,31 @@ document.getElementById('btn-generate').addEventListener('click', async function
     status.style.color = '#dc2626';
   } finally {
     btn.disabled = false;
+  }
+});
+
+// ----- 저장 (편집 내용을 patient_documents에 update) -----
+document.getElementById('btn-save').addEventListener('click', async function(){
+  const text = document.getElementById('result').value;
+  const docId = window._currentDocId;
+  if (!text) { alert('저장할 내용이 없습니다. 먼저 AI 생성을 해주세요.'); return; }
+  if (!docId) { alert('문서 ID가 없습니다. AI 생성을 다시 해주세요.'); return; }
+  this.disabled = true;
+  this.textContent = '저장 중...';
+  try {
+    const r = await fetch(`/api/notices/${docId}/update`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({body: text})
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '저장 실패');
+    this.textContent = '✓ 저장됨';
+    setTimeout(() => this.textContent = '💾 저장', 1500);
+  } catch (e) {
+    alert('저장 실패: ' + e.message);
+    this.textContent = '💾 저장';
+  } finally {
+    this.disabled = false;
   }
 });
 

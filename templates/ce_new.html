@@ -109,7 +109,8 @@ async function generate() {
     resultBox.value = d.text;
     resultCard.style.display = '';
     resultCard.scrollIntoView({behavior:'smooth', block:'start'});
-    status.textContent = '✅ 생성 완료. 검토·수정 후 복사해서 전송하세요.';
+    window._currentDocId = d.doc_id || null;
+    status.textContent = '✅ 생성 완료 · 💾 자동 저장됨 (편집 후 [저장] 누르세요)';
     status.style.color = '#0a7';
     // 해피콜 자동 등록 (보호자 모드일 때만, 기본 1일 뒤)
     if (mode === 'guardian' && patient_name) {

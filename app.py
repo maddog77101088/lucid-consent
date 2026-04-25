@@ -1427,7 +1427,7 @@ def api_postop_generate():
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
         # 통합 환자 문서 저장
-        _save_patient_document(
+        saved_doc_id = _save_patient_document(
             "postop", patient,
             species=species, age=age,
             guardian_name=guardian,
@@ -1447,7 +1447,7 @@ def api_postop_generate():
                 "special_notes": special_notes,
             },
         )
-        return jsonify({"ok": True, "text": text})
+        return jsonify({"ok": True, "text": text, "doc_id": saved_doc_id})
     except Exception as e:
         return jsonify({"error": f"AI 요청 실패: {e}"}), 500
 
@@ -1612,7 +1612,7 @@ def api_imd_generate():
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
         # 통합 환자 문서 저장
-        _save_patient_document(
+        saved_doc_id = _save_patient_document(
             "imd", patient,
             species=species, age=age,
             guardian_name=guardian,
@@ -1631,7 +1631,7 @@ def api_imd_generate():
                 "special_notes": special_notes,
             },
         )
-        return jsonify({"ok": True, "text": text})
+        return jsonify({"ok": True, "text": text, "doc_id": saved_doc_id})
     except Exception as e:
         return jsonify({"error": f"AI 요청 실패: {e}"}), 500
 
@@ -2036,6 +2036,24 @@ def _save_patient_document(doc_type, patient_name, *,
         # 저장 실패해도 본 작업은 진행 (best-effort)
         return None
 
+
+
+
+@app.route("/api/notices/<int:doc_id>/update", methods=["POST"])
+@login_required
+def api_notice_update(doc_id):
+    """안내문 편집 내용 저장 (patient_documents.body 업데이트)."""
+    data = request.get_json() or {}
+    body = (data.get("body") or "").strip()
+    if not body:
+        return jsonify({"ok": False, "error": "본문이 비어있습니다."}), 400
+    db = get_db()
+    row = db.execute("SELECT id FROM patient_documents WHERE id=?", (doc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "문서를 찾을 수 없습니다."}), 404
+    db.execute("UPDATE patient_documents SET body=? WHERE id=?", (body, doc_id))
+    db.commit()
+    return jsonify({"ok": True})
 
 @app.route("/patients", methods=["GET"])
 @login_required
@@ -3449,15 +3467,16 @@ def api_ce_generate():
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
         # 통합 환자 문서 저장 (보호자 모드만)
+        saved_doc_id = None
         if mode == "guardian" and patient_name:
-            _save_patient_document(
+            saved_doc_id = _save_patient_document(
                 "ce", patient_name,
                 guardian_name=guardian_name,
                 title="진료안내문",
                 body=text,
                 structured_data={"mode": mode, "ref_vet_name": ref_vet_name},
             )
-        return jsonify({"ok": True, "text": text, "mode": mode})
+        return jsonify({"ok": True, "text": text, "mode": mode, "doc_id": saved_doc_id})
     except Exception as e:
         return jsonify({"error": f"AI 요청 실패: {e}"}), 500
 
