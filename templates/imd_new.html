@@ -367,12 +367,13 @@ document.getElementById('btn-save').addEventListener('click', async function(){
     });
     const j = await r.json();
     if (!r.ok || !j.ok) throw new Error(j.error || '저장 실패');
-    this.textContent = '✓ 저장됨';
-    setTimeout(() => this.textContent = '💾 저장', 1500);
+    this.textContent = '✓ 저장됨 — 메인으로 이동...';
+    setTimeout(() => { window.location.href = '/'; }, 700);
   } catch (e) {
     alert('저장 실패: ' + e.message);
     this.textContent = '💾 저장';
-  } finally { this.disabled = false; }
+    this.disabled = false;
+  }
 });
 
 // ----- 복사 -----
