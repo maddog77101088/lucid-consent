@@ -19,7 +19,7 @@
   <span style="color:#9ca3af;">→</span>
   <span style="background:#f3f4f6; color:#6b7280; padding:2px 8px; border-radius:8px; font-weight:600;">✓ 종료</span>
   <span style="color:#9ca3af;">·</span>
-  <span style="background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:8px; font-weight:600;">🔁 2차발송</span>
+  <span style="background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:8px; font-weight:600;">🚫 카톡 스킵</span>
 </div>
 
 <form method="get" action="{{ url_for('happy_calls_list') }}"
@@ -45,7 +45,7 @@
     <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✓ 종료</option>
     <option value="noreply" {% if status_filter == 'noreply' %}selected{% endif %}>📵 무응답</option>
     <option value="canceled" {% if status_filter == 'canceled' %}selected{% endif %}>❌ 취소</option>
-    <option value="next_day_revisit" {% if status_filter == 'next_day_revisit' %}selected{% endif %}>🔁 2차발송</option>
+    <option value="next_day_revisit" {% if status_filter == 'next_day_revisit' %}selected{% endif %}>🚫 카톡 스킵</option>
     <option value="all" {% if status_filter == 'all' %}selected{% endif %}>전체</option>
   </select>
   <select name="doc_type" style="padding:10px 12px; font-size:14px;
@@ -69,7 +69,7 @@
   'done': ('#f3f4f6', '#6b7280', '✓ 종료'),
   'noreply': ('#fef2f2', '#9ca3af', '📵 무응답'),
   'canceled': ('#f3f4f6', '#9ca3af', '❌ 취소'),
-  'next_day_revisit': ('#ede9fe', '#6d28d9', '🔁 2차발송'),
+  'next_day_revisit': ('#ede9fe', '#6d28d9', '🚫 카톡 스킵'),
 } %}
 {# replied 상태인 경우 ai_classification 기반으로 라벨 변환 #}
 {% set cls_styles = {
@@ -145,10 +145,11 @@
                   style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
             ✏️ {% if r.draft_message %}이어서 편집{% else %}직접작성{% endif %}
           </button>
-          {% if not r.draft_message %}
+          {% if not r.draft_message and not r.is_followup %}
           <button class="btn-status" data-status="next_day_revisit" data-hcid="{{ r.id }}"
+                  data-confirm="이 환자는 익일 직접 재진 예정이므로 카톡 안부를 보내지 않습니다.\n진행할까요? (스킵된 행은 [🚫 카톡 스킵] 필터에서 다시 볼 수 있습니다)"
                   title="익일에 직접 재진하므로 카톡 안부 스킵"
-                  style="background:#fff; color:#6d28d9; border:1px solid #c4b5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🔁 2차발송</button>
+                  style="background:#fff; color:#6d28d9; border:1px solid #c4b5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🚫 카톡 스킵</button>
           {% endif %}
         {% elif r.status == 'approved' %}
           <button class="btn-act" data-act="send" data-hcid="{{ r.id }}"
@@ -170,6 +171,11 @@
                   style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">👁</button>
         {% elif r.status == 'next_day_revisit' %}
           <span style="color:#6d28d9; font-size:11px; font-weight:600; padding:5px 10px;">익일 직접 재진 — 카톡 스킵</span>
+          <button class="btn-status" data-status="pending_draft" data-hcid="{{ r.id }}"
+                  data-confirm="이 환자를 다시 작성대기로 되돌립니다.\n진행할까요?"
+                  style="background:#dc2626; color:#fff; border:0; padding:5px 12px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer;">
+            🔄 작성대기로 복귀
+          </button>
           <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
                   style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
             👁 보기
@@ -426,9 +432,11 @@
     });
   });
 
-  // 빠른 상태 변경 (무응답 등)
+  // 빠른 상태 변경 (무응답·카톡스킵 등)
   document.querySelectorAll('.btn-status').forEach(btn => {
     btn.addEventListener('click', async function(){
+      const confirmMsg = this.dataset.confirm;
+      if (confirmMsg && !confirm(confirmMsg)) return;
       const hcid = this.dataset.hcid;
       const status = this.dataset.status;
       this.disabled = true;
