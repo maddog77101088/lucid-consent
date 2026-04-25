@@ -321,11 +321,17 @@
           📱 보호자 연락처: ${d.guardian_phone || '<span style="color:#dc2626;">없음 (수동 확인 필요)</span>'}
         </div>
       `;
+      const kakaoEnabled = {{ 'true' if kakao_enabled else 'false' }};
+      const hasPhone = !!d.guardian_phone;
+      const autoSendBtn = (kakaoEnabled && hasPhone)
+        ? `<button id="m-auto-send" style="background:#fbbc04; color:#3c3c3c; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:700;">⚡ 카카오 자동발송</button>`
+        : '';
       modalActions.innerHTML = `
         <button onclick="document.getElementById('modal').style.display='none'"
                 style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>
         <button id="m-copy" style="background:#fef3c7; color:#92400e; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:500;">📋 복사</button>
-        <button id="m-mark-sent" style="background:#2563eb; color:#fff; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:600;">✅ 발송 완료 처리</button>
+        ${autoSendBtn}
+        <button id="m-mark-sent" style="background:#2563eb; color:#fff; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:600;">✅ 수동 발송 완료</button>
       `;
       document.getElementById('m-copy').onclick = async () => {
         try {
@@ -339,6 +345,25 @@
         if (!r.ok || !j.ok) { alert('실패: ' + (j.error || '')); return; }
         hide(); location.reload();
       };
+      const autoBtn = document.getElementById('m-auto-send');
+      if (autoBtn) {
+        autoBtn.onclick = async () => {
+          if (!confirm(`카카오 알림톡으로 자동 발송합니다.\n수신: ${d.guardian_phone}\n진행할까요?`)) return;
+          autoBtn.disabled = true;
+          autoBtn.textContent = '⏳ 발송 중...';
+          try {
+            const r = await fetch(`/api/happy-calls/${hcid}/send-kakao`, {method:'POST'});
+            const j = await r.json();
+            if (!r.ok || !j.ok) throw new Error(j.error || '발송 실패');
+            alert('✓ 카카오 알림톡 발송 완료');
+            hide(); location.reload();
+          } catch (e) {
+            alert('자동 발송 실패: ' + e.message + '\n\n수동 발송으로 진행하세요.');
+            autoBtn.disabled = false;
+            autoBtn.textContent = '⚡ 카카오 자동발송';
+          }
+        };
+      }
     } catch (e) {
       modalBody.innerHTML = '<div style="color:#dc2626;">오류: ' + e.message + '</div>';
     }

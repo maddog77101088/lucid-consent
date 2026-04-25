@@ -4,6 +4,9 @@ import json
 import base64
 import secrets
 import sqlite3
+import hmac
+import hashlib
+import re as _re_phone
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
@@ -1807,7 +1810,8 @@ def happy_calls_list():
                            rows=rows, today=today_str,
                            status_filter=status_filter,
                            doc_type_filter=doc_type_filter, q=q,
-                           doc_labels=HAPPYCALL_DOC_LABELS)
+                           doc_labels=HAPPYCALL_DOC_LABELS,
+                           kakao_enabled=_kakao_enabled())
 
 
 @app.route("/api/happy-calls/<int:hc_id>/update", methods=["POST"])
@@ -1954,6 +1958,142 @@ CARE_SURVEY_PROMPT = """당신은 한국 동물병원의 수의사가 보호자�
 def _make_survey_token():
     """설문 페이지용 토큰 생성 (24자)."""
     return secrets.token_urlsafe(18)
+
+
+# ===================== 솔라피 카카오 알림톡 발송 =====================
+
+def _kakao_enabled():
+    """솔라피 카카오 알림톡 자동발송 가능 여부 (환경변수 4개 모두 있어야 함)."""
+    return all([
+        os.environ.get("SOLAPI_API_KEY", "").strip(),
+        os.environ.get("SOLAPI_API_SECRET", "").strip(),
+        os.environ.get("KAKAO_PFID", "").strip(),
+        os.environ.get("KAKAO_TEMPLATE_ID", "").strip(),
+    ])
+
+
+def _normalize_phone(phone):
+    """전화번호 정규화: '010-1234-5678' → '01012345678'."""
+    return _re_phone.sub(r"[^0-9]", "", phone or "")
+
+
+def _doc_type_to_visit(doc_type):
+    """doc_type → 진료유형 한글 변환."""
+    return {"ce": "진료", "postop": "수술", "imd": "퇴원"}.get(doc_type, "진료")
+
+
+def _solapi_auth_header():
+    """솔라피 HMAC-SHA256 인증 헤더 생성."""
+    api_key = os.environ.get("SOLAPI_API_KEY", "").strip()
+    api_secret = os.environ.get("SOLAPI_API_SECRET", "").strip()
+    date = datetime.utcnow().isoformat() + "Z"
+    salt = secrets.token_hex(16)
+    sig_data = (date + salt).encode("utf-8")
+    signature = hmac.new(api_secret.encode("utf-8"), sig_data, hashlib.sha256).hexdigest()
+    return f"HMAC-SHA256 apiKey={api_key}, date={date}, salt={salt}, signature={signature}"
+
+
+def _send_kakao_alimtalk(phone, patient_name, visit_type, survey_url):
+    """솔라피 통해 카카오 알림톡 발송. 실패 시 자동으로 LMS 대체발송 (템플릿 등록 시 설정).
+    Returns: (ok: bool, message_id_or_error: str)
+    """
+    if requests is None:
+        return False, "requests 패키지 미설치"
+    if not _kakao_enabled():
+        return False, "카카오 발송 환경변수 미설정 (SOLAPI_API_KEY/SECRET, KAKAO_PFID, KAKAO_TEMPLATE_ID)"
+
+    to = _normalize_phone(phone)
+    if not to or len(to) < 10:
+        return False, f"휴대폰 번호 형식 오류: {phone}"
+
+    sender = os.environ.get("KAKAO_SENDER", "0294117900").strip()
+    pf_id = os.environ.get("KAKAO_PFID", "").strip()
+    template_id = os.environ.get("KAKAO_TEMPLATE_ID", "").strip()
+
+    payload = {
+        "message": {
+            "to": to,
+            "from": sender,
+            "type": "ATA",  # 알림톡 (실패 시 대체발송 자동)
+            "kakaoOptions": {
+                "pfId": pf_id,
+                "templateId": template_id,
+                "variables": {
+                    "#{환자명}": patient_name or "환자",
+                    "#{진료유형}": visit_type,
+                    "#{설문URL}": survey_url,
+                },
+                "disableSms": False,  # 알림톡 실패 시 LMS 대체발송 허용
+            },
+        }
+    }
+
+    try:
+        r = requests.post(
+            "https://api.solapi.com/messages/v4/send",
+            headers={
+                "Authorization": _solapi_auth_header(),
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=30,
+        )
+        if r.status_code not in (200, 202):
+            return False, f"솔라피 응답 {r.status_code}: {r.text[:300]}"
+        body = r.json() or {}
+        # 솔라피 응답: { "groupId": "...", "messageId": "...", "statusCode": "2000" }
+        status_code = body.get("statusCode") or (body.get("groupInfo") or {}).get("status") or ""
+        msg_id = body.get("messageId") or (body.get("groupId") or "")
+        if status_code and not str(status_code).startswith("2"):
+            err_msg = body.get("statusMessage") or body.get("errorMessage") or json.dumps(body, ensure_ascii=False)[:300]
+            return False, f"발송 실패 ({status_code}): {err_msg}"
+        return True, msg_id or "발송요청 완료"
+    except Exception as e:
+        return False, f"솔라피 호출 실패: {e}"
+
+
+@app.route("/api/happy-calls/<int:hc_id>/send-kakao", methods=["POST"])
+@login_required
+def api_happy_call_send_kakao(hc_id):
+    """솔라피 통해 카카오 알림톡 자동 발송 + status='sent' 처리."""
+    if not _kakao_enabled():
+        return jsonify({"ok": False, "error": "카카오 자동발송 미설정. 관리자에게 문의."}), 400
+
+    db = get_db()
+    row = db.execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    if not row["guardian_phone"]:
+        return jsonify({"ok": False, "error": "보호자 휴대폰 번호 없음"}), 400
+
+    # 토큰 없으면 생성
+    token = row["survey_token"]
+    if not token:
+        token = _make_survey_token()
+        db.execute("UPDATE happy_calls SET survey_token=? WHERE id=?", (token, hc_id))
+        db.commit()
+
+    survey_url = f"{_sign_base_url()}/care/{token}"
+    visit_type = _doc_type_to_visit(row["doc_type"])
+
+    ok, result = _send_kakao_alimtalk(
+        phone=row["guardian_phone"],
+        patient_name=row["patient_name"],
+        visit_type=visit_type,
+        survey_url=survey_url,
+    )
+
+    if not ok:
+        return jsonify({"ok": False, "error": result}), 500
+
+    # 발송 성공 → status='sent' + sent_at 기록
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        "UPDATE happy_calls SET status='sent', sent_at=?, sent_by=? WHERE id=?",
+        (now_str, session.get("user_id"), hc_id)
+    )
+    db.commit()
+    return jsonify({"ok": True, "message_id": result, "sent_at": now_str})
 
 
 @app.route("/api/happy-calls/<int:hc_id>/generate-survey-link", methods=["POST"])
