@@ -206,7 +206,7 @@
       actReview(hcid);
     } catch (e) {
       modalBody.innerHTML = '<div style="color:#dc2626;">오류: ' + e.message + '</div>';
-      modalActions.innerHTML = '<button onclick="document.getElementById(\\'modal\\').style.display=\\'none\\'" style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>';
+      modalActions.innerHTML = `<button onclick="document.getElementById('modal').style.display='none'" style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>`;
     }
   }
 
@@ -348,7 +348,7 @@
   async function actView(hcid){
     currentHcid = hcid;
     modalTitle.textContent = '👁 카톡 안부 상세';
-    modalActions.innerHTML = '<button onclick="document.getElementById(\\'modal\\').style.display=\\'none\\'" style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>';
+    modalActions.innerHTML = `<button onclick="document.getElementById('modal').style.display='none'" style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>`;
     show();
     try {
       const d = await fetchDetail(hcid);
