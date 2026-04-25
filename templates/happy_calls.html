@@ -15,10 +15,8 @@
   <span style="color:#9ca3af;">→</span>
   <span style="background:#d1fae5; color:#047857; padding:2px 8px; border-radius:8px; font-weight:600;">📤 발송완료</span>
   <span style="color:#9ca3af;">→</span>
-  <span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:8px; font-weight:600;">💬 응답대기</span>
-  <span style="color:#9ca3af;">→</span>
   <span style="background:#f3f4f6; color:#6b7280; padding:2px 8px; border-radius:8px; font-weight:600;">✓ 종료</span>
-  <span style="color:#9ca3af; margin-left:6px; font-size:11px;">· 재안부 등록 시 동일 흐름 반복 (🔁 재안부 표시)</span>
+  <span style="color:#9ca3af; margin-left:6px; font-size:11px;">· 종료 후 24h간 진행중에 노출 · 재안부 등록 시 동일 흐름 반복 (🔁 재안부)</span>
 </div>
 
 <form method="get" action="{{ url_for('happy_calls_list') }}"
@@ -33,7 +31,7 @@
     <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🔥 진행중 (전체)</option>
     <option value="pending_draft" {% if status_filter == 'pending_draft' %}selected{% endif %}>📝 작성대기 (주치의)</option>
     <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>✅ 발송대기 (코디)</option>
-    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>💬 응답대기</option>
+    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>📤 발송완료</option>
     <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✓ 종료</option>
     <option value="canceled" {% if status_filter == 'canceled' %}selected{% endif %}>❌ 취소</option>
     <option value="next_day_revisit" {% if status_filter == 'next_day_revisit' %}selected{% endif %}>🚫 카톡 스킵</option>
@@ -55,7 +53,7 @@
   'pending_draft': ('#fee2e2', '#991b1b', '📝 작성대기'),
   'drafted': ('#fef3c7', '#92400e', '🤖 검수중'),
   'approved': ('#dbeafe', '#1e40af', '✅ 발송대기'),
-  'sent': ('#e0e7ff', '#3730a3', '💬 응답대기'),
+  'sent': ('#d1fae5', '#047857', '📤 발송완료'),
   'replied': ('#e0e7ff', '#3730a3', '💬 답장'),
   'done': ('#f3f4f6', '#6b7280', '✓ 종료'),
   'noreply': ('#fef2f2', '#9ca3af', '📵 무응답'),
@@ -152,12 +150,9 @@
             ✏️ 다시 편집
           </button>
         {% elif r.status == 'sent' %}
-          <button class="btn-act" data-act="reply" data-hcid="{{ r.id }}"
-                  style="background:#3730a3; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
-            💬 답장 기록
-          </button>
+          <span style="color:#047857; font-size:11px; font-weight:600; padding:5px 10px;">발송완료 — 응답 시 피드백 카드에 자동 분류</span>
           <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
-                  style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">👁</button>
+                  style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">👁 보기</button>
         {% elif r.status == 'next_day_revisit' %}
           <span style="color:#6d28d9; font-size:11px; font-weight:600; padding:5px 10px;">익일 직접 재진 — 카톡 스킵</span>
           <button class="btn-status" data-status="pending_draft" data-hcid="{{ r.id }}"

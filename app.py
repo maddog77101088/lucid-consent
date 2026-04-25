@@ -1757,8 +1757,11 @@ def happy_calls_list():
         sql += " AND hc.status=?"
         args.append(status_filter)
     elif status_filter == "active":
-        # 진행중 = 작성/발송 단계 (답장 받은 건은 피드백 카드에서 별도 처리)
-        sql += " AND hc.status IN ('pending_draft', 'drafted', 'approved', 'sent')"
+        # 진행중 = 작성/발송 단계 + 24시간 이내 종료된 것 (방금 처리한 것 한눈에 확인용)
+        cutoff_done = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
+        sql += """ AND (hc.status IN ('pending_draft', 'drafted', 'approved', 'sent')
+                        OR (hc.status='done' AND hc.completed_at IS NOT NULL AND hc.completed_at >= ?))"""
+        args.append(cutoff_done)
     elif status_filter == "cls_urgent":
         # 긴급검토필요 = 상태악화 + 약 부작용/거부 (replied 중에서)
         sql += " AND hc.status='replied' AND hc.ai_classification IN ('worsening','medication')"
