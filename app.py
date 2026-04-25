@@ -189,6 +189,28 @@ def init_db():
     hp_cols = [c[1] for c in cur.fetchall()]
     if "discharge_notes" not in hp_cols:
         cur.execute("ALTER TABLE hospitalizations ADD COLUMN discharge_notes TEXT DEFAULT ''")
+    # 해피콜 테이블
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS happy_calls (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            doc_type TEXT NOT NULL,
+            patient_name TEXT,
+            guardian_name TEXT,
+            guardian_phone TEXT,
+            diagnosis TEXT,
+            vet_name TEXT,
+            assignee_id INTEGER,
+            scheduled_date TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            call_memo TEXT,
+            doc_body TEXT,
+            created_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            completed_at TEXT
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_happycall_date ON happy_calls(scheduled_date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_happycall_status ON happy_calls(status)")
     con.commit()
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
@@ -368,8 +390,19 @@ def dashboard():
     signed_cnt = db.execute(
         "SELECT COUNT(*) FROM consent_records WHERE signed_at IS NOT NULL AND deleted_at IS NULL"
     ).fetchone()[0]
+    # 해피콜: 오늘 예정 건 + 밀린 건 (지난 날짜 미완료)
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    hc_today = db.execute(
+        "SELECT COUNT(*) FROM happy_calls WHERE status='pending' AND scheduled_date=?",
+        (today_str,)
+    ).fetchone()[0]
+    hc_overdue = db.execute(
+        "SELECT COUNT(*) FROM happy_calls WHERE status='pending' AND scheduled_date<?",
+        (today_str,)
+    ).fetchone()[0]
     return render_template("dashboard.html", counts=counts, total=sum(counts.values()),
-                           pending_cnt=pending_cnt, signed_cnt=signed_cnt)
+                           pending_cnt=pending_cnt, signed_cnt=signed_cnt,
+                           hc_today=hc_today, hc_overdue=hc_overdue)
 
 
 @app.route("/surgeries")
@@ -1481,6 +1514,164 @@ def api_hospitalization_discharge(hid):
     row = get_db().execute("SELECT discharge_notes FROM hospitalizations WHERE id=?", (hid,)).fetchone()
     if not row: return jsonify({"error": "not found"}), 404
     return jsonify({"discharge_notes": row["discharge_notes"] or ""})
+
+# ===================== 해피콜 관리 =====================
+# CE · 수술후 · 내과 퇴원 안내문 생성 시 자동 등록되는 follow-up 통화 리스트.
+
+HAPPYCALL_DEFAULT_DAYS = {"ce": 1, "postop": 2, "imd": 3}
+HAPPYCALL_DOC_LABELS = {"ce": "진료안내문(CE)", "postop": "수술후 안내문", "imd": "내과 퇴원 안내문"}
+
+
+@app.route("/api/happy-calls/create", methods=["POST"])
+@login_required
+def api_happy_call_create():
+    """안내문 생성 시 자동으로 해피콜 등록. JSON body.
+    필수: doc_type, patient_name
+    선택: guardian_name, guardian_phone, diagnosis, vet_name, doc_body, days_offset
+    """
+    data = request.get_json() or {}
+    doc_type = (data.get("doc_type") or "").strip()
+    if doc_type not in ("ce", "postop", "imd"):
+        return jsonify({"ok": False, "error": "doc_type invalid"}), 400
+    patient = (data.get("patient_name") or "").strip()
+    if not patient:
+        return jsonify({"ok": False, "error": "환자명 누락"}), 400
+
+    days_offset = data.get("days_offset")
+    try:
+        days_offset = int(days_offset) if days_offset is not None else HAPPYCALL_DEFAULT_DAYS.get(doc_type, 1)
+    except (ValueError, TypeError):
+        days_offset = HAPPYCALL_DEFAULT_DAYS.get(doc_type, 1)
+
+    scheduled = (datetime.now() + timedelta(days=days_offset)).strftime("%Y-%m-%d")
+
+    db = get_db()
+    cur = db.execute(
+        """INSERT INTO happy_calls
+           (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
+            vet_name, assignee_id, scheduled_date, status, doc_body, created_by)
+           VALUES (?,?,?,?,?,?,?,?,'pending',?,?)""",
+        (doc_type,
+         patient,
+         (data.get("guardian_name") or "").strip(),
+         (data.get("guardian_phone") or "").strip(),
+         (data.get("diagnosis") or "").strip(),
+         (data.get("vet_name") or session.get("display_name", "")).strip(),
+         session.get("user_id"),
+         scheduled,
+         (data.get("doc_body") or "").strip(),
+         session.get("user_id", 0))
+    )
+    db.commit()
+    return jsonify({"ok": True, "id": cur.lastrowid, "scheduled_date": scheduled})
+
+
+@app.route("/happy-calls", methods=["GET"])
+@login_required
+def happy_calls_list():
+    """해피콜 목록 (필터·정렬)."""
+    status_filter = (request.args.get("status") or "pending").strip()
+    doc_type_filter = (request.args.get("doc_type") or "").strip()
+    q = (request.args.get("q") or "").strip()
+
+    sql = """SELECT hc.*, u.display_name AS assignee_name
+             FROM happy_calls hc
+             LEFT JOIN users u ON u.id = hc.assignee_id
+             WHERE 1=1"""
+    args = []
+    if status_filter in ("pending", "done", "noreply", "canceled"):
+        sql += " AND hc.status=?"
+        args.append(status_filter)
+    elif status_filter == "all":
+        pass
+    if doc_type_filter in ("ce", "postop", "imd"):
+        sql += " AND hc.doc_type=?"
+        args.append(doc_type_filter)
+    if q:
+        sql += " AND (hc.patient_name LIKE ? OR hc.guardian_name LIKE ? OR hc.diagnosis LIKE ?)"
+        like = f"%{q}%"
+        args += [like, like, like]
+
+    # 정렬: pending 은 오래된 것부터 (밀린 건 먼저), 나머지는 최근 순
+    if status_filter == "pending":
+        sql += " ORDER BY hc.scheduled_date ASC, hc.created_at ASC"
+    else:
+        sql += " ORDER BY hc.scheduled_date DESC, hc.created_at DESC"
+    sql += " LIMIT 500"
+
+    rows = get_db().execute(sql, args).fetchall()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    return render_template("happy_calls.html",
+                           rows=rows, today=today_str,
+                           status_filter=status_filter,
+                           doc_type_filter=doc_type_filter, q=q,
+                           doc_labels=HAPPYCALL_DOC_LABELS)
+
+
+@app.route("/api/happy-calls/<int:hc_id>/update", methods=["POST"])
+@login_required
+def api_happy_call_update(hc_id):
+    """상태·메모·연락처·예정일 업데이트."""
+    data = request.get_json() or {}
+    db = get_db()
+    row = db.execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+
+    fields = []
+    args = []
+    for k in ("status", "call_memo", "guardian_phone", "scheduled_date"):
+        if k in data:
+            val = data[k]
+            if k == "status" and val not in ("pending", "done", "noreply", "canceled"):
+                continue
+            fields.append(f"{k}=?")
+            args.append((val or "").strip() if isinstance(val, str) else val)
+    if not fields:
+        return jsonify({"ok": False, "error": "업데이트할 필드 없음"}), 400
+
+    # status 가 done/noreply/canceled 면 completed_at 설정
+    if data.get("status") in ("done", "noreply", "canceled"):
+        fields.append("completed_at=?")
+        args.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    elif data.get("status") == "pending":
+        fields.append("completed_at=NULL")  # 되돌림
+
+    args.append(hc_id)
+    # NULL 재할당 처리
+    sql = "UPDATE happy_calls SET " + ", ".join(fields) + " WHERE id=?"
+    sql = sql.replace("completed_at=NULL, ", "completed_at=NULL, ").replace(", completed_at=NULL WHERE", " WHERE")
+    # 위 치환은 단순화 — completed_at=NULL 은 args 불필요
+    if "completed_at=NULL" in sql:
+        # args 에서 해당 슬롯 제거
+        # 안전하게 재구성
+        clean_fields = []
+        clean_args = []
+        for i, f in enumerate(fields):
+            if f == "completed_at=NULL":
+                clean_fields.append(f)
+            else:
+                clean_fields.append(f)
+                clean_args.append(args[i])
+        clean_args.append(hc_id)
+        sql = "UPDATE happy_calls SET " + ", ".join(clean_fields) + " WHERE id=?"
+        db.execute(sql, clean_args)
+    else:
+        db.execute(sql, args)
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/happy-calls/<int:hc_id>", methods=["GET"])
+@login_required
+def api_happy_call_detail(hc_id):
+    """단건 상세 (doc_body 포함) - 모달에서 사용."""
+    row = get_db().execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    return jsonify({"ok": True, "data": dict(row)})
+
+
 
 
 

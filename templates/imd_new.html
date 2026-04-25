@@ -266,6 +266,20 @@ document.getElementById('btn-generate').addEventListener('click', async function
     result.value = d.text;
     status.textContent = '✓ 완료 (편집 가능)';
     status.style.color = '#059669';
+    // 해피콜 자동 등록 (내과 퇴원 기본 3일 뒤)
+    try {
+      await fetch('/api/happy-calls/create', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          doc_type: 'imd',
+          patient_name: payload.patient_name,
+          guardian_name: payload.guardian_name,
+          diagnosis: payload.diagnosis,
+          doc_body: d.text,
+        })
+      });
+      status.textContent = '✓ 완료 · 📞 해피콜 자동 등록됨 (3일 뒤)';
+    } catch (e) { /* 실패해도 안내문 생성은 유지 */ }
   } catch (e) {
     status.textContent = '✗ ' + e.message;
     status.style.color = '#dc2626';

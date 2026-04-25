@@ -111,6 +111,21 @@ async function generate() {
     resultCard.scrollIntoView({behavior:'smooth', block:'start'});
     status.textContent = '✅ 생성 완료. 검토·수정 후 복사해서 전송하세요.';
     status.style.color = '#0a7';
+    // 해피콜 자동 등록 (보호자 모드일 때만, 기본 1일 뒤)
+    if (mode === 'guardian' && patient_name) {
+      try {
+        await fetch('/api/happy-calls/create', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            doc_type: 'ce',
+            patient_name: patient_name,
+            guardian_name: guardian_name || '',
+            doc_body: d.text,
+          })
+        });
+        status.textContent = '✅ 생성 완료 · 📞 해피콜 자동 등록됨 (1일 뒤)';
+      } catch (e) { /* 실패해도 안내문 생성은 유지 */ }
+    }
   } catch (e) {
     status.textContent = '❌ ' + e.message;
     status.style.color = '#c33';
