@@ -1,143 +1,139 @@
 {% extends "base.html" %}
-{% block title %}해피콜 관리 - {{ hospital_short }}{% endblock %}
+{% block title %}카톡 안부 관리 - {{ hospital_short }}{% endblock %}
 {% block content %}
 <h1 style="display:flex; align-items:center; gap:10px;">
-  📞 해피콜 관리
-  <span class="muted" style="font-size:13px; font-weight:400;">
-    ({{ rows|length }}건 표시)
-  </span>
+  📱 카톡 안부 관리
+  <span class="muted" style="font-size:13px; font-weight:400;">({{ rows|length }}건 표시)</span>
 </h1>
-<p class="muted">안내문 작성 시 자동 등록됩니다. 예정일이 되면 보호자에게 전화해서 경과 확인 후 "완료" 처리하세요.</p>
+<p class="muted">안내문 작성 시 자동 등록됩니다. <strong>주치의가 AI 초안 → 첨삭·승인</strong>하면, <strong>코디가 카카오 비즈채널로 발송</strong> 후 답장을 기록합니다.</p>
+
+<!-- 워크플로 안내 -->
+<div style="background:#f9fafb; padding:10px 14px; border-radius:8px; margin:14px 0; font-size:12px; color:#4b5563; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+  <span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:8px; font-weight:600;">📝 초안 대기</span>
+  <span style="color:#9ca3af;">→</span>
+  <span style="background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:8px; font-weight:600;">🤖 검수 중</span>
+  <span style="color:#9ca3af;">→</span>
+  <span style="background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:8px; font-weight:600;">✅ 발송 대기</span>
+  <span style="color:#9ca3af;">→</span>
+  <span style="background:#d1fae5; color:#047857; padding:2px 8px; border-radius:8px; font-weight:600;">📤 발송됨</span>
+  <span style="color:#9ca3af;">→</span>
+  <span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:8px; font-weight:600;">💬 답장</span>
+</div>
 
 <form method="get" action="{{ url_for('happy_calls_list') }}"
       style="display:flex; gap:8px; margin:16px 0 22px; flex-wrap:wrap; align-items:center;
-             background:#fff; padding:14px 16px; border-radius:8px;
-             box-shadow:0 1px 3px rgba(0,0,0,.06);">
-  <input type="text" name="q" value="{{ q }}" placeholder="🔍 환자·보호자·진단명 검색"
+             background:#fff; padding:14px 16px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
+  <input type="text" name="q" value="{{ q }}" placeholder="🔍 환자·보호자·진단 검색"
          style="flex:1; min-width:240px; padding:10px 14px; font-size:14px;
                 border:1.5px solid #d1d5db; border-radius:6px;">
   <select name="status" style="padding:10px 12px; font-size:14px;
                               border:1.5px solid #d1d5db; border-radius:6px;
                               background:#fff; cursor:pointer;">
-    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>🟡 대기</option>
-    <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✅ 완료</option>
-    <option value="noreply" {% if status_filter == 'noreply' %}selected{% endif %}>📵 연락 불가</option>
+    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🔥 진행중 (전체)</option>
+    <option value="pending_draft" {% if status_filter == 'pending_draft' %}selected{% endif %}>📝 초안 대기 (주치의)</option>
+    <option value="drafted" {% if status_filter == 'drafted' %}selected{% endif %}>🤖 검수 중 (주치의)</option>
+    <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>✅ 발송 대기 (코디)</option>
+    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>📤 발송됨 (답장 대기)</option>
+    <option value="replied" {% if status_filter == 'replied' %}selected{% endif %}>💬 답장 받음</option>
+    <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✓ 완료</option>
+    <option value="noreply" {% if status_filter == 'noreply' %}selected{% endif %}>📵 무응답</option>
     <option value="canceled" {% if status_filter == 'canceled' %}selected{% endif %}>❌ 취소</option>
     <option value="all" {% if status_filter == 'all' %}selected{% endif %}>전체</option>
   </select>
   <select name="doc_type" style="padding:10px 12px; font-size:14px;
                                 border:1.5px solid #d1d5db; border-radius:6px;
                                 background:#fff; cursor:pointer;">
-    <option value="">문서 유형 전체</option>
+    <option value="">유형 전체</option>
     <option value="ce" {% if doc_type_filter == 'ce' %}selected{% endif %}>💬 CE</option>
     <option value="postop" {% if doc_type_filter == 'postop' %}selected{% endif %}>🏥 수술후</option>
     <option value="imd" {% if doc_type_filter == 'imd' %}selected{% endif %}>🩺 내과</option>
   </select>
   <button type="submit" style="background:#2563eb; color:#fff; border:0; padding:10px 24px;
-                               border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
-    검색
-  </button>
+                               border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">검색</button>
 </form>
 
+{% set status_styles = {
+  'pending_draft': ('#fee2e2', '#991b1b', '📝 초안대기'),
+  'drafted': ('#fef3c7', '#92400e', '🤖 검수중'),
+  'approved': ('#dbeafe', '#1e40af', '✅ 발송대기'),
+  'sent': ('#d1fae5', '#047857', '📤 발송됨'),
+  'replied': ('#e0e7ff', '#3730a3', '💬 답장'),
+  'done': ('#f3f4f6', '#6b7280', '✓ 완료'),
+  'noreply': ('#fef2f2', '#9ca3af', '📵 무응답'),
+  'canceled': ('#f3f4f6', '#9ca3af', '❌ 취소'),
+} %}
+
 {% if not rows %}
-  <div class="card" style="padding:40px; text-align:center; color:#6b7280;
-       background:#fff; border-radius:8px;">
-    {% if q %}검색 결과가 없습니다.{% else %}해당 상태의 해피콜이 없습니다.{% endif %}
+  <div class="card" style="padding:40px; text-align:center; color:#6b7280; background:#fff; border-radius:8px;">
+    {% if q %}검색 결과 없음.{% else %}해당 상태의 항목이 없습니다.{% endif %}
   </div>
 {% else %}
 <div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow:hidden;">
-<table style="width:100%; border-collapse:collapse; font-size:14px;">
+<table style="width:100%; border-collapse:collapse; font-size:13.5px;">
   <thead>
     <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
-      <th style="width:100px; padding:12px 10px; text-align:left; font-size:13px;">유형</th>
-      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px;">예정일</th>
-      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px;">환자</th>
-      <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px;">보호자</th>
-      <th style="width:140px; padding:12px 10px; text-align:left; font-size:13px;">연락처</th>
-      <th style="padding:12px 10px; text-align:left; font-size:13px;">진단/수술</th>
-      <th style="width:100px; padding:12px 10px; text-align:left; font-size:13px;">담당</th>
-      <th style="width:270px; padding:12px 10px; text-align:right; font-size:13px;">동작</th>
+      <th style="width:100px; padding:10px 8px; text-align:left;">상태</th>
+      <th style="width:80px; padding:10px 8px; text-align:left;">유형</th>
+      <th style="width:90px; padding:10px 8px; text-align:left;">예정일</th>
+      <th style="width:90px; padding:10px 8px; text-align:left;">환자</th>
+      <th style="width:90px; padding:10px 8px; text-align:left;">보호자</th>
+      <th style="padding:10px 8px; text-align:left;">진단/메모</th>
+      <th style="width:280px; padding:10px 8px; text-align:right;">동작</th>
     </tr>
   </thead>
   <tbody>
     {% for r in rows %}
-    {% set is_overdue = r.status == 'pending' and r.scheduled_date < today %}
-    {% set is_today = r.status == 'pending' and r.scheduled_date == today %}
-    <tr data-hcid="{{ r.id }}" style="border-bottom:1px solid #f3f4f6;
-        {% if is_overdue %}background:#fef2f2;{% elif is_today %}background:#fefce8;{% endif %}">
-      <td style="padding:12px 10px; vertical-align:middle;">
-        {% if r.doc_type == 'ce' %}
-          <span style="color:#1e40af; background:#dbeafe; padding:3px 8px; border-radius:10px; font-size:12px; font-weight:600;">💬 CE</span>
-        {% elif r.doc_type == 'postop' %}
-          <span style="color:#0e7490; background:#cffafe; padding:3px 8px; border-radius:10px; font-size:12px; font-weight:600;">🏥 수술후</span>
-        {% elif r.doc_type == 'imd' %}
-          <span style="color:#047857; background:#d1fae5; padding:3px 8px; border-radius:10px; font-size:12px; font-weight:600;">🩺 내과</span>
-        {% endif %}
+    {% set bg, fg, label = status_styles.get(r.status, ('#f3f4f6', '#6b7280', r.status)) %}
+    <tr data-hcid="{{ r.id }}" style="border-bottom:1px solid #f3f4f6;">
+      <td style="padding:10px 8px;">
+        <span style="background:{{ bg }}; color:{{ fg }}; padding:3px 8px; border-radius:8px; font-size:11px; font-weight:600; white-space:nowrap;">{{ label }}</span>
       </td>
-      <td style="padding:12px 10px; vertical-align:middle; font-weight:600;">
-        {{ r.scheduled_date }}
-        {% if is_overdue %}
-          <div style="font-size:11px; color:#dc2626; font-weight:600;">⚠ 밀림</div>
-        {% elif is_today %}
-          <div style="font-size:11px; color:#d97706; font-weight:600;">📅 오늘</div>
-        {% endif %}
+      <td style="padding:10px 8px; font-size:11px; color:#6b7280;">
+        {% if r.doc_type == 'ce' %}💬 CE{% elif r.doc_type == 'postop' %}🏥 수술후{% elif r.doc_type == 'imd' %}🩺 내과{% endif %}
       </td>
-      <td style="padding:12px 10px; vertical-align:middle; font-weight:600;">{{ r.patient_name or '-' }}</td>
-      <td style="padding:12px 10px; vertical-align:middle;">{{ r.guardian_name or '-' }}</td>
-      <td style="padding:12px 10px; vertical-align:middle;">
+      <td style="padding:10px 8px; font-size:12px;">{{ r.scheduled_date }}</td>
+      <td style="padding:10px 8px; font-weight:600;">{{ r.patient_name or '-' }}</td>
+      <td style="padding:10px 8px;">
+        {{ r.guardian_name or '-' }}
         {% if r.guardian_phone %}
-          <a href="tel:{{ r.guardian_phone }}" style="color:#2563eb; text-decoration:none; font-weight:500;">
-            📱 {{ r.guardian_phone }}
-          </a>
-        {% else %}
-          <button type="button" class="btn-edit-phone" data-hcid="{{ r.id }}"
-                  style="background:#fff; color:#6b7280; border:1px dashed #d1d5db;
-                         padding:4px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
-            📱 연락처 입력
-          </button>
+          <div style="font-size:10px; color:#6b7280;">📱 {{ r.guardian_phone }}</div>
         {% endif %}
       </td>
-      <td style="padding:12px 10px; vertical-align:middle; color:#4b5563;">
+      <td style="padding:10px 8px; color:#4b5563; font-size:12px;">
         {{ r.diagnosis or '-' }}
         {% if r.call_memo %}
-          <div style="font-size:11px; color:#6b7280; margin-top:4px; background:#f9fafb; padding:4px 8px; border-radius:4px;">
-            💬 {{ r.call_memo[:60] }}{% if r.call_memo|length > 60 %}...{% endif %}
+          <div style="font-size:11px; color:#6b7280; margin-top:3px; background:#f9fafb; padding:3px 6px; border-radius:4px;">
+            💬 {{ r.call_memo[:80] }}{% if r.call_memo|length > 80 %}...{% endif %}
           </div>
         {% endif %}
       </td>
-      <td style="padding:12px 10px; vertical-align:middle; color:#6b7280; font-size:12px;">
-        {{ r.assignee_name or r.vet_name or '-' }}
-      </td>
-      <td style="padding:12px 10px; vertical-align:middle; text-align:right; white-space:nowrap;">
-        {% if r.status == 'pending' %}
-          <button type="button" class="btn-status" data-hcid="{{ r.id }}" data-status="done"
-                  style="background:#059669; color:#fff; border:0; padding:6px 12px;
-                         border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
-            ✅ 완료
+      <td style="padding:10px 8px; text-align:right; white-space:nowrap;">
+        {% if r.status == 'pending_draft' %}
+          <button class="btn-act" data-act="generate" data-hcid="{{ r.id }}"
+                  style="background:#dc2626; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
+            🤖 AI 초안 생성
           </button>
-          <button type="button" class="btn-status" data-hcid="{{ r.id }}" data-status="noreply"
-                  style="background:#fff; color:#6b7280; border:1px solid #d1d5db;
-                         padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;">
-            📵 불가
+        {% elif r.status == 'drafted' %}
+          <button class="btn-act" data-act="review" data-hcid="{{ r.id }}"
+                  style="background:#d97706; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
+            ✏️ 검수·승인
           </button>
-          <button type="button" class="btn-detail" data-hcid="{{ r.id }}"
-                  style="background:#fff; color:#2563eb; border:1px solid #93c5fd;
-                         padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;">
-            📝 메모
+        {% elif r.status == 'approved' %}
+          <button class="btn-act" data-act="send" data-hcid="{{ r.id }}"
+                  style="background:#2563eb; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
+            📤 발송하기
           </button>
+        {% elif r.status == 'sent' %}
+          <button class="btn-act" data-act="reply" data-hcid="{{ r.id }}"
+                  style="background:#3730a3; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
+            💬 답장 기록
+          </button>
+          <button class="btn-status" data-status="noreply" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#6b7280; border:1px solid #d1d5db; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">📵 무응답</button>
         {% else %}
-          <span style="font-size:12px; color:#6b7280;">
-            {% if r.status == 'done' %}✅ 완료{% elif r.status == 'noreply' %}📵 연락불가{% elif r.status == 'canceled' %}❌ 취소{% endif %}
-          </span>
-          <button type="button" class="btn-status" data-hcid="{{ r.id }}" data-status="pending"
-                  style="background:#fff; color:#6b7280; border:1px solid #d1d5db;
-                         padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer; margin-left:4px;">
-            ↩ 되돌림
-          </button>
-          <button type="button" class="btn-detail" data-hcid="{{ r.id }}"
-                  style="background:#fff; color:#2563eb; border:1px solid #93c5fd;
-                         padding:5px 10px; border-radius:4px; font-size:12px; cursor:pointer;">
-            📝 보기
+          <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
+            👁 보기
           </button>
         {% endif %}
       </td>
@@ -148,141 +144,239 @@
 </div>
 {% endif %}
 
-<!-- 상세/메모 모달 -->
-<div id="detail-modal" style="display:none; position:fixed; inset:0;
-     background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
-  <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:720px;
-              width:92%; max-height:85vh; overflow-y:auto; box-shadow:0 10px 40px rgba(0,0,0,.3);">
-    <h3 style="margin:0 0 12px; font-size:18px;">📞 해피콜 상세</h3>
-    <div id="modal-body" style="font-size:14px; line-height:1.6;"></div>
-    <label style="display:block; margin-top:16px; font-size:13px; color:#374151; font-weight:500;">
-      통화 메모
-      <textarea id="memo-input" rows="4" style="width:100%; margin-top:4px; padding:8px 10px;
-                font-size:14px; border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box;
-                font-family:inherit; resize:vertical;"
-                placeholder="예) 보호자 통화 완료. 식욕 정상, 구토 없음. 3일 후 재내원 예정."></textarea>
-    </label>
-    <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
-      <button type="button" id="modal-close" style="background:#f3f4f6; color:#374151; border:0;
-              padding:10px 18px; border-radius:6px; font-size:14px; cursor:pointer;">닫기</button>
-      <button type="button" id="modal-save" style="background:#2563eb; color:#fff; border:0;
-              padding:10px 18px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
-        메모 저장
-      </button>
-    </div>
+<!-- 통합 모달 -->
+<div id="modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:680px; width:92%; max-height:88vh; overflow-y:auto; box-shadow:0 10px 40px rgba(0,0,0,.3);">
+    <h3 id="modal-title" style="margin:0 0 12px; font-size:18px;">📱 카톡 안부</h3>
+    <div id="modal-body" style="font-size:13.5px;"></div>
+    <div id="modal-actions" style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;"></div>
   </div>
 </div>
 
 <script>
 (function(){
-  const modal = document.getElementById('detail-modal');
+  const modal = document.getElementById('modal');
+  const modalTitle = document.getElementById('modal-title');
   const modalBody = document.getElementById('modal-body');
-  const memoInput = document.getElementById('memo-input');
-  const btnClose = document.getElementById('modal-close');
-  const btnSave = document.getElementById('modal-save');
+  const modalActions = document.getElementById('modal-actions');
   let currentHcid = null;
 
-  function showModal(){ modal.style.display='flex'; }
-  function hideModal(){ modal.style.display='none'; currentHcid = null; }
+  function show(){ modal.style.display='flex'; }
+  function hide(){ modal.style.display='none'; currentHcid = null; }
+  modal.addEventListener('click', e => { if (e.target === modal) hide(); });
 
-  btnClose.addEventListener('click', hideModal);
-  modal.addEventListener('click', e => { if (e.target === modal) hideModal(); });
+  async function fetchDetail(hcid){
+    const r = await fetch(`/api/happy-calls/${hcid}`);
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '조회 실패');
+    return j.data;
+  }
 
-  // 상태 변경
+  // 1) AI 초안 생성
+  async function actGenerate(hcid){
+    if (!confirm('AI가 카톡 안부 초안을 작성합니다. 진행할까요?')) return;
+    currentHcid = hcid;
+    modalTitle.textContent = '🤖 AI 초안 생성 중...';
+    modalBody.innerHTML = '<div style="text-align:center; padding:40px; color:#6b7280;">Claude 가 메시지 작성 중... (10~20초)</div>';
+    modalActions.innerHTML = '';
+    show();
+    try {
+      const r = await fetch(`/api/happy-calls/${hcid}/generate-draft`, {method:'POST'});
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || '생성 실패');
+      // 생성 후 바로 검수 화면 열기
+      actReview(hcid);
+    } catch (e) {
+      modalBody.innerHTML = '<div style="color:#dc2626;">오류: ' + e.message + '</div>';
+      modalActions.innerHTML = '<button onclick="document.getElementById(\\'modal\\').style.display=\\'none\\'" style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>';
+    }
+  }
+
+  // 2) 검수·승인 (주치의)
+  async function actReview(hcid){
+    currentHcid = hcid;
+    modalTitle.textContent = '✏️ 카톡 안부 검수·승인 (주치의)';
+    modalBody.innerHTML = '<div style="text-align:center; padding:20px; color:#6b7280;">로딩...</div>';
+    modalActions.innerHTML = '';
+    show();
+    try {
+      const d = await fetchDetail(hcid);
+      const draft = d.approved_message || d.draft_message || '';
+      modalBody.innerHTML = `
+        <p style="margin:0 0 8px; font-size:13px; color:#4b5563;">
+          <strong>${d.patient_name}</strong> 보호자님께 보낼 메시지입니다. 자유롭게 첨삭한 후 [✅ 승인] 누르면 코디 발송 대기 목록으로 이동합니다.
+        </p>
+        <textarea id="m-edit" rows="12" style="width:100%; padding:12px; font-size:14px; line-height:1.7;
+                  border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical;">${draft}</textarea>
+        <p style="font-size:11px; color:#9ca3af; margin-top:6px;">💡 보내기 전 환자 이름·약물·진단 등 정확성 다시 확인해주세요.</p>
+      `;
+      modalActions.innerHTML = `
+        <button onclick="document.getElementById('modal').style.display='none'"
+                style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>
+        <button id="m-regen" style="background:#fef3c7; color:#92400e; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:500;">🔁 AI 다시 생성</button>
+        <button id="m-approve" style="background:#059669; color:#fff; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:600;">✅ 승인 (발송 대기로)</button>
+      `;
+      document.getElementById('m-regen').onclick = () => actGenerate(hcid);
+      document.getElementById('m-approve').onclick = async () => {
+        const text = document.getElementById('m-edit').value.trim();
+        if (!text) { alert('메시지가 비어있습니다.'); return; }
+        const r = await fetch(`/api/happy-calls/${hcid}/approve`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({approved_message: text})
+        });
+        const j = await r.json();
+        if (!r.ok || !j.ok) { alert('승인 실패: ' + (j.error || '')); return; }
+        hide(); location.reload();
+      };
+    } catch (e) {
+      modalBody.innerHTML = '<div style="color:#dc2626;">오류: ' + e.message + '</div>';
+    }
+  }
+
+  // 3) 발송하기 (코디)
+  async function actSend(hcid){
+    currentHcid = hcid;
+    modalTitle.textContent = '📤 카카오 비즈채널로 발송 (코디)';
+    modalBody.innerHTML = '<div style="text-align:center; padding:20px; color:#6b7280;">로딩...</div>';
+    modalActions.innerHTML = '';
+    show();
+    try {
+      const d = await fetchDetail(hcid);
+      const msg = d.approved_message || d.draft_message || '';
+      modalBody.innerHTML = `
+        <p style="margin:0 0 8px; font-size:13px; color:#4b5563;">
+          아래 메시지를 복사해서 <strong>카카오 비즈채널</strong>로 <strong>${d.guardian_name || '보호자'}</strong>에게 보내주세요.
+        </p>
+        <pre id="m-text" style="white-space:pre-wrap; font-family:inherit; font-size:14px; line-height:1.7;
+              padding:14px; background:#fef9c3; border:1.5px solid #fbbf24; border-radius:6px;
+              margin:0;">${msg.replace(/</g,'&lt;')}</pre>
+        <div style="background:#f0f9ff; padding:8px 12px; border-radius:6px; margin-top:8px; font-size:12px; color:#0c4a6e;">
+          📱 보호자 연락처: ${d.guardian_phone || '<span style="color:#dc2626;">없음 (수동 확인 필요)</span>'}
+        </div>
+      `;
+      modalActions.innerHTML = `
+        <button onclick="document.getElementById('modal').style.display='none'"
+                style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>
+        <button id="m-copy" style="background:#fef3c7; color:#92400e; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:500;">📋 복사</button>
+        <button id="m-mark-sent" style="background:#2563eb; color:#fff; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:600;">✅ 발송 완료 처리</button>
+      `;
+      document.getElementById('m-copy').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(msg);
+          document.getElementById('m-copy').textContent = '✓ 복사됨';
+        } catch (e) { alert('복사 실패. 수동 선택해서 복사해주세요.'); }
+      };
+      document.getElementById('m-mark-sent').onclick = async () => {
+        const r = await fetch(`/api/happy-calls/${hcid}/mark-sent`, {method:'POST'});
+        const j = await r.json();
+        if (!r.ok || !j.ok) { alert('실패: ' + (j.error || '')); return; }
+        hide(); location.reload();
+      };
+    } catch (e) {
+      modalBody.innerHTML = '<div style="color:#dc2626;">오류: ' + e.message + '</div>';
+    }
+  }
+
+  // 4) 답장 기록 (코디)
+  async function actReply(hcid){
+    currentHcid = hcid;
+    modalTitle.textContent = '💬 보호자 답장 기록';
+    modalActions.innerHTML = '';
+    show();
+    try {
+      const d = await fetchDetail(hcid);
+      modalBody.innerHTML = `
+        <p style="font-size:13px; color:#4b5563;">
+          <strong>${d.patient_name}</strong> 보호자님이 답장한 내용을 메모로 기록합니다.
+        </p>
+        <details style="margin:8px 0; background:#f9fafb; padding:8px 10px; border-radius:6px;">
+          <summary style="cursor:pointer; font-size:12px; color:#6b7280;">📤 발송한 메시지 보기</summary>
+          <pre style="white-space:pre-wrap; font-family:inherit; font-size:12px; margin:8px 0 0; color:#4b5563;">${(d.approved_message || d.draft_message || '').replace(/</g,'&lt;')}</pre>
+        </details>
+        <label style="display:block; margin-top:10px; font-size:13px; color:#374151; font-weight:500;">통화/답장 메모
+          <textarea id="m-memo" rows="5" style="width:100%; margin-top:4px; padding:10px; font-size:14px;
+                    border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical;"
+                    placeholder="예) 회복 잘 되고 식욕 정상. 약 부작용 없음. 2주 후 재진 예약함.">${d.call_memo || ''}</textarea>
+        </label>
+      `;
+      modalActions.innerHTML = `
+        <button onclick="document.getElementById('modal').style.display='none'"
+                style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>
+        <button id="m-mark-reply" style="background:#3730a3; color:#fff; border:0; padding:10px 18px; border-radius:6px; cursor:pointer; font-weight:600;">💬 답장 기록 + 종료</button>
+      `;
+      document.getElementById('m-mark-reply').onclick = async () => {
+        const memo = document.getElementById('m-memo').value.trim();
+        const r = await fetch(`/api/happy-calls/${hcid}/mark-replied`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({call_memo: memo})
+        });
+        const j = await r.json();
+        if (!r.ok || !j.ok) { alert('실패: ' + (j.error || '')); return; }
+        hide(); location.reload();
+      };
+    } catch (e) {
+      modalBody.innerHTML = '<div style="color:#dc2626;">오류: ' + e.message + '</div>';
+    }
+  }
+
+  // 5) 보기 (완료/취소된 항목 등)
+  async function actView(hcid){
+    currentHcid = hcid;
+    modalTitle.textContent = '👁 카톡 안부 상세';
+    modalActions.innerHTML = '<button onclick="document.getElementById(\\'modal\\').style.display=\\'none\\'" style="background:#f3f4f6; color:#374151; border:0; padding:10px 18px; border-radius:6px; cursor:pointer;">닫기</button>';
+    show();
+    try {
+      const d = await fetchDetail(hcid);
+      modalBody.innerHTML = `
+        <table style="width:100%; font-size:13px; margin-bottom:10px;">
+          <tr><th style="text-align:left; padding:4px; color:#6b7280; width:90px;">환자</th><td style="padding:4px; font-weight:600;">${d.patient_name || '-'}</td></tr>
+          <tr><th style="text-align:left; padding:4px; color:#6b7280;">보호자</th><td style="padding:4px;">${d.guardian_name || '-'} ${d.guardian_phone ? '· 📱 ' + d.guardian_phone : ''}</td></tr>
+          <tr><th style="text-align:left; padding:4px; color:#6b7280;">진단</th><td style="padding:4px;">${d.diagnosis || '-'}</td></tr>
+          <tr><th style="text-align:left; padding:4px; color:#6b7280;">상태</th><td style="padding:4px;">${d.status}</td></tr>
+        </table>
+        ${d.approved_message || d.draft_message ? `
+        <details open style="background:#fef9c3; padding:10px; border-radius:6px;">
+          <summary style="cursor:pointer; font-weight:500;">📤 보낸 메시지</summary>
+          <pre style="white-space:pre-wrap; font-family:inherit; font-size:12.5px; margin:8px 0 0; line-height:1.6;">${(d.approved_message || d.draft_message).replace(/</g,'&lt;')}</pre>
+        </details>` : ''}
+        ${d.call_memo ? `
+        <details open style="background:#e0e7ff; padding:10px; border-radius:6px; margin-top:8px;">
+          <summary style="cursor:pointer; font-weight:500;">💬 답장 메모</summary>
+          <div style="margin-top:8px; font-size:12.5px;">${d.call_memo.replace(/</g,'&lt;').replace(/\\n/g,'<br>')}</div>
+        </details>` : ''}
+      `;
+    } catch (e) {
+      modalBody.innerHTML = '<div style="color:#dc2626;">오류: ' + e.message + '</div>';
+    }
+  }
+
+  // 액션 라우터
+  document.querySelectorAll('.btn-act').forEach(btn => {
+    btn.addEventListener('click', function(){
+      const act = this.dataset.act;
+      const hcid = this.dataset.hcid;
+      if (act === 'generate') actGenerate(hcid);
+      else if (act === 'review') actReview(hcid);
+      else if (act === 'send') actSend(hcid);
+      else if (act === 'reply') actReply(hcid);
+      else if (act === 'view') actView(hcid);
+    });
+  });
+
+  // 빠른 상태 변경 (무응답 등)
   document.querySelectorAll('.btn-status').forEach(btn => {
     btn.addEventListener('click', async function(){
       const hcid = this.dataset.hcid;
-      const newStatus = this.dataset.status;
+      const status = this.dataset.status;
       this.disabled = true;
-      try {
-        const r = await fetch(`/api/happy-calls/${hcid}/update`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ status: newStatus })
-        });
-        const j = await r.json();
-        if (!r.ok || !j.ok) throw new Error(j.error || '실패');
-        location.reload();
-      } catch (e) {
-        alert('상태 변경 실패: ' + e.message);
-        this.disabled = false;
-      }
-    });
-  });
-
-  // 연락처 입력
-  document.querySelectorAll('.btn-edit-phone').forEach(btn => {
-    btn.addEventListener('click', async function(){
-      const hcid = this.dataset.hcid;
-      const phone = prompt('보호자 연락처를 입력해주세요 (예: 010-1234-5678)');
-      if (!phone) return;
-      try {
-        const r = await fetch(`/api/happy-calls/${hcid}/update`, {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ guardian_phone: phone.trim() })
-        });
-        const j = await r.json();
-        if (!r.ok || !j.ok) throw new Error(j.error || '실패');
-        location.reload();
-      } catch (e) { alert('실패: ' + e.message); }
-    });
-  });
-
-  // 상세 모달 (메모 편집 + AI 본문 조회)
-  document.querySelectorAll('.btn-detail').forEach(btn => {
-    btn.addEventListener('click', async function(){
-      const hcid = this.dataset.hcid;
-      currentHcid = hcid;
-      modalBody.innerHTML = '<div style="text-align:center; padding:20px; color:#6b7280;">로딩...</div>';
-      memoInput.value = '';
-      showModal();
-      try {
-        const r = await fetch(`/api/happy-calls/${hcid}`);
-        const j = await r.json();
-        if (!r.ok || !j.ok) throw new Error(j.error || '실패');
-        const d = j.data;
-        memoInput.value = d.call_memo || '';
-        const typeLabel = {ce:'💬 진료안내문(CE)', postop:'🏥 수술후 안내문', imd:'🩺 내과 퇴원 안내문'}[d.doc_type] || d.doc_type;
-        modalBody.innerHTML = `
-          <table style="width:100%; font-size:13px; margin-bottom:12px;">
-            <tr><th style="text-align:left; padding:4px; color:#6b7280; width:90px;">유형</th><td style="padding:4px;">${typeLabel}</td></tr>
-            <tr><th style="text-align:left; padding:4px; color:#6b7280;">환자</th><td style="padding:4px; font-weight:600;">${d.patient_name || '-'}</td></tr>
-            <tr><th style="text-align:left; padding:4px; color:#6b7280;">보호자</th><td style="padding:4px;">${d.guardian_name || '-'} ${d.guardian_phone ? '· 📱 ' + d.guardian_phone : ''}</td></tr>
-            <tr><th style="text-align:left; padding:4px; color:#6b7280;">진단/수술</th><td style="padding:4px;">${d.diagnosis || '-'}</td></tr>
-            <tr><th style="text-align:left; padding:4px; color:#6b7280;">담당</th><td style="padding:4px;">${d.vet_name || '-'}</td></tr>
-            <tr><th style="text-align:left; padding:4px; color:#6b7280;">예정일</th><td style="padding:4px;">${d.scheduled_date}</td></tr>
-          </table>
-          ${d.doc_body ? `
-          <details style="margin-top:12px; background:#f9fafb; padding:10px; border-radius:6px;">
-            <summary style="cursor:pointer; font-weight:500; color:#374151;">📄 AI 생성 안내문 본문 (통화 전 참고)</summary>
-            <pre style="white-space:pre-wrap; font-family:inherit; font-size:12.5px; line-height:1.6; margin:10px 0 0 0; color:#4b5563;">${d.doc_body.replace(/</g,'&lt;')}</pre>
-          </details>` : ''}
-        `;
-      } catch (e) {
-        modalBody.innerHTML = '<div style="color:#dc2626;">오류: ' + e.message + '</div>';
-      }
-    });
-  });
-
-  // 메모 저장
-  btnSave.addEventListener('click', async function(){
-    if (!currentHcid) return;
-    btnSave.disabled = true;
-    btnSave.textContent = '저장 중...';
-    try {
-      const r = await fetch(`/api/happy-calls/${currentHcid}/update`, {
+      const r = await fetch(`/api/happy-calls/${hcid}/update`, {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ call_memo: memoInput.value })
+        body: JSON.stringify({status: status})
       });
       const j = await r.json();
-      if (!r.ok || !j.ok) throw new Error(j.error || '실패');
-      hideModal();
+      if (!r.ok || !j.ok) { alert('실패'); this.disabled = false; return; }
       location.reload();
-    } catch (e) {
-      alert('저장 실패: ' + e.message);
-    } finally {
-      btnSave.disabled = false;
-      btnSave.textContent = '메모 저장';
-    }
+    });
   });
 })();
 </script>

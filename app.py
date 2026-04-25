@@ -211,6 +211,21 @@ def init_db():
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_happycall_date ON happy_calls(scheduled_date)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_happycall_status ON happy_calls(status)")
+    # happy_calls 마이그레이션: 카톡 워크플로 컬럼 추가
+    cur.execute("PRAGMA table_info(happy_calls)")
+    hc_cols = [c[1] for c in cur.fetchall()]
+    for col, ddl in [
+        ("draft_message", "ALTER TABLE happy_calls ADD COLUMN draft_message TEXT"),
+        ("approved_message", "ALTER TABLE happy_calls ADD COLUMN approved_message TEXT"),
+        ("approved_at", "ALTER TABLE happy_calls ADD COLUMN approved_at TEXT"),
+        ("approved_by", "ALTER TABLE happy_calls ADD COLUMN approved_by INTEGER"),
+        ("sent_at", "ALTER TABLE happy_calls ADD COLUMN sent_at TEXT"),
+        ("sent_by", "ALTER TABLE happy_calls ADD COLUMN sent_by INTEGER"),
+        ("reply_received_at", "ALTER TABLE happy_calls ADD COLUMN reply_received_at TEXT"),
+    ]:
+        if col not in hc_cols:
+            cur.execute(ddl)
+    con.commit()
     # 통합 환자 문서 테이블 (환자별·질환별 히스토리 + 미래 AI 추천용)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS patient_documents (
@@ -424,17 +439,25 @@ def dashboard():
     ).fetchone()[0]
     # 해피콜: 오늘 예정 건 + 밀린 건 (지난 날짜 미완료)
     today_str = datetime.now().strftime("%Y-%m-%d")
-    hc_today = db.execute(
-        "SELECT COUNT(*) FROM happy_calls WHERE status='pending' AND scheduled_date=?",
-        (today_str,)
+    # 카톡 안부 stats
+    hc_pending_draft = db.execute(
+        "SELECT COUNT(*) FROM happy_calls WHERE status='pending_draft'"
     ).fetchone()[0]
-    hc_overdue = db.execute(
-        "SELECT COUNT(*) FROM happy_calls WHERE status='pending' AND scheduled_date<?",
-        (today_str,)
+    hc_drafted = db.execute(
+        "SELECT COUNT(*) FROM happy_calls WHERE status='drafted'"
     ).fetchone()[0]
+    hc_approved = db.execute(
+        "SELECT COUNT(*) FROM happy_calls WHERE status='approved'"
+    ).fetchone()[0]
+    # 호환성을 위해 기존 필드도 유지 (legacy)
+    hc_today = hc_pending_draft + hc_drafted
+    hc_overdue = hc_approved
     return render_template("dashboard.html", counts=counts, total=sum(counts.values()),
                            pending_cnt=pending_cnt, signed_cnt=signed_cnt,
-                           hc_today=hc_today, hc_overdue=hc_overdue)
+                           hc_today=hc_today, hc_overdue=hc_overdue,
+                           hc_pending_draft=hc_pending_draft,
+                           hc_drafted=hc_drafted,
+                           hc_approved=hc_approved)
 
 
 @app.route("/surgeries")
@@ -1656,7 +1679,7 @@ def api_happy_call_create():
         """INSERT INTO happy_calls
            (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
             vet_name, assignee_id, scheduled_date, status, doc_body, created_by)
-           VALUES (?,?,?,?,?,?,?,?,'pending',?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,'pending_draft',?,?)""",
         (doc_type,
          patient,
          (data.get("guardian_name") or "").strip(),
@@ -1688,7 +1711,7 @@ def api_happy_call_create():
 @login_required
 def happy_calls_list():
     """해피콜 목록 (필터·정렬)."""
-    status_filter = (request.args.get("status") or "pending").strip()
+    status_filter = (request.args.get("status") or "active").strip()
     doc_type_filter = (request.args.get("doc_type") or "").strip()
     q = (request.args.get("q") or "").strip()
 
@@ -1697,9 +1720,11 @@ def happy_calls_list():
              LEFT JOIN users u ON u.id = hc.assignee_id
              WHERE 1=1"""
     args = []
-    if status_filter in ("pending", "done", "noreply", "canceled"):
+    if status_filter in ("pending_draft", "drafted", "approved", "sent", "replied", "done", "noreply", "canceled"):
         sql += " AND hc.status=?"
         args.append(status_filter)
+    elif status_filter == "active":
+        sql += " AND hc.status IN ('pending_draft', 'drafted', 'approved', 'sent')"
     elif status_filter == "all":
         pass
     if doc_type_filter in ("ce", "postop", "imd"):
@@ -1710,8 +1735,8 @@ def happy_calls_list():
         like = f"%{q}%"
         args += [like, like, like]
 
-    # 정렬: pending 은 오래된 것부터 (밀린 건 먼저), 나머지는 최근 순
-    if status_filter == "pending":
+    # 정렬: 진행 중인 것은 오래된 것부터 (먼저 처리), 나머지는 최근 순
+    if status_filter in ("active", "pending_draft", "drafted", "approved", "sent"):
         sql += " ORDER BY hc.scheduled_date ASC, hc.created_at ASC"
     else:
         sql += " ORDER BY hc.scheduled_date DESC, hc.created_at DESC"
@@ -1788,6 +1813,176 @@ def api_happy_call_detail(hc_id):
     if not row:
         return jsonify({"ok": False, "error": "not found"}), 404
     return jsonify({"ok": True, "data": dict(row)})
+
+# ===================== 카톡 안부 (해피콜 카톡 워크플로) =====================
+# pending_draft → drafted → approved → sent → replied → done
+# 주치의가 AI초안 만들어 첨삭 후 승인 → 코디가 카톡으로 발송 → 답장 기록
+
+KAKAO_HC_PROMPT = """당신은 한국 24시루시드 동물병원의 코디네이터가 보호자에게 보낼 카톡 안부 메시지를 작성하는 전문가입니다.
+
+**톤과 양식 (매우 중요)**:
+- 친근하고 따뜻한 카톡 톤. 너무 길지 않게 (5~7줄).
+- 이모지 적절히 사용 (과하지 않게, 1~3개 정도).
+- 첫 줄: "🐾 [환자]이 보호자님, 24시루시드 동물병원입니다." (조사는 받침에 맞춰서)
+- 마지막 줄: "조금이라도 걱정되는 점 있으시면 이 채팅으로 답장 주시거나 02-941-7900 으로 전화 주세요. 언제든 도와드리겠습니다. 🙏"
+
+**메시지 구성**:
+1. 인사 + 병원 소개
+2. [수술명/진단명] 후 안부 (한 줄)
+3. 보호자가 점검할 핵심 항목 3가지 (환자 상황에 맞춤, 이모지 포함)
+4. 답장/문의 안내
+
+**환자 상태별 톤**:
+- "좋은 경과로 퇴원": 안심되는 따뜻한 톤
+- "회복이 지연 중 퇴원": 차분히 주의 깊게, 작은 변화도 알려달라는 부탁
+- "상태 악화 중 퇴원": 진지하고 적극적, "조금이라도 이상하면 즉시 연락"
+
+**출력 규칙**:
+- 마크다운·코드블록·헤더 금지. 일반 카톡 메시지처럼 자연스럽게.
+- 입력된 진단/수술/처방 정확히 반영. 추측 금지.
+- 7줄 이내로 간결하게.
+"""
+
+
+@app.route("/api/happy-calls/<int:hc_id>/generate-draft", methods=["POST"])
+@login_required
+def api_happy_call_generate_draft(hc_id):
+    """주치의가 클릭 → AI가 환자 정보 기반 카톡 안부 메시지 초안 생성."""
+    if requests is None:
+        return jsonify({"ok": False, "error": "'requests' 패키지 미설치"}), 500
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"ok": False, "error": "ANTHROPIC_API_KEY 미설정"}), 400
+
+    db = get_db()
+    row = db.execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+
+    # 환자 정보
+    patient = row["patient_name"] or ""
+    guardian = row["guardian_name"] or ""
+    diagnosis = row["diagnosis"] or ""
+    doc_type = row["doc_type"]
+    doc_body = row["doc_body"] or ""
+
+    # patient_documents 에서 관련 history 추가 조회 (있으면 reference)
+    history_rows = db.execute(
+        """SELECT doc_type, diagnosis, structured_data FROM patient_documents
+           WHERE patient_name=? ORDER BY created_at DESC LIMIT 5""", (patient,)
+    ).fetchall()
+    history_summary = []
+    for h in history_rows:
+        sd = {}
+        if h["structured_data"]:
+            try: sd = json.loads(h["structured_data"])
+            except: pass
+        meds = sd.get("medications", "")
+        status = sd.get("discharge_status", "")
+        if meds or status:
+            history_summary.append(f"- {h['doc_type']}: {h['diagnosis'] or ''} (약: {meds}, 퇴원상태: {status})")
+
+    user_msg_parts = [
+        f"[환자 정보]",
+        f"- 환자 이름: {patient}",
+        f"- 보호자: {guardian}",
+        f"- 진단/수술명: {diagnosis}",
+        f"- 안내문 유형: {HAPPYCALL_DOC_LABELS.get(doc_type, doc_type)}",
+    ]
+    if history_summary:
+        user_msg_parts += ["\n[이 환자의 최근 history]"] + history_summary
+    if doc_body:
+        # 안내문 본문 첫 800자만
+        body_excerpt = doc_body[:800] + ("..." if len(doc_body) > 800 else "")
+        user_msg_parts += ["\n[보낸 안내문 요약]", body_excerpt]
+    user_msg_parts.append("\n위 정보를 바탕으로 보호자에게 보낼 카톡 안부 메시지를 작성해주세요.")
+    user_msg = "\n".join(user_msg_parts)
+
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 1500,
+                "system": KAKAO_HC_PROMPT,
+                "messages": [{"role": "user", "content": user_msg}],
+            },
+            timeout=60,
+        )
+        if r.status_code != 200:
+            return jsonify({"ok": False, "error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
+        body = r.json()
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith(("text","markdown","md")):
+                text = text.split("\n", 1)[1] if "\n" in text else ""
+            text = text.strip().rstrip("`").strip()
+        # DB 에 draft_message 저장 + status 변경
+        db.execute(
+            "UPDATE happy_calls SET draft_message=?, status='drafted' WHERE id=?",
+            (text, hc_id)
+        )
+        db.commit()
+        return jsonify({"ok": True, "draft_message": text})
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"AI 요청 실패: {e}"}), 500
+
+
+@app.route("/api/happy-calls/<int:hc_id>/approve", methods=["POST"])
+@login_required
+def api_happy_call_approve(hc_id):
+    """주치의 승인: 첨삭한 최종 메시지 저장 + 상태=approved."""
+    data = request.get_json() or {}
+    final_message = (data.get("approved_message") or "").strip()
+    if not final_message:
+        return jsonify({"ok": False, "error": "메시지 내용 누락"}), 400
+    db = get_db()
+    row = db.execute("SELECT id FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    db.execute(
+        """UPDATE happy_calls SET approved_message=?, status='approved',
+           approved_at=?, approved_by=? WHERE id=?""",
+        (final_message, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+         session.get("user_id"), hc_id)
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/happy-calls/<int:hc_id>/mark-sent", methods=["POST"])
+@login_required
+def api_happy_call_mark_sent(hc_id):
+    """코디 발송 완료."""
+    db = get_db()
+    db.execute(
+        "UPDATE happy_calls SET status='sent', sent_at=?, sent_by=? WHERE id=?",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), session.get("user_id"), hc_id)
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/happy-calls/<int:hc_id>/mark-replied", methods=["POST"])
+@login_required
+def api_happy_call_mark_replied(hc_id):
+    """답장 받음 + 메모 입력."""
+    data = request.get_json() or {}
+    memo = (data.get("call_memo") or "").strip()
+    db = get_db()
+    db.execute(
+        """UPDATE happy_calls SET status='replied', call_memo=?, reply_received_at=?,
+           completed_at=? WHERE id=?""",
+        (memo, datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+         datetime.now().strftime("%Y-%m-%d %H:%M:%S"), hc_id)
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
 
 # ===================== 통합 환자 문서 시스템 =====================
 # 모든 동의서/안내문/해피콜을 환자별·질환별로 조회하기 위한 통합 저장소.
