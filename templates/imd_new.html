@@ -330,6 +330,7 @@ document.getElementById('btn-generate').addEventListener('click', async function
           guardian_phone: payload.guardian_mobile || '',
           diagnosis: payload.diagnosis,
           doc_body: d.text,
+          followup_date: payload.followup1_date || '',
         })
       });
       status.textContent = '✓ 완료 · 📞 해피콜 자동 등록됨 (3일 뒤)';

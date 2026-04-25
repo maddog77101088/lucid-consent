@@ -1670,7 +1670,9 @@ HAPPYCALL_DOC_LABELS = {"ce": "진료안내문(CE)", "postop": "수술후 안내
 def api_happy_call_create():
     """안내문 생성 시 자동으로 해피콜 등록. JSON body.
     필수: doc_type, patient_name
-    선택: guardian_name, guardian_phone, diagnosis, vet_name, doc_body, days_offset
+    선택: guardian_name, guardian_phone, diagnosis, vet_name, doc_body, days_offset, followup_date
+    followup_date(YYYY-MM-DD)가 scheduled_date 이전 또는 동일이면 'next_day_revisit'(익일재진)으로
+    저장하고 카톡 안부 작성·발송 워크플로는 스킵 (히스토리만 남김).
     """
     data = request.get_json() or {}
     doc_type = (data.get("doc_type") or "").strip()
@@ -1688,6 +1690,20 @@ def api_happy_call_create():
 
     scheduled = (datetime.now() + timedelta(days=days_offset)).strftime("%Y-%m-%d")
 
+    # 익일재진 자동 감지: followup_date 가 scheduled_date 이전 또는 동일이면 카톡 안부 스킵
+    followup_date = (data.get("followup_date") or "").strip()
+    auto_skip = False
+    skip_memo = ""
+    if followup_date and len(followup_date) == 10:
+        try:
+            if followup_date <= scheduled:
+                auto_skip = True
+                skip_memo = f"익일재진({followup_date}) 예정 — 카톡 안부 자동 스킵"
+        except Exception:
+            pass
+
+    initial_status = "next_day_revisit" if auto_skip else "pending_draft"
+
     db = get_db()
     # doc_body 는 참고용 짧은 요약만 저장 (전체 본문은 patient_documents에서 조회)
     full_body = (data.get("doc_body") or "").strip()
@@ -1695,8 +1711,8 @@ def api_happy_call_create():
     cur = db.execute(
         """INSERT INTO happy_calls
            (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
-            vet_name, assignee_id, scheduled_date, status, doc_body, created_by)
-           VALUES (?,?,?,?,?,?,?,?,'pending_draft',?,?)""",
+            vet_name, assignee_id, scheduled_date, status, doc_body, call_memo, created_by)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
         (doc_type,
          patient,
          (data.get("guardian_name") or "").strip(),
@@ -1705,12 +1721,15 @@ def api_happy_call_create():
          (data.get("vet_name") or session.get("display_name", "")).strip(),
          session.get("user_id"),
          scheduled,
+         initial_status,
          body_summary,
+         skip_memo,
          session.get("user_id", 0))
     )
     db.commit()
     hc_id = cur.lastrowid
-    return jsonify({"ok": True, "id": hc_id, "scheduled_date": scheduled})
+    return jsonify({"ok": True, "id": hc_id, "scheduled_date": scheduled,
+                    "status": initial_status, "skipped": auto_skip})
 
 
 @app.route("/happy-calls", methods=["GET"])
@@ -1726,7 +1745,8 @@ def happy_calls_list():
              LEFT JOIN users u ON u.id = hc.assignee_id
              WHERE 1=1"""
     args = []
-    if status_filter in ("pending_draft", "drafted", "approved", "sent", "replied", "done", "noreply", "canceled"):
+    if status_filter in ("pending_draft", "drafted", "approved", "sent", "replied",
+                         "done", "noreply", "canceled", "next_day_revisit"):
         sql += " AND hc.status=?"
         args.append(status_filter)
     elif status_filter == "active":
@@ -1772,7 +1792,7 @@ def api_happy_call_update(hc_id):
     for k in ("status", "call_memo", "guardian_phone", "scheduled_date"):
         if k in data:
             val = data[k]
-            if k == "status" and val not in ("pending", "done", "noreply", "canceled"):
+            if k == "status" and val not in ("pending", "done", "noreply", "canceled", "next_day_revisit", "pending_draft"):
                 continue
             fields.append(f"{k}=?")
             args.append((val or "").strip() if isinstance(val, str) else val)
