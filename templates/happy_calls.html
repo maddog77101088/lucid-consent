@@ -9,7 +9,7 @@
 
 <!-- 워크플로 안내 -->
 <div style="background:#f9fafb; padding:10px 14px; border-radius:8px; margin:14px 0; font-size:12px; color:#4b5563; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-  <span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:8px; font-weight:600;">📝 초안대기</span>
+  <span style="background:#fee2e2; color:#991b1b; padding:2px 8px; border-radius:8px; font-weight:600;">📝 작성대기</span>
   <span style="color:#9ca3af;">→</span>
   <span style="background:#dbeafe; color:#1e40af; padding:2px 8px; border-radius:8px; font-weight:600;">✅ 발송대기</span>
   <span style="color:#9ca3af;">→</span>
@@ -19,7 +19,7 @@
   <span style="color:#9ca3af;">→</span>
   <span style="background:#f3f4f6; color:#6b7280; padding:2px 8px; border-radius:8px; font-weight:600;">✓ 종료</span>
   <span style="color:#9ca3af;">·</span>
-  <span style="background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:8px; font-weight:600;">🔁 익일재안부</span>
+  <span style="background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:8px; font-weight:600;">🔁 2차발송</span>
 </div>
 
 <form method="get" action="{{ url_for('happy_calls_list') }}"
@@ -32,7 +32,7 @@
                               border:1.5px solid #d1d5db; border-radius:6px;
                               background:#fff; cursor:pointer;">
     <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🔥 진행중 (전체)</option>
-    <option value="pending_draft" {% if status_filter == 'pending_draft' %}selected{% endif %}>📝 초안대기 (주치의)</option>
+    <option value="pending_draft" {% if status_filter == 'pending_draft' %}selected{% endif %}>📝 작성대기 (주치의)</option>
     <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>✅ 발송대기 (코디)</option>
     <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>📤 발송완료 (답장 대기)</option>
     <option value="replied" {% if status_filter == 'replied' %}selected{% endif %}>💬 답장 (전체 분류)</option>
@@ -45,7 +45,7 @@
     <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✓ 종료</option>
     <option value="noreply" {% if status_filter == 'noreply' %}selected{% endif %}>📵 무응답</option>
     <option value="canceled" {% if status_filter == 'canceled' %}selected{% endif %}>❌ 취소</option>
-    <option value="next_day_revisit" {% if status_filter == 'next_day_revisit' %}selected{% endif %}>🔁 익일재안부</option>
+    <option value="next_day_revisit" {% if status_filter == 'next_day_revisit' %}selected{% endif %}>🔁 2차발송</option>
     <option value="all" {% if status_filter == 'all' %}selected{% endif %}>전체</option>
   </select>
   <select name="doc_type" style="padding:10px 12px; font-size:14px;
@@ -61,7 +61,7 @@
 </form>
 
 {% set status_styles = {
-  'pending_draft': ('#fee2e2', '#991b1b', '📝 초안대기'),
+  'pending_draft': ('#fee2e2', '#991b1b', '📝 작성대기'),
   'drafted': ('#fef3c7', '#92400e', '🤖 검수중'),
   'approved': ('#dbeafe', '#1e40af', '✅ 발송대기'),
   'sent': ('#d1fae5', '#047857', '📤 발송완료'),
@@ -69,7 +69,7 @@
   'done': ('#f3f4f6', '#6b7280', '✓ 종료'),
   'noreply': ('#fef2f2', '#9ca3af', '📵 무응답'),
   'canceled': ('#f3f4f6', '#9ca3af', '❌ 취소'),
-  'next_day_revisit': ('#ede9fe', '#6d28d9', '🔁 익일재안부'),
+  'next_day_revisit': ('#ede9fe', '#6d28d9', '🔁 2차발송'),
 } %}
 {# replied 상태인 경우 ai_classification 기반으로 라벨 변환 #}
 {% set cls_styles = {
@@ -108,6 +108,11 @@
     <tr data-hcid="{{ r.id }}" style="border-bottom:1px solid #f3f4f6;">
       <td style="padding:10px 8px;">
         <span style="background:{{ bg }}; color:{{ fg }}; padding:3px 8px; border-radius:8px; font-size:11px; font-weight:600; white-space:nowrap;">{{ label }}</span>
+        {% if r.is_followup %}
+        <div style="margin-top:3px;">
+          <span style="background:#ede9fe; color:#6d28d9; padding:2px 6px; border-radius:6px; font-size:10px; font-weight:600;">🔁 재안부</span>
+        </div>
+        {% endif %}
       </td>
       <td style="padding:10px 8px; font-size:11px; color:#6b7280;">
         {% if r.doc_type == 'ce' %}💬 CE{% elif r.doc_type == 'postop' %}🏥 수술후{% elif r.doc_type == 'imd' %}🩺 내과{% endif %}
@@ -143,7 +148,7 @@
           {% if not r.draft_message %}
           <button class="btn-status" data-status="next_day_revisit" data-hcid="{{ r.id }}"
                   title="익일에 직접 재진하므로 카톡 안부 스킵"
-                  style="background:#fff; color:#6d28d9; border:1px solid #c4b5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🔁 익일재안부</button>
+                  style="background:#fff; color:#6d28d9; border:1px solid #c4b5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🔁 2차발송</button>
           {% endif %}
         {% elif r.status == 'approved' %}
           <button class="btn-act" data-act="send" data-hcid="{{ r.id }}"

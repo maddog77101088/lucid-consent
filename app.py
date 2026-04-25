@@ -227,6 +227,8 @@ def init_db():
         ("survey_submitted_at", "ALTER TABLE happy_calls ADD COLUMN survey_submitted_at TEXT"),
         ("ai_classification", "ALTER TABLE happy_calls ADD COLUMN ai_classification TEXT"),
         ("ai_summary", "ALTER TABLE happy_calls ADD COLUMN ai_summary TEXT"),
+        ("is_followup", "ALTER TABLE happy_calls ADD COLUMN is_followup INTEGER DEFAULT 0"),
+        ("followup_of", "ALTER TABLE happy_calls ADD COLUMN followup_of INTEGER"),
     ]:
         if col not in hc_cols:
             cur.execute(ddl)
@@ -457,12 +459,15 @@ def dashboard():
     hc_approved = db.execute(
         "SELECT COUNT(*) FROM happy_calls WHERE status='approved'"
     ).fetchone()[0]
-    # 긴급 응답 (응급/약부작용) - 주치의 피드백 필요
+    # 긴급 응답 (악화/약물) - 24시간 이내 replied 만
+    cutoff_24h = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     hc_urgent = db.execute(
         """SELECT COUNT(*) FROM happy_calls
            WHERE survey_submitted_at IS NOT NULL
+             AND survey_submitted_at >= ?
              AND ai_classification IN ('worsening','medication')
-             AND status='replied'"""
+             AND status='replied'""",
+        (cutoff_24h,)
     ).fetchone()[0]
     # 호환성을 위해 기존 필드도 유지 (legacy)
     hc_today = hc_pending_draft + hc_drafted
@@ -1752,6 +1757,7 @@ def happy_calls_list():
         sql += " AND hc.status=?"
         args.append(status_filter)
     elif status_filter == "active":
+        # 진행중 = 작성/발송 단계 (답장 받은 건은 피드백 카드에서 별도 처리)
         sql += " AND hc.status IN ('pending_draft', 'drafted', 'approved', 'sent')"
     elif status_filter == "cls_urgent":
         # 긴급검토필요 = 상태악화 + 약 부작용/거부 (replied 중에서)
@@ -2034,30 +2040,8 @@ def care_survey_submit(token):
     )
     db.commit()
 
-    # 분류별 자동 액션
-    if classification == "good":
-        # 정상회복 → 자동 종료
-        db.execute("UPDATE happy_calls SET status='done', completed_at=? WHERE id=?",
-                   (submitted_at, row["id"]))
-        db.commit()
-    elif classification == "delayed":
-        # 지연 → 다음날 재안부 자동 등록
-        try:
-            next_scheduled = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-            db.execute(
-                """INSERT INTO happy_calls
-                   (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
-                    vet_name, assignee_id, scheduled_date, status, doc_body, created_by)
-                   VALUES (?,?,?,?,?,?,?,?,'pending_draft',?,?)""",
-                (row["doc_type"], row["patient_name"], row["guardian_name"],
-                 row["guardian_phone"], row["diagnosis"], row["vet_name"],
-                 row["assignee_id"], next_scheduled,
-                 f"[자동 재안부] 이전 안부 응답: {summary}", row["created_by"])
-            )
-            db.commit()
-        except Exception:
-            pass
-    # worsening → 별도 액션 없이 그대로 두면 대시보드 빨간 뱃지로 표시됨
+    # 모든 분류는 일단 status='replied'로 두고 피드백 카드에서 주치의가 [✓ 종료] 또는
+    # [🔁 재안부 등록] 액션으로 직접 처리. (자동 종료/자동 재안부 모두 폐지)
 
     return jsonify({"ok": True, "classification": classification})
 
@@ -2070,11 +2054,15 @@ def care_feedback():
     """카톡 안부 응답 결과 - 분류별·환자별 보기 (주치의용)."""
     cls_filter = (request.args.get("cls") or "all").strip()
     db = get_db()
+    # 24시간 이내 피드백만 (그 이후는 자동 보관 처리되어 페이지에 안 보임)
+    cutoff = (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
     sql = """SELECT hc.*, u.display_name AS vet_display
              FROM happy_calls hc
              LEFT JOIN users u ON u.id = hc.assignee_id
-             WHERE hc.survey_submitted_at IS NOT NULL"""
-    args = []
+             WHERE hc.survey_submitted_at IS NOT NULL
+               AND hc.survey_submitted_at >= ?
+               AND hc.status='replied'"""
+    args = [cutoff]
     if cls_filter in ("good", "delayed", "worsening", "medication", "other"):
         sql += " AND hc.ai_classification=?"
         args.append(cls_filter)
@@ -2082,14 +2070,63 @@ def care_feedback():
         sql += " AND hc.ai_classification IN ('worsening', 'medication')"
     sql += " ORDER BY hc.survey_submitted_at DESC LIMIT 200"
     rows = db.execute(sql, args).fetchall()
-    # 통계
+    # 통계 (24시간 이내, replied 만)
     stats = {}
     for c in ("good", "delayed", "worsening", "medication", "other"):
         stats[c] = db.execute(
-            "SELECT COUNT(*) FROM happy_calls WHERE ai_classification=?", (c,)
+            """SELECT COUNT(*) FROM happy_calls
+               WHERE ai_classification=? AND status='replied'
+                 AND survey_submitted_at >= ?""",
+            (c, cutoff)
         ).fetchone()[0]
     return render_template("care_feedback.html",
                            rows=rows, cls_filter=cls_filter, stats=stats)
+
+
+@app.route("/api/happy-calls/<int:hc_id>/register-followup", methods=["POST"])
+@login_required
+def api_happy_call_register_followup(hc_id):
+    """피드백 카드의 [🔁 재안부 등록] — 다음날 날짜로 새 happy_call 생성, 원본은 done 처리."""
+    db = get_db()
+    row = db.execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    next_scheduled = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    summary = row["ai_summary"] or ""
+    classification = row["ai_classification"] or ""
+    db.execute(
+        """INSERT INTO happy_calls
+           (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
+            vet_name, assignee_id, scheduled_date, status, doc_body,
+            is_followup, followup_of, created_by)
+           VALUES (?,?,?,?,?,?,?,?,'pending_draft',?,1,?,?)""",
+        (row["doc_type"], row["patient_name"], row["guardian_name"],
+         row["guardian_phone"], row["diagnosis"], row["vet_name"],
+         row["assignee_id"], next_scheduled,
+         f"[재안부] 이전 분류: {classification} / {summary}",
+         row["id"], session.get("user_id", 0))
+    )
+    # 원본 응답은 done 처리 (피드백에서 빠짐)
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("UPDATE happy_calls SET status='done', completed_at=? WHERE id=?",
+               (now_str, hc_id))
+    db.commit()
+    return jsonify({"ok": True, "scheduled_date": next_scheduled})
+
+
+@app.route("/api/happy-calls/<int:hc_id>/close-feedback", methods=["POST"])
+@login_required
+def api_happy_call_close_feedback(hc_id):
+    """피드백 카드의 [✓ 종료] — replied 답장을 done 처리."""
+    db = get_db()
+    row = db.execute("SELECT id FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute("UPDATE happy_calls SET status='done', completed_at=? WHERE id=?",
+               (now_str, hc_id))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/happy-calls/<int:hc_id>/generate-draft", methods=["POST"])

@@ -87,15 +87,51 @@
           {% endif %}
         </div>
       </details>
-      {% if r.guardian_phone %}
-        <div style="margin-top:8px;">
+      <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        {% if r.guardian_phone %}
           <a href="tel:{{ r.guardian_phone }}" style="display:inline-block; background:#2563eb; color:#fff; padding:6px 14px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:600;">📞 {{ r.guardian_phone }} 전화</a>
-        </div>
-      {% endif %}
+        {% endif %}
+        <button class="btn-followup" data-hcid="{{ r.id }}"
+                style="background:#6d28d9; color:#fff; border:0; padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">
+          🔁 재안부 등록 (내일)
+        </button>
+        <button class="btn-close" data-hcid="{{ r.id }}"
+                style="background:#059669; color:#fff; border:0; padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer;">
+          ✓ 종료
+        </button>
+      </div>
     </div>
   </div>
   {% endfor %}
 </div>
+
+<script>
+(function(){
+  document.querySelectorAll('.btn-followup').forEach(btn => {
+    btn.addEventListener('click', async function(){
+      if (!confirm('이 환자에게 내일 재안부 카톡을 등록할까요?\n(원본 답장은 종료 처리되고, 카톡 안부 관리에 🔁 재안부 행이 새로 생깁니다)')) return;
+      this.disabled = true;
+      const hcid = this.dataset.hcid;
+      const r = await fetch(`/api/happy-calls/${hcid}/register-followup`, {method:'POST'});
+      const j = await r.json();
+      if (!r.ok || !j.ok) { alert('실패: ' + (j.error || '')); this.disabled = false; return; }
+      alert('✓ 재안부 등록 완료 — 예정일: ' + j.scheduled_date);
+      location.reload();
+    });
+  });
+  document.querySelectorAll('.btn-close').forEach(btn => {
+    btn.addEventListener('click', async function(){
+      if (!confirm('이 응답을 종료 처리할까요?')) return;
+      this.disabled = true;
+      const hcid = this.dataset.hcid;
+      const r = await fetch(`/api/happy-calls/${hcid}/close-feedback`, {method:'POST'});
+      const j = await r.json();
+      if (!r.ok || !j.ok) { alert('실패: ' + (j.error || '')); this.disabled = false; return; }
+      location.reload();
+    });
+  });
+})();
+</script>
 
 {% endif %}
 
