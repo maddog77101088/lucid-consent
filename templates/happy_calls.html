@@ -140,9 +140,11 @@
                   style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
             ✏️ {% if r.draft_message %}이어서 편집{% else %}직접작성{% endif %}
           </button>
+          {% if not r.draft_message %}
           <button class="btn-status" data-status="next_day_revisit" data-hcid="{{ r.id }}"
                   title="익일에 직접 재진하므로 카톡 안부 스킵"
                   style="background:#fff; color:#6d28d9; border:1px solid #c4b5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🔁 익일재안부</button>
+          {% endif %}
         {% elif r.status == 'approved' %}
           <button class="btn-act" data-act="send" data-hcid="{{ r.id }}"
                   style="background:#2563eb; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
