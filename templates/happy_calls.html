@@ -15,11 +15,10 @@
   <span style="color:#9ca3af;">→</span>
   <span style="background:#d1fae5; color:#047857; padding:2px 8px; border-radius:8px; font-weight:600;">📤 발송완료</span>
   <span style="color:#9ca3af;">→</span>
-  <span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:8px; font-weight:600;">💬 분류된 답장</span>
+  <span style="background:#e0e7ff; color:#3730a3; padding:2px 8px; border-radius:8px; font-weight:600;">💬 응답대기</span>
   <span style="color:#9ca3af;">→</span>
   <span style="background:#f3f4f6; color:#6b7280; padding:2px 8px; border-radius:8px; font-weight:600;">✓ 종료</span>
-  <span style="color:#9ca3af;">·</span>
-  <span style="background:#ede9fe; color:#6d28d9; padding:2px 8px; border-radius:8px; font-weight:600;">🚫 카톡 스킵</span>
+  <span style="color:#9ca3af; margin-left:6px; font-size:11px;">· 재안부 등록 시 동일 흐름 반복 (🔁 재안부 표시)</span>
 </div>
 
 <form method="get" action="{{ url_for('happy_calls_list') }}"
@@ -34,16 +33,8 @@
     <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🔥 진행중 (전체)</option>
     <option value="pending_draft" {% if status_filter == 'pending_draft' %}selected{% endif %}>📝 작성대기 (주치의)</option>
     <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>✅ 발송대기 (코디)</option>
-    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>📤 발송완료 (답장 대기)</option>
-    <option value="replied" {% if status_filter == 'replied' %}selected{% endif %}>💬 답장 (전체 분류)</option>
-    <option value="cls_urgent" {% if status_filter == 'cls_urgent' %}selected{% endif %}>🚨 긴급검토필요 (악화+약물)</option>
-    <option value="cls_worsening" {% if status_filter == 'cls_worsening' %}selected{% endif %}>🔥 상태악화</option>
-    <option value="cls_medication" {% if status_filter == 'cls_medication' %}selected{% endif %}>💊 약 부작용/거부</option>
-    <option value="cls_delayed" {% if status_filter == 'cls_delayed' %}selected{% endif %}>⚠️ 회복지연</option>
-    <option value="cls_good" {% if status_filter == 'cls_good' %}selected{% endif %}>✅ 정상회복</option>
-    <option value="cls_other" {% if status_filter == 'cls_other' %}selected{% endif %}>❓ 기타질문</option>
+    <option value="sent" {% if status_filter == 'sent' %}selected{% endif %}>💬 응답대기</option>
     <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✓ 종료</option>
-    <option value="noreply" {% if status_filter == 'noreply' %}selected{% endif %}>📵 무응답</option>
     <option value="canceled" {% if status_filter == 'canceled' %}selected{% endif %}>❌ 취소</option>
     <option value="next_day_revisit" {% if status_filter == 'next_day_revisit' %}selected{% endif %}>🚫 카톡 스킵</option>
     <option value="all" {% if status_filter == 'all' %}selected{% endif %}>전체</option>
@@ -64,14 +55,14 @@
   'pending_draft': ('#fee2e2', '#991b1b', '📝 작성대기'),
   'drafted': ('#fef3c7', '#92400e', '🤖 검수중'),
   'approved': ('#dbeafe', '#1e40af', '✅ 발송대기'),
-  'sent': ('#d1fae5', '#047857', '📤 발송완료'),
+  'sent': ('#e0e7ff', '#3730a3', '💬 응답대기'),
   'replied': ('#e0e7ff', '#3730a3', '💬 답장'),
   'done': ('#f3f4f6', '#6b7280', '✓ 종료'),
   'noreply': ('#fef2f2', '#9ca3af', '📵 무응답'),
   'canceled': ('#f3f4f6', '#9ca3af', '❌ 취소'),
   'next_day_revisit': ('#ede9fe', '#6d28d9', '🚫 카톡 스킵'),
 } %}
-{# replied 상태인 경우 ai_classification 기반으로 라벨 변환 #}
+{# replied 상태인 경우 ai_classification 기반으로 라벨 변환 (피드백 화면용) #}
 {% set cls_styles = {
   'worsening':  ('#fee2e2', '#991b1b', '🔥 상태악화'),
   'medication': ('#fef3c7', '#d97706', '💊 약 부작용/거부'),
@@ -165,8 +156,6 @@
                   style="background:#3730a3; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">
             💬 답장 기록
           </button>
-          <button class="btn-status" data-status="noreply" data-hcid="{{ r.id }}"
-                  style="background:#fff; color:#6b7280; border:1px solid #d1d5db; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">📵 무응답</button>
           <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
                   style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">👁</button>
         {% elif r.status == 'next_day_revisit' %}
@@ -185,6 +174,16 @@
                   style="background:#059669; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; font-weight:600; cursor:pointer;">✓ 종료</button>
           <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
                   style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">👁 상세</button>
+        {% elif r.status == 'noreply' %}
+          <button class="btn-status" data-status="sent" data-hcid="{{ r.id }}"
+                  data-confirm="이 환자를 다시 발송완료(답장 대기)로 되돌립니다.\n진행할까요?"
+                  style="background:#2563eb; color:#fff; border:0; padding:5px 12px; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer;">
+            🔄 발송완료로 복귀
+          </button>
+          <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
+                  style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
+            👁 보기
+          </button>
         {% else %}
           <button class="btn-act" data-act="view" data-hcid="{{ r.id }}"
                   style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">
