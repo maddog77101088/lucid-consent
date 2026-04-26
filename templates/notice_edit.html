@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}{{ doc.patient_name }} 안내문 - {{ hospital_short }}{% endblock %}
+{% block content %}
+<div style="margin-bottom:14px;">
+  <a href="{{ url_for('notices_list') }}" style="color:#6b7280; font-size:13px; text-decoration:none;">← 안내문 목록으로</a>
+</div>
+
+<h1 style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+  {{ type_label }}
+  <span style="font-size:18px; color:#1f2937;">· 🐾 {{ doc.patient_name }}</span>
+</h1>
+
+<!-- 환자/보호자 정보 카드 (읽기 전용) -->
+<section class="card" style="background:#f9fafb;">
+  <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:10px; font-size:13px;">
+    <div><span style="color:#6b7280;">환자:</span> <strong>{{ doc.patient_name or '-' }}</strong></div>
+    {% if doc.patient_chart_id %}<div><span style="color:#6b7280;">차트ID:</span> {{ doc.patient_chart_id }}</div>{% endif %}
+    {% if doc.species %}<div><span style="color:#6b7280;">종:</span> {{ doc.species }}</div>{% endif %}
+    {% if doc.age %}<div><span style="color:#6b7280;">나이:</span> {{ doc.age }}</div>{% endif %}
+    <div><span style="color:#6b7280;">보호자:</span> {{ doc.guardian_name or '-' }}</div>
+    <div><span style="color:#6b7280;">휴대폰:</span> <span id="display-phone">{{ doc.guardian_phone or '-' }}</span></div>
+    <div><span style="color:#6b7280;">주치의:</span> 👨‍⚕️ {{ doc.vet_name or '-' }}</div>
+    <div><span style="color:#6b7280;">진단:</span> {{ doc.diagnosis or '-' }}</div>
+    <div><span style="color:#6b7280;">작성일:</span> {{ doc.created_at[:16] if doc.created_at else '-' }}</div>
+    {% if doc.share_sent_at %}
+    <div style="grid-column: 1 / -1;">
+      <span style="background:#d1fae5; color:#047857; padding:3px 10px; border-radius:8px; font-size:11px; font-weight:600;">✅ 카톡 발송됨</span>
+      <span style="color:#6b7280; font-size:12px; margin-left:6px;">{{ doc.share_sent_at[:16] }}</span>
+    </div>
+    {% else %}
+    <div style="grid-column: 1 / -1;">
+      <span style="background:#fef3c7; color:#92400e; padding:3px 10px; border-radius:8px; font-size:11px; font-weight:600;">⚠️ 미발송</span>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<!-- 본문 편집 -->
+<section class="card">
+  <h2>📄 안내문 본문</h2>
+  <textarea id="body-text" style="display:block; width:100%; box-sizing:border-box; font-family:-apple-system,'Malgun Gothic',sans-serif;
+            font-size:14px; line-height:1.7; padding:14px; border:1.5px solid #d1d5db; border-radius:6px;
+            min-height:55vh; resize:vertical; white-space:pre-wrap;">{{ doc.body or '' }}</textarea>
+  <p class="muted" style="font-size:11px; margin-top:6px;">※ 편집 후 [💾 저장] 누르면 환자 히스토리에 업데이트됩니다. 카톡 발송했던 링크에도 즉시 반영됩니다.</p>
+
+  <div class="actions" style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+    <button type="button" id="btn-save" style="background:#059669; color:#fff; border:0; padding:10px 22px; border-radius:6px; font-weight:600; cursor:pointer;">💾 저장</button>
+    <button type="button" id="btn-copy" style="background:#fff; color:#374151; border:1.5px solid #d1d5db; padding:10px 18px; border-radius:6px; cursor:pointer;">📋 복사</button>
+
+    {% if doc.share_token %}
+    <a href="{{ url_for('notice_view', token=doc.share_token) }}" target="_blank"
+       style="background:#fff; color:#2563eb; border:1.5px solid #93c5fd; padding:10px 18px; border-radius:6px; text-decoration:none;">👁 보호자 페이지 보기</a>
+    {% endif %}
+
+    {% if kakao_notice_enabled and doc.guardian_phone %}
+      {% if doc.share_sent_at %}
+      <button type="button" id="btn-resend" data-phone="{{ doc.guardian_phone }}"
+              style="background:#fff; color:#d97706; border:1.5px solid #fbbf24; padding:10px 18px; border-radius:6px; font-weight:600; cursor:pointer;">🔁 재발송</button>
+      {% else %}
+      <button type="button" id="btn-send" data-phone="{{ doc.guardian_phone }}"
+              style="background:#fbbc04; color:#3c3c3c; border:0; padding:10px 22px; border-radius:6px; font-weight:700; cursor:pointer;">📤 카톡 발송</button>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+
+<script>
+const docId = {{ doc.id }};
+
+// 저장
+document.getElementById('btn-save').addEventListener('click', async function(){
+  const body = document.getElementById('body-text').value;
+  if (!body.trim()) { alert('본문이 비어있습니다.'); return; }
+  this.disabled = true;
+  this.textContent = '저장 중...';
+  try {
+    const r = await fetch(`/api/notices/${docId}/update`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({body: body})
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) throw new Error(j.error || '실패');
+    this.textContent = '✓ 저장됨';
+    setTimeout(() => { this.textContent = '💾 저장'; this.disabled = false; }, 1500);
+  } catch (e) {
+    alert('저장 실패: ' + e.message);
+    this.textContent = '💾 저장';
+    this.disabled = false;
+  }
+});
+
+// 복사
+document.getElementById('btn-copy').addEventListener('click', async function(){
+  try {
+    await navigator.clipboard.writeText(document.getElementById('body-text').value);
+    this.textContent = '✓ 복사됨';
+    setTimeout(() => this.textContent = '📋 복사', 1500);
+  } catch (e) { alert('복사 실패 - 수동으로 선택해서 복사해주세요.'); }
+});
+
+// 카톡 발송 / 재발송
+async function sendKakao(phone, isResend){
+  const action = isResend ? '재발송' : '발송';
+  if (!confirm(`카카오 알림톡으로 ${action}합니다.\n수신: ${phone}\n진행할까요?`)) return;
+  const r = await fetch(`/api/notices/${docId}/send-kakao`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({guardian_phone: phone})
+  });
+  const j = await r.json();
+  if (!r.ok || !j.ok) { alert(`${action} 실패: ` + (j.error || '')); return; }
+  alert(`✓ 카톡 ${action} 완료`);
+  location.reload();
+}
+const sendBtn = document.getElementById('btn-send');
+const resendBtn = document.getElementById('btn-resend');
+if (sendBtn) sendBtn.addEventListener('click', () => sendKakao(sendBtn.dataset.phone, false));
+if (resendBtn) resendBtn.addEventListener('click', () => sendKakao(resendBtn.dataset.phone, true));
+</script>
+{% endblock %}

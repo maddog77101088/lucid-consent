@@ -2654,6 +2654,27 @@ def notice_view(token):
                            doc=row, type_label=type_label, error=None)
 
 
+@app.route("/notices/<int:doc_id>", methods=["GET"])
+@login_required
+def notice_edit(doc_id):
+    """직원용 안내문 상세·편집 페이지."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM patient_documents WHERE id=? AND doc_type IN ('ce','postop','imd')",
+        (doc_id,)
+    ).fetchone()
+    if not row:
+        abort(404)
+    type_label = {
+        "ce": "💬 진료안내문",
+        "postop": "🏥 수술후 안내문",
+        "imd": "🩺 내과 퇴원 안내문",
+    }.get(row["doc_type"], "📄 안내문")
+    return render_template("notice_edit.html",
+                           doc=row, type_label=type_label,
+                           kakao_notice_enabled=_kakao_notice_enabled())
+
+
 @app.route("/notices", methods=["GET"])
 @login_required
 def notices_list():
