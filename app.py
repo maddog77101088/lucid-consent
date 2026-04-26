@@ -2653,6 +2653,51 @@ def notice_view(token):
     return render_template("notice_view.html",
                            doc=row, type_label=type_label, error=None)
 
+
+@app.route("/notices", methods=["GET"])
+@login_required
+def notices_list():
+    """CE/postop/imd 안내문 통합 목록 + 카톡 발송 상태."""
+    db = get_db()
+    doc_type_filter = (request.args.get("doc_type") or "").strip()
+    sent_filter = (request.args.get("sent") or "").strip()  # 'yes' / 'no' / ''
+    q = (request.args.get("q") or "").strip()
+
+    sql = """SELECT id, doc_type, patient_chart_id, patient_name, guardian_name,
+                    guardian_phone, diagnosis, vet_name, share_token, share_sent_at,
+                    created_at
+             FROM patient_documents
+             WHERE doc_type IN ('ce','postop','imd')"""
+    args = []
+    if doc_type_filter in ("ce", "postop", "imd"):
+        sql += " AND doc_type=?"
+        args.append(doc_type_filter)
+    if sent_filter == "yes":
+        sql += " AND share_sent_at IS NOT NULL"
+    elif sent_filter == "no":
+        sql += " AND share_sent_at IS NULL"
+    if q:
+        sql += " AND (patient_name LIKE ? OR guardian_name LIKE ? OR diagnosis LIKE ? OR vet_name LIKE ?)"
+        like = f"%{q}%"
+        args += [like, like, like, like]
+    sql += " ORDER BY created_at DESC LIMIT 500"
+    rows = db.execute(sql, args).fetchall()
+
+    # 통계
+    stats = {
+        "total": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type IN ('ce','postop','imd')").fetchone()[0],
+        "sent": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type IN ('ce','postop','imd') AND share_sent_at IS NOT NULL").fetchone()[0],
+        "ce": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type='ce'").fetchone()[0],
+        "postop": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type='postop'").fetchone()[0],
+        "imd": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type='imd'").fetchone()[0],
+    }
+    return render_template("notices_list.html",
+                           rows=rows, stats=stats,
+                           doc_type_filter=doc_type_filter,
+                           sent_filter=sent_filter, q=q,
+                           kakao_notice_enabled=_kakao_notice_enabled())
+
+
 @app.route("/patients", methods=["GET"])
 @login_required
 def patients_list():

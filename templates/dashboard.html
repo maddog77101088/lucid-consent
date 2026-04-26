@@ -71,6 +71,13 @@
       <p>입원 DB + 진단·처방·모니터링 정보 → AI가 진단별 응급증상까지 포함한 보호자 안내문 자동 작성.</p>
     </div>
   </a>
+  <a class="card big-action" href="{{ url_for('notices_list') }}">
+    <div class="big-icon">📋</div>
+    <div>
+      <h2>안내문 목록</h2>
+      <p>작성된 CE/수술후/내과 안내문 통합 조회 + 카톡 발송 상태 + 재발송 가능.</p>
+    </div>
+  </a>
 </div>
 
 <!-- 섹션 3: 카톡 안부 -->
@@ -82,7 +89,7 @@
     <div>
       <h2>카톡 안부 관리
         {% if hc_pending_draft and hc_pending_draft > 0 %}
-          <span style="background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📝 초안대기 {{ hc_pending_draft }}</span>
+          <span style="background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📝 작성대기 {{ hc_pending_draft }}</span>
         {% endif %}
         {% if hc_approved and hc_approved > 0 %}
           <span style="background:#dbeafe; color:#1e40af; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📤 발송대기 {{ hc_approved }}</span>

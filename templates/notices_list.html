@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block title %}안내문 목록 - {{ hospital_short }}{% endblock %}
+{% block content %}
+<h1 style="display:flex; align-items:center; gap:10px;">
+  📋 안내문 목록
+  <span class="muted" style="font-size:13px; font-weight:400;">({{ rows|length }}건 표시 / 전체 {{ stats.total }}건)</span>
+</h1>
+<p class="muted">CE / 수술후 / 내과 퇴원 안내문 통합. 카톡 발송 여부와 시각도 함께 표시됩니다.</p>
+
+<!-- 통계 카드 -->
+<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; margin:16px 0;">
+  <a href="?" style="background:#fff; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if not doc_type_filter and not sent_filter %}#2563eb{% else %}#e5e7eb{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#1f2937;">📋 {{ stats.total }}</div>
+    <div style="font-size:12px; color:#4b5563; margin-top:4px;">전체</div>
+  </a>
+  <a href="?sent=yes" style="background:#d1fae5; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if sent_filter == 'yes' %}#059669{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#047857;">📤 {{ stats.sent }}</div>
+    <div style="font-size:12px; color:#065f46; margin-top:4px;">카톡 발송됨</div>
+  </a>
+  <a href="?sent=no" style="background:#fef3c7; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if sent_filter == 'no' %}#d97706{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#92400e;">⚠️ {{ stats.total - stats.sent }}</div>
+    <div style="font-size:12px; color:#92400e; margin-top:4px;">미발송</div>
+  </a>
+  <a href="?doc_type=ce" style="background:#fff; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if doc_type_filter == 'ce' %}#2563eb{% else %}#e5e7eb{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#2563eb;">💬 {{ stats.ce }}</div>
+    <div style="font-size:12px; color:#4b5563; margin-top:4px;">CE</div>
+  </a>
+  <a href="?doc_type=postop" style="background:#fff; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if doc_type_filter == 'postop' %}#0891b2{% else %}#e5e7eb{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#0891b2;">🏥 {{ stats.postop }}</div>
+    <div style="font-size:12px; color:#4b5563; margin-top:4px;">수술후</div>
+  </a>
+  <a href="?doc_type=imd" style="background:#fff; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if doc_type_filter == 'imd' %}#6d28d9{% else %}#e5e7eb{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#6d28d9;">🩺 {{ stats.imd }}</div>
+    <div style="font-size:12px; color:#4b5563; margin-top:4px;">내과</div>
+  </a>
+</div>
+
+<!-- 검색 -->
+<form method="get" action="{{ url_for('notices_list') }}"
+      style="display:flex; gap:8px; margin:16px 0 22px; flex-wrap:wrap; align-items:center;
+             background:#fff; padding:14px 16px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
+  <input type="text" name="q" value="{{ q }}" placeholder="🔍 환자·보호자·진단·주치의 검색"
+         style="flex:1; min-width:200px; padding:10px 14px; font-size:14px;
+                border:1.5px solid #d1d5db; border-radius:6px;">
+  {% if doc_type_filter %}<input type="hidden" name="doc_type" value="{{ doc_type_filter }}">{% endif %}
+  {% if sent_filter %}<input type="hidden" name="sent" value="{{ sent_filter }}">{% endif %}
+  <button type="submit" style="background:#2563eb; color:#fff; border:0; padding:10px 24px;
+                               border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">검색</button>
+  {% if q or doc_type_filter or sent_filter %}
+  <a href="{{ url_for('notices_list') }}" style="padding:10px 16px; color:#6b7280; text-decoration:none; font-size:13px;">초기화</a>
+  {% endif %}
+</form>
+
+{% if not rows %}
+  <div class="card" style="padding:40px; text-align:center; color:#6b7280; background:#fff; border-radius:8px;">
+    {% if q or doc_type_filter or sent_filter %}
+      검색 결과가 없습니다.
+    {% else %}
+      작성된 안내문이 아직 없습니다.
+    {% endif %}
+  </div>
+{% else %}
+
+{% set type_styles = {
+  'ce':     ('#dbeafe', '#1e40af', '💬 CE'),
+  'postop': ('#cffafe', '#0e7490', '🏥 수술후'),
+  'imd':    ('#ede9fe', '#6d28d9', '🩺 내과'),
+} %}
+
+<div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow-x:auto; -webkit-overflow-scrolling:touch;">
+<table style="width:100%; min-width:900px; border-collapse:collapse; font-size:13.5px;">
+  <thead>
+    <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
+      <th style="width:90px; padding:10px 8px; text-align:left; white-space:nowrap;">유형</th>
+      <th style="width:130px; padding:10px 8px; text-align:left; white-space:nowrap;">작성일</th>
+      <th style="width:80px; padding:10px 8px; text-align:left; white-space:nowrap;">환자</th>
+      <th style="width:80px; padding:10px 8px; text-align:left; white-space:nowrap;">주치의</th>
+      <th style="width:130px; padding:10px 8px; text-align:left; white-space:nowrap;">보호자</th>
+      <th style="min-width:140px; padding:10px 8px; text-align:left;">진단</th>
+      <th style="width:130px; padding:10px 8px; text-align:left; white-space:nowrap;">발송 상태</th>
+      <th style="width:200px; padding:10px 8px; text-align:right; white-space:nowrap;">동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    {% set bg, fg, label = type_styles.get(r.doc_type, ('#f3f4f6', '#6b7280', r.doc_type)) %}
+    <tr data-doc-id="{{ r.id }}" style="border-bottom:1px solid #f3f4f6;">
+      <td style="padding:10px 8px;">
+        <span style="background:{{ bg }}; color:{{ fg }}; padding:3px 8px; border-radius:8px; font-size:11px; font-weight:600; white-space:nowrap;">{{ label }}</span>
+      </td>
+      <td style="padding:10px 8px; font-size:12px; white-space:nowrap;">{{ r.created_at[:16] if r.created_at else '-' }}</td>
+      <td style="padding:10px 8px; font-weight:600; white-space:nowrap;">{{ r.patient_name or '-' }}</td>
+      <td style="padding:10px 8px; font-size:12px; color:#374151; white-space:nowrap;">
+        {% if r.vet_name %}👨‍⚕️ {{ r.vet_name }}{% else %}<span style="color:#9ca3af;">-</span>{% endif %}
+      </td>
+      <td style="padding:10px 8px; white-space:nowrap;">
+        {{ r.guardian_name or '-' }}
+        {% if r.guardian_phone %}
+          <div style="font-size:11px; color:#6b7280; margin-top:2px;">{{ r.guardian_phone }}</div>
+        {% endif %}
+      </td>
+      <td style="padding:10px 8px; color:#4b5563; font-size:12px;">{{ r.diagnosis or '-' }}</td>
+      <td style="padding:10px 8px; white-space:nowrap;">
+        {% if r.share_sent_at %}
+          <span style="background:#d1fae5; color:#047857; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600;">✅ 발송됨</span>
+          <div style="font-size:10px; color:#6b7280; margin-top:3px;">{{ r.share_sent_at[:16] }}</div>
+        {% else %}
+          <span style="background:#fef3c7; color:#92400e; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600;">⚠️ 미발송</span>
+        {% endif %}
+      </td>
+      <td style="padding:10px 8px; text-align:right; white-space:nowrap;">
+        {% if r.share_token %}
+        <a href="{{ url_for('notice_view', token=r.share_token) }}" target="_blank"
+           style="background:#fff; color:#2563eb; border:1px solid #93c5fd; padding:5px 10px; border-radius:4px; font-size:11px; text-decoration:none;">👁 보기</a>
+        {% endif %}
+        {% if kakao_notice_enabled and r.guardian_phone %}
+          {% if r.share_sent_at %}
+          <button class="btn-resend" data-doc-id="{{ r.id }}" data-phone="{{ r.guardian_phone }}"
+                  style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🔁 재발송</button>
+          {% else %}
+          <button class="btn-send" data-doc-id="{{ r.id }}" data-phone="{{ r.guardian_phone }}"
+                  style="background:#fbbc04; color:#3c3c3c; border:0; padding:5px 12px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;">📤 카톡 발송</button>
+          {% endif %}
+        {% elif not r.guardian_phone %}
+          <span style="color:#9ca3af; font-size:11px;">번호 없음</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% endif %}
+
+<script>
+(function(){
+  async function sendKakao(docId, phone, isResend){
+    const action = isResend ? '재발송' : '발송';
+    if (!confirm(`카카오 알림톡으로 ${action}합니다.\n수신: ${phone}\n진행할까요?`)) return;
+    const r = await fetch(`/api/notices/${docId}/send-kakao`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({guardian_phone: phone})
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) { alert(`${action} 실패: ` + (j.error || '')); return; }
+    alert(`✓ 카톡 ${action} 완료`);
+    location.reload();
+  }
+  document.querySelectorAll('.btn-send').forEach(btn => {
+    btn.addEventListener('click', () => sendKakao(btn.dataset.docId, btn.dataset.phone, false));
+  });
+  document.querySelectorAll('.btn-resend').forEach(btn => {
+    btn.addEventListener('click', () => sendKakao(btn.dataset.docId, btn.dataset.phone, true));
+  });
+})();
+</script>
+{% endblock %}
