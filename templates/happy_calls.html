@@ -74,18 +74,18 @@
     {% if q %}검색 결과 없음.{% else %}해당 상태의 항목이 없습니다.{% endif %}
   </div>
 {% else %}
-<div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow:hidden;">
-<table style="width:100%; border-collapse:collapse; font-size:13.5px;">
+<div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow-x:auto; -webkit-overflow-scrolling:touch;">
+<table style="width:100%; min-width:900px; border-collapse:collapse; font-size:13.5px;">
   <thead>
     <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
-      <th style="width:100px; padding:10px 8px; text-align:left;">상태</th>
-      <th style="width:80px; padding:10px 8px; text-align:left;">유형</th>
-      <th style="width:90px; padding:10px 8px; text-align:left;">예정일</th>
-      <th style="width:80px; padding:10px 8px; text-align:left;">환자</th>
-      <th style="width:80px; padding:10px 8px; text-align:left;">주치의</th>
-      <th style="width:130px; padding:10px 8px; text-align:left;">보호자</th>
-      <th style="padding:10px 8px; text-align:left;">진단/메모</th>
-      <th style="width:280px; padding:10px 8px; text-align:right;">동작</th>
+      <th style="width:100px; padding:10px 8px; text-align:left; white-space:nowrap;">상태</th>
+      <th style="width:80px; padding:10px 8px; text-align:left; white-space:nowrap;">유형</th>
+      <th style="width:90px; padding:10px 8px; text-align:left; white-space:nowrap;">예정일</th>
+      <th style="width:80px; padding:10px 8px; text-align:left; white-space:nowrap;">환자</th>
+      <th style="width:80px; padding:10px 8px; text-align:left; white-space:nowrap;">주치의</th>
+      <th style="width:130px; padding:10px 8px; text-align:left; white-space:nowrap;">보호자</th>
+      <th style="min-width:160px; padding:10px 8px; text-align:left;">진단/메모</th>
+      <th style="width:280px; padding:10px 8px; text-align:right; white-space:nowrap;">동작</th>
     </tr>
   </thead>
   <tbody>
@@ -107,9 +107,9 @@
       <td style="padding:10px 8px; font-size:11px; color:#6b7280;">
         {% if r.doc_type == 'ce' %}💬 CE{% elif r.doc_type == 'postop' %}🏥 수술후{% elif r.doc_type == 'imd' %}🩺 내과{% endif %}
       </td>
-      <td style="padding:10px 8px; font-size:12px;">{{ r.scheduled_date }}</td>
-      <td style="padding:10px 8px; font-weight:600;">{{ r.patient_name or '-' }}</td>
-      <td style="padding:10px 8px; font-size:12px; color:#374151;">
+      <td style="padding:10px 8px; font-size:12px; white-space:nowrap;">{{ r.scheduled_date }}</td>
+      <td style="padding:10px 8px; font-weight:600; white-space:nowrap;">{{ r.patient_name or '-' }}</td>
+      <td style="padding:10px 8px; font-size:12px; color:#374151; white-space:nowrap;">
         {% if r.vet_name %}👨‍⚕️ {{ r.vet_name }}{% else %}<span style="color:#9ca3af;">-</span>{% endif %}
       </td>
       <td style="padding:10px 8px; white-space:nowrap;">
