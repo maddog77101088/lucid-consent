@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<title>{% if doc %}{{ doc.patient_name }} 안내문{% else %}안내문{% endif %} · 24시 루시드 동물병원</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    background: #f5f6f8; color: #1f2937;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 600px; margin: 0 auto; padding: 16px; }
+  .header {
+    background: linear-gradient(135deg, #2563eb 0%, #0891b2 100%);
+    color: #fff; padding: 22px 20px; border-radius: 14px;
+    margin-bottom: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.1);
+  }
+  .header .type { font-size:13px; opacity:0.9; margin-bottom:4px; }
+  .header h1 { margin: 0; font-size: 22px; font-weight: 700; line-height:1.3; }
+  .header .meta { margin-top:8px; font-size:12.5px; opacity:0.92; }
+  .info-card {
+    background: #fff; padding: 14px 16px; border-radius: 10px;
+    margin-bottom: 12px; box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    font-size: 13.5px;
+  }
+  .info-card .row { display:flex; gap:8px; padding:4px 0; }
+  .info-card .label { color:#6b7280; min-width:65px; }
+  .info-card .val { color:#1f2937; font-weight:500; }
+  .body-card {
+    background: #fff; padding: 20px 18px; border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    line-height: 1.85; font-size: 15px; color:#1f2937;
+    white-space: pre-wrap; word-break: keep-all;
+  }
+  .actions {
+    display:flex; gap:10px; margin-top:14px; flex-direction:column;
+  }
+  .btn {
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    padding: 14px; border-radius: 10px; text-decoration:none; font-size:15px; font-weight:600;
+    border: 0; cursor:pointer;
+  }
+  .btn-call { background: #059669; color:#fff; }
+  .btn-print { background:#fff; color:#374151; border:1.5px solid #d1d5db; }
+  .footer {
+    text-align:center; padding:18px 0 30px; color:#9ca3af; font-size:11.5px;
+    line-height:1.6;
+  }
+  .error-box {
+    background:#fef2f2; padding:32px 20px; border-radius:12px;
+    text-align:center; color:#991b1b; font-weight:600;
+  }
+  @media print {
+    body { background: #fff; }
+    .header { background: #2563eb !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .actions, .footer { display: none; }
+    .wrap { max-width: 100%; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+{% if error %}
+  <div class="error-box">
+    ⚠️ {{ error }}
+    <div style="margin-top:14px; font-weight:normal; font-size:13px; color:#4b5563;">
+      문의: 02-941-7900<br>24시 루시드 동물병원
+    </div>
+  </div>
+
+{% else %}
+
+  <div class="header">
+    <div class="type">{{ type_label }}</div>
+    <h1>🐾 {{ doc.patient_name }}{% if doc.guardian_name %} · {{ doc.guardian_name }}님{% endif %}</h1>
+    <div class="meta">
+      {% if doc.created_at %}작성일: {{ doc.created_at[:10] }}{% endif %}
+      {% if doc.vet_name %} · 주치의: {{ doc.vet_name }}{% endif %}
+    </div>
+  </div>
+
+  {% if doc.diagnosis %}
+  <div class="info-card">
+    <div class="row"><div class="label">진단/수술</div><div class="val">{{ doc.diagnosis }}</div></div>
+  </div>
+  {% endif %}
+
+  <div class="body-card">{{ doc.body }}</div>
+
+  <div class="actions">
+    <a href="tel:02-941-7900" class="btn btn-call">📞 병원 전화 (02-941-7900)</a>
+    <button class="btn btn-print" onclick="window.print()">🖨 인쇄하기</button>
+  </div>
+
+  <div class="footer">
+    24시 루시드 동물병원 · 서울 강북구<br>
+    이 페이지는 보호자 안내용으로만 제공됩니다.
+  </div>
+
+{% endif %}
+
+</div>
+</body>
+</html>

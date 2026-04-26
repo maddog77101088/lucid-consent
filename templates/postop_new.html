@@ -224,6 +224,9 @@
         <button type="button" id="btn-save" class="btn-primary" style="flex:1.5; font-weight:600;">💾 저장</button>
         <button type="button" id="btn-copy" class="btn-ghost" style="flex:1;">📋 복사</button>
         <button type="button" id="btn-print" class="btn-ghost" style="flex:1;">🖨 인쇄/PDF</button>
+        {% if kakao_notice_enabled %}
+        <button type="button" id="btn-send-kakao" style="flex:1.5; background:#fbbc04; color:#3c3c3c; border:0; padding:8px 14px; border-radius:6px; font-weight:700; cursor:pointer;">📤 카톡 발송</button>
+        {% endif %}
       </div>
       <p class="muted" style="font-size:11px; margin-top:6px;">※ AI 생성 시 자동 저장됨. 편집 후 [💾 저장]으로 업데이트. 저장된 안내문은 환자 히스토리에서 다시 열 수 있습니다.</p>
     </section>
@@ -402,6 +405,35 @@ document.getElementById('btn-save').addEventListener('click', async function(){
     this.disabled = false;
   }
 });
+
+// ----- 카톡 발송 -----
+const sendKakaoBtn = document.getElementById('btn-send-kakao');
+if (sendKakaoBtn) {
+  sendKakaoBtn.addEventListener('click', async function(){
+    const docId = window._currentDocId;
+    if (!docId) { alert('먼저 [💾 저장]을 눌러 안내문을 저장해주세요.'); return; }
+    const phone = document.getElementById('guardian_mobile').value.trim();
+    if (!phone) { alert('보호자 휴대전화 번호가 비어있습니다. 먼저 입력해주세요.'); return; }
+    if (!confirm(`카카오 알림톡으로 안내문 링크를 발송합니다.\n수신: ${phone}\n진행할까요?`)) return;
+    this.disabled = true;
+    this.textContent = '⏳ 발송 중...';
+    try {
+      const r = await fetch(`/api/notices/${docId}/send-kakao`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({guardian_phone: phone})
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || '발송 실패');
+      alert('✓ 카톡 발송 완료\n링크: ' + j.notice_url);
+      this.textContent = '✓ 발송됨';
+      setTimeout(() => { this.textContent = '📤 카톡 발송'; this.disabled = false; }, 2000);
+    } catch (e) {
+      alert('발송 실패: ' + e.message);
+      this.textContent = '📤 카톡 발송';
+      this.disabled = false;
+    }
+  });
+}
 
 // ----- 복사 -----
 document.getElementById('btn-copy').addEventListener('click', async function(){
