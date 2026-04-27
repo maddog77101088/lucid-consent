@@ -115,6 +115,36 @@ h4 { font-size: 14px; margin: 12px 0 4px; color: #374151; }
 .big-action h2 { margin: 0 0 6px; }
 .big-action p { margin: 0; color: var(--muted); }
 
+/* ---------- 공통 토글 스위치 (사이즈는 .toggle-sm / .toggle-md 로 조절) ---------- */
+.toggle-switch {
+  position: relative; display: inline-block;
+  vertical-align: middle; cursor: pointer;
+}
+.toggle-switch input {
+  opacity: 0; width: 0; height: 0; position: absolute;
+}
+.toggle-switch .slider {
+  position: absolute; inset: 0; background: #9ca3af;
+  border-radius: 999px; transition: .25s;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.18);
+}
+.toggle-switch .knob {
+  position: absolute; background: #fff; border-radius: 50%;
+  transition: .25s; box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.toggle-switch input:checked ~ .slider { background: #059669; }
+.toggle-switch input:disabled ~ .slider { opacity: .5; cursor: not-allowed; }
+
+/* 큰 사이즈 (전체 토글) */
+.toggle-md { width: 52px; height: 28px; }
+.toggle-md .knob { top: 3px; left: 3px; width: 22px; height: 22px; }
+.toggle-md input:checked ~ .knob { left: 27px; }
+
+/* 작은 사이즈 (행별 토글) */
+.toggle-sm { width: 38px; height: 20px; }
+.toggle-sm .knob { top: 3px; left: 3px; width: 14px; height: 14px; }
+.toggle-sm input:checked ~ .knob { left: 21px; }
+
 /* ---------- 모바일 (< 640px) — 1열 전환 + 카드 컴팩트 ---------- */
 @media (max-width: 640px) {
   body { font-size: 15px; }
