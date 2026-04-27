@@ -1764,14 +1764,19 @@ def api_happy_call_create():
     initial_status = "next_day_revisit" if auto_skip else "pending_draft"
 
     db = get_db()
+    # 전역 발송예약 설정 → 새 row의 auto_send 기본값 결정
+    auto_global, _send_hour = _get_auto_send_setting()
+    initial_auto_send = 1 if auto_global else 0
+
     # doc_body 는 참고용 짧은 요약만 저장 (전체 본문은 patient_documents에서 조회)
     full_body = (data.get("doc_body") or "").strip()
     body_summary = full_body[:300] + ("..." if len(full_body) > 300 else "") if full_body else ""
     cur = db.execute(
         """INSERT INTO happy_calls
            (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
-            vet_name, assignee_id, scheduled_date, status, doc_body, call_memo, created_by)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            vet_name, assignee_id, scheduled_date, status, doc_body, call_memo,
+            auto_send, created_by)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (doc_type,
          patient,
          (data.get("guardian_name") or "").strip(),
@@ -1783,14 +1788,15 @@ def api_happy_call_create():
          initial_status,
          body_summary,
          skip_memo,
+         initial_auto_send,
          session.get("user_id", 0))
     )
     db.commit()
     hc_id = cur.lastrowid
 
-    # 자동 예약 발송 시도 (조건 안 맞으면 조용히 패스)
+    # 자동 예약 발송 시도 (전역 ON + 개별 ON + 조건 충족 시에만)
     auto_scheduled_at = None
-    if not auto_skip:
+    if not auto_skip and initial_auto_send:
         ok, result = _try_schedule_kakao_for_happycall(hc_id)
         if ok:
             auto_scheduled_at = result
