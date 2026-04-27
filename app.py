@@ -162,6 +162,10 @@ def init_db():
     cols = [c[1] for c in cur.fetchall()]
     if "youtube_url" not in cols:
         cur.execute("ALTER TABLE hospital_template ADD COLUMN youtube_url TEXT DEFAULT ''")
+    if "kakao_auto_send" not in cols:
+        cur.execute("ALTER TABLE hospital_template ADD COLUMN kakao_auto_send INTEGER DEFAULT 1")
+    if "kakao_auto_send_hour" not in cols:
+        cur.execute("ALTER TABLE hospital_template ADD COLUMN kakao_auto_send_hour INTEGER DEFAULT 10")
     # 기존 row가 있고 URL이 비어있으면 기본값 주입
     cur.execute("UPDATE hospital_template SET youtube_url=? WHERE id=1 AND (youtube_url IS NULL OR youtube_url='')",
                 (DEFAULT_YOUTUBE_URL,))
@@ -232,6 +236,9 @@ def init_db():
         ("ai_summary", "ALTER TABLE happy_calls ADD COLUMN ai_summary TEXT"),
         ("is_followup", "ALTER TABLE happy_calls ADD COLUMN is_followup INTEGER DEFAULT 0"),
         ("followup_of", "ALTER TABLE happy_calls ADD COLUMN followup_of INTEGER"),
+        ("auto_send", "ALTER TABLE happy_calls ADD COLUMN auto_send INTEGER DEFAULT 1"),
+        ("scheduled_send_at", "ALTER TABLE happy_calls ADD COLUMN scheduled_send_at TEXT"),
+        ("solapi_message_id", "ALTER TABLE happy_calls ADD COLUMN solapi_message_id TEXT"),
     ]:
         if col not in hc_cols:
             cur.execute(ddl)
@@ -1761,8 +1768,17 @@ def api_happy_call_create():
     )
     db.commit()
     hc_id = cur.lastrowid
+
+    # 자동 예약 발송 시도 (조건 안 맞으면 조용히 패스)
+    auto_scheduled_at = None
+    if not auto_skip:
+        ok, result = _try_schedule_kakao_for_happycall(hc_id)
+        if ok:
+            auto_scheduled_at = result
+
     return jsonify({"ok": True, "id": hc_id, "scheduled_date": scheduled,
-                    "status": initial_status, "skipped": auto_skip})
+                    "status": initial_status, "skipped": auto_skip,
+                    "auto_scheduled_at": auto_scheduled_at})
 
 
 @app.route("/happy-calls", methods=["GET"])
@@ -1804,25 +1820,26 @@ def happy_calls_list():
         like = f"%{q}%"
         args += [like, like, like]
 
-    # 정렬: 진행중(작성/발송대기/발송완료)이 위, 종료된 것은 아래. 같은 그룹은 오래된 것부터
+    # 정렬: 진행중(작성/발송대기/발송완료)이 위, 종료된 것은 아래. 같은 그룹은 최신순
     if status_filter == "active":
         sql += """ ORDER BY
                    CASE WHEN hc.status='done' THEN 1 ELSE 0 END,
-                   hc.scheduled_date ASC, hc.created_at ASC"""
-    elif status_filter in ("pending_draft", "drafted", "approved", "sent"):
-        sql += " ORDER BY hc.scheduled_date ASC, hc.created_at ASC"
+                   hc.created_at DESC"""
     else:
-        sql += " ORDER BY hc.scheduled_date DESC, hc.created_at DESC"
+        sql += " ORDER BY hc.created_at DESC"
     sql += " LIMIT 500"
 
     rows = get_db().execute(sql, args).fetchall()
     today_str = datetime.now().strftime("%Y-%m-%d")
+    auto_global, send_hour = _get_auto_send_setting()
     return render_template("happy_calls.html",
                            rows=rows, today=today_str,
                            status_filter=status_filter,
                            doc_type_filter=doc_type_filter, q=q,
                            doc_labels=HAPPYCALL_DOC_LABELS,
-                           kakao_enabled=_kakao_enabled())
+                           kakao_enabled=_kakao_enabled(),
+                           auto_send_global=auto_global,
+                           auto_send_hour=send_hour)
 
 
 @app.route("/api/happy-calls/<int:hc_id>/update", methods=["POST"])
@@ -2013,9 +2030,9 @@ def _solapi_auth_header():
     return f"HMAC-SHA256 apiKey={api_key}, date={date}, salt={salt}, signature={signature}"
 
 
-def _send_kakao_template(phone, template_id, variables):
+def _send_kakao_template(phone, template_id, variables, scheduled_at=None):
     """범용 솔라피 알림톡 발송 (template_id + variables dict).
-    실패 시 LMS 대체발송 자동 (템플릿 등록 시 설정된 경우).
+    scheduled_at: ISO datetime string (예: '2026-04-28T10:00:00'). None이면 즉시 발송.
     Returns: (ok: bool, message_id_or_error: str)
     """
     if requests is None:
@@ -2045,6 +2062,9 @@ def _send_kakao_template(phone, template_id, variables):
             },
         }
     }
+    if scheduled_at:
+        # 솔라피 v4: scheduledDate 는 message 외부에 위치, ISO 8601 형식
+        payload["scheduledDate"] = scheduled_at
 
     try:
         r = requests.post(
@@ -2069,8 +2089,8 @@ def _send_kakao_template(phone, template_id, variables):
         return False, f"솔라피 호출 실패: {e}"
 
 
-def _send_kakao_alimtalk(phone, patient_name, visit_type, survey_url):
-    """카톡 안부 (care) 알림톡 — 기존 호출부 호환용 래퍼."""
+def _send_kakao_alimtalk(phone, patient_name, visit_type, survey_url, scheduled_at=None):
+    """카톡 안부 (care) 알림톡 — scheduled_at 지정 시 예약 발송."""
     return _send_kakao_template(
         phone=phone,
         template_id=os.environ.get("KAKAO_TEMPLATE_ID", "").strip(),
@@ -2079,7 +2099,82 @@ def _send_kakao_alimtalk(phone, patient_name, visit_type, survey_url):
             "#{진료유형}": visit_type,
             "#{설문URL}": survey_url,
         },
+        scheduled_at=scheduled_at,
     )
+
+
+def _get_auto_send_setting():
+    """전역 자동 발송 설정 + 발송 시각 (시) 반환."""
+    db = get_db()
+    row = db.execute("SELECT kakao_auto_send, kakao_auto_send_hour FROM hospital_template WHERE id=1").fetchone()
+    if not row:
+        return True, 10  # 기본값
+    return bool(row["kakao_auto_send"]), int(row["kakao_auto_send_hour"] or 10)
+
+
+def _try_schedule_kakao_for_happycall(hc_id):
+    """해당 happy_call이 자동 발송 대상이면 솔라피에 예약 등록.
+    조건: 카카오 활성 + auto_send=1 + guardian_phone 있음 + 전역 자동발송 ON.
+    성공 시 status='approved' (또는 'sent'?), scheduled_send_at, solapi_message_id 기록.
+    """
+    if not _kakao_enabled():
+        return False, "카카오 미설정"
+    auto_global, send_hour = _get_auto_send_setting()
+    if not auto_global:
+        return False, "전역 자동 발송 OFF"
+
+    db = get_db()
+    row = db.execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return False, "not found"
+    if not row["auto_send"]:
+        return False, "개별 자동 발송 OFF"
+    if not row["guardian_phone"]:
+        return False, "보호자 휴대폰 없음"
+    if row["status"] not in ("pending_draft",):
+        return False, f"이미 처리됨 (status={row['status']})"
+
+    # 토큰
+    token = row["survey_token"]
+    if not token:
+        token = _make_survey_token()
+        db.execute("UPDATE happy_calls SET survey_token=? WHERE id=?", (token, hc_id))
+        db.commit()
+
+    survey_url = f"{_sign_base_url()}/care/{token}"
+    visit_type = _doc_type_to_visit(row["doc_type"])
+
+    # 예약 시각: scheduled_date 의 send_hour시 (KST)
+    try:
+        sched_date = datetime.strptime(row["scheduled_date"], "%Y-%m-%d")
+    except Exception:
+        sched_date = datetime.now() + timedelta(days=1)
+    sched_dt = sched_date.replace(hour=send_hour, minute=0, second=0)
+    # 솔라피 최소 5분 후 예약 가능: 너무 가까우면 5분 뒤로 조정
+    min_dt = datetime.now() + timedelta(minutes=6)
+    if sched_dt < min_dt:
+        sched_dt = min_dt
+    scheduled_iso = sched_dt.strftime("%Y-%m-%dT%H:%M:%S")
+
+    ok, result = _send_kakao_alimtalk(
+        phone=row["guardian_phone"],
+        patient_name=row["patient_name"],
+        visit_type=visit_type,
+        survey_url=survey_url,
+        scheduled_at=scheduled_iso,
+    )
+    if not ok:
+        return False, result
+
+    # 예약 등록 성공 → status='sent' (=발송완료, 예약됨), scheduled_send_at 기록
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        """UPDATE happy_calls SET status='sent', sent_at=?, sent_by=?,
+           scheduled_send_at=?, solapi_message_id=? WHERE id=?""",
+        (now_str, session.get("user_id", 0) or 0, scheduled_iso, str(result), hc_id)
+    )
+    db.commit()
+    return True, scheduled_iso
 
 
 def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
@@ -2098,6 +2193,49 @@ def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
             "#{안내문URL}": notice_url,
         },
     )
+
+
+@app.route("/api/happy-calls/<int:hc_id>/toggle-auto", methods=["POST"])
+@login_required
+def api_happy_call_toggle_auto(hc_id):
+    """개별 안부의 자동발송 ON/OFF 토글. ON 전환 시 즉시 예약 시도."""
+    data = request.get_json() or {}
+    new_val = 1 if data.get("auto_send") else 0
+    db = get_db()
+    row = db.execute("SELECT id, status FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    db.execute("UPDATE happy_calls SET auto_send=? WHERE id=?", (new_val, hc_id))
+    db.commit()
+    scheduled_at = None
+    if new_val and row["status"] == "pending_draft":
+        ok, result = _try_schedule_kakao_for_happycall(hc_id)
+        if ok:
+            scheduled_at = result
+    return jsonify({"ok": True, "auto_send": new_val, "scheduled_at": scheduled_at})
+
+
+@app.route("/api/settings/kakao-auto-send", methods=["POST"])
+@login_required
+def api_settings_kakao_auto_send():
+    """전역 자동발송 ON/OFF 토글 (admin 권장)."""
+    data = request.get_json() or {}
+    new_val = 1 if data.get("enabled") else 0
+    send_hour = data.get("send_hour")
+    db = get_db()
+    if send_hour is not None:
+        try:
+            send_hour = int(send_hour)
+            if send_hour < 0 or send_hour > 23:
+                send_hour = 10
+        except Exception:
+            send_hour = 10
+        db.execute("UPDATE hospital_template SET kakao_auto_send=?, kakao_auto_send_hour=? WHERE id=1",
+                   (new_val, send_hour))
+    else:
+        db.execute("UPDATE hospital_template SET kakao_auto_send=? WHERE id=1", (new_val,))
+    db.commit()
+    return jsonify({"ok": True, "enabled": new_val})
 
 
 @app.route("/api/happy-calls/<int:hc_id>/send-kakao", methods=["POST"])
