@@ -46,17 +46,33 @@
       if (ev.key === ' ' || ev.key === 'Enter') { ev.preventDefault(); toggle.call(el); }
     });
   });
+  function setBox(el, checked){
+    if (checked) {
+      el.textContent = '☑';
+      el.dataset.cbChecked = '1';
+      el.setAttribute('aria-checked', 'true');
+    } else {
+      el.textContent = '☐';
+      el.dataset.cbChecked = '0';
+      el.setAttribute('aria-checked', 'false');
+    }
+  }
   function toggle() {
     const isChecked = this.dataset.cbChecked === '1';
-    if (isChecked) {
-      this.textContent = '☐';
-      this.dataset.cbChecked = '0';
-      this.setAttribute('aria-checked', 'false');
-    } else {
-      this.textContent = '☑';
-      this.dataset.cbChecked = '1';
-      this.setAttribute('aria-checked', 'true');
+    // 같은 줄(부모 p/li/.qopts 등)에 ☐가 2개 이상 있으면 라디오 그룹으로 처리:
+    // 다른 항목 자동 해제
+    if (!isChecked) {
+      const parent = this.closest('p, li, .qopts');
+      if (parent) {
+        const siblings = parent.querySelectorAll('span.cb[data-cb-idx]');
+        if (siblings.length > 1) {
+          siblings.forEach(other => {
+            if (other !== this && other.dataset.cbChecked === '1') setBox(other, false);
+          });
+        }
+      }
     }
+    setBox(this, !isChecked);
   }
   // 부모 페이지에서 호출할 수 있도록 현재 체크 상태 수집 함수 노출
   window.__collectCheckedBoxes = function(){

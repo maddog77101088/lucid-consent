@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
-<title>{% if doc %}{{ doc.patient_name }} 안내문{% else %}안내문{% endif %} · 24시 루시드 동물병원</title>
+<title>{% if doc %}{{ doc.patient_name }} 안내문{% else %}안내문{% endif %} · {{ hospital_short }}</title>
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -68,7 +68,7 @@
   <div class="error-box">
     ⚠️ {{ error }}
     <div style="margin-top:14px; font-weight:normal; font-size:13px; color:#4b5563;">
-      문의: 02-941-7900<br>24시 루시드 동물병원
+      문의: {{ hospital_phone }}<br>{{ hospital_short }}
     </div>
   </div>
 
@@ -92,12 +92,12 @@
   <div class="body-card">{{ doc.body }}</div>
 
   <div class="actions">
-    <a href="tel:02-941-7900" class="btn btn-call">📞 병원 전화 (02-941-7900)</a>
+    <a href="tel:{{ hospital_phone }}" class="btn btn-call">📞 병원 전화 ({{ hospital_phone }})</a>
     <button class="btn btn-print" onclick="window.print()">🖨 인쇄하기</button>
   </div>
 
   <div class="footer">
-    24시 루시드 동물병원 · 서울 강북구<br>
+    {{ hospital_short }} · 서울 강북구<br>
     이 페이지는 보호자 안내용으로만 제공됩니다.
   </div>
 

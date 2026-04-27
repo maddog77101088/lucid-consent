@@ -11,7 +11,7 @@
 <header class="topbar no-print" style="display:flex; align-items:center; justify-content:space-between;">
   <div class="logo">
     <a href="{{ url_for('dashboard') }}">
-      <strong>🏠 {{ hospital_short }}</strong>
+      <strong>🏠 {{ hospital_short }}{% if hospital_branch %} <span style="color:#fbbf24; font-size:13px; font-weight:500; margin-left:4px;">[{{ hospital_branch }}]</span>{% endif %}</strong>
     </a>
   </div>
   <div class="userbox" style="margin-left:auto; display:flex; align-items:center; gap:14px;">

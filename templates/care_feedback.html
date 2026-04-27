@@ -29,9 +29,9 @@
     <div style="font-size:24px; font-weight:700; color:#6b7280;">{{ stats.other }}</div>
     <div style="font-size:12px; color:#4b5563; margin-top:4px;">기타 질문</div>
   </a>
-  <a href="?cls=pending_reply" style="background:#dbeafe; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'pending_reply' %}#2563eb{% else %}transparent{% endif %};">
-    <div style="font-size:24px; font-weight:700; color:#1e40af;">⏳ {{ stats.pending_reply }}</div>
-    <div style="font-size:12px; color:#1e3a8a; margin-top:4px;">답장 대기중 (24h이내)</div>
+  <a href="?cls=pending_reply" style="background:#e0e7ff; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'pending_reply' %}#3730a3{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#3730a3;">💬 {{ stats.pending_reply }}</div>
+    <div style="font-size:12px; color:#3730a3; margin-top:4px;">응답대기 (24h이내)</div>
   </a>
   <a href="?cls=noresponse" style="background:#fef2f2; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if cls_filter == 'noresponse' %}#9ca3af{% else %}transparent{% endif %};">
     <div style="font-size:24px; font-weight:700; color:#6b7280;">📵 {{ stats.noresponse }}</div>
@@ -64,7 +64,7 @@
 <div style="display:flex; flex-direction:column; gap:10px;">
   {% for r in rows %}
   {% if r.status == 'sent' and cls_filter == 'pending_reply' %}
-    {% set bg, fg, label = ('#dbeafe', '#1e40af', '⏳ 답장 대기중') %}
+    {% set bg, fg, label = ('#e0e7ff', '#3730a3', '💬 응답대기') %}
   {% elif r.status == 'sent' %}
     {% set bg, fg, label = ('#fef2f2', '#6b7280', '📵 무응답 (24h+)') %}
   {% else %}
@@ -77,6 +77,7 @@
           <span style="background:{{ bg }}; color:{{ fg }}; padding:3px 10px; border-radius:10px; font-size:12px; font-weight:600;">{{ label }}</span>
           <span style="font-weight:600; font-size:15px; margin-left:6px;">🐾 {{ r.patient_name }}</span>
           <span style="color:#6b7280; font-size:13px;">{% if r.guardian_name %} · {{ r.guardian_name }}{% endif %}</span>
+          {% if r.vet_name %}<span style="color:#3730a3; font-size:12px; margin-left:6px; font-weight:500;">· 👨‍⚕️ {{ r.vet_name }}</span>{% endif %}
         </div>
         <div style="font-size:11px; color:#9ca3af;">
           {% if r.status == 'sent' and r.sent_at %}발송: {{ r.sent_at[:16] }}{% else %}{{ r.survey_submitted_at[:16] if r.survey_submitted_at else '' }}{% endif %}

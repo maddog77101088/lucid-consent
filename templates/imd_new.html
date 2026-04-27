@@ -438,7 +438,7 @@ document.getElementById('btn-print').addEventListener('click', function(){
     </style></head><body>
     <h1>🩺 내과 퇴원 안내문 — ${patient}</h1>
     <pre>${text.replace(/</g,'&lt;')}</pre>
-    <div class="footer">24시루시드동물메디컬센터 · 서울 강북구 월계로 3 · TEL 02-941-7900</div>
+    <div class="footer">{{ hospital_name }} · TEL {{ hospital_phone }}</div>
     <script>window.onload=()=>window.print();<\\/script>
     </body></html>`);
   w.document.close();

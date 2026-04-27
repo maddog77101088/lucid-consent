@@ -91,16 +91,25 @@
   <h4>{% if pt == 'surgery_daycare' %}당일 퇴원 후 주의사항·재진 안내{% else %}입원기간·통원 치료·재진 여부·모니터링 방법{% endif %}</h4>
   <p class="body-text">{{ d.hospitalization }}</p>
 
-  <div class="check-group" style="margin-top:12pt; padding:8pt 10pt; background:#fafafa; border-left:2pt solid #888;">
-    <p><strong>Q1.</strong> 보호자님께서는 수술{% if pt == 'surgery_hospital' %} 및 입원{% endif %} 안내장에 포함된 내용을 모두 주치의를 통해 직접 설명을 듣고 동의하십니까?
-      &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
-      &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
-    <p><strong>Q2.</strong> 설명서의 내용 중 의문이 있는 부분에 대해 충분히 질문하고 설명을 들으셨습니까?
-      &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
-      &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
-    <p><strong>Q3.</strong> 집도의(수의사 <u>{{ d.vet_name }}</u>)에게 수술에 대한 설명을 듣고 대면하였습니까?
-      &nbsp; <span class="cb">☐</span> 네, 대면하였습니다.
-      &nbsp; <span class="cb">☐</span> 아니오, 대면하지 못했습니다.</p>
+  <div class="check-group" style="margin-top:12pt; padding:10pt 12pt; background:#fafafa; border-left:2pt solid #888;">
+    <p style="margin:0;"><strong>Q1.</strong> 보호자님께서는 수술{% if pt == 'surgery_hospital' %} 및 입원{% endif %} 안내장에 포함된 내용을 모두 주치의를 통해 직접 설명을 듣고 동의하십니까?</p>
+    <div class="qopts" style="text-align:center; margin:6pt 0 12pt;">
+      <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.
+    </div>
+    <p style="margin:0;"><strong>Q2.</strong> 설명서의 내용 중 의문이 있는 부분에 대해 충분히 질문하고 설명을 들으셨습니까?</p>
+    <div class="qopts" style="text-align:center; margin:6pt 0 12pt;">
+      <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.
+    </div>
+    <p style="margin:0;"><strong>Q3.</strong> 집도의(수의사 <u>{{ d.vet_name }}</u>)에게 수술에 대한 설명을 듣고 대면하였습니까?</p>
+    <div class="qopts" style="text-align:center; margin:6pt 0 0;">
+      <span class="cb">☐</span> 네, 대면하였습니다.
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      <span class="cb">☐</span> 아니오, 대면하지 못했습니다.
+    </div>
   </div>
 
   {% if d.asa_grade %}
@@ -150,13 +159,19 @@
   <h4>통원치료 / 재진 여부 / 모니터링 방법</h4>
   <p class="body-text">{{ d.h_hospitalization }}</p>
 
-  <div class="check-group" style="margin-top:12pt; padding:8pt 10pt; background:#fafafa; border-left:2pt solid #888;">
-    <p><strong>Q1.</strong> 보호자님께서는 입원 안내장에 포함된 내용을 모두 주치의를 통해 직접 설명을 듣고 동의하십니까?
-      &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
-      &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
-    <p><strong>Q2.</strong> 설명서의 내용 중 의문이 있는 부분에 대해 충분히 질문하고 설명을 들으셨습니까?
-      &nbsp; <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
-      &nbsp; <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.</p>
+  <div class="check-group" style="margin-top:12pt; padding:10pt 12pt; background:#fafafa; border-left:2pt solid #888;">
+    <p style="margin:0;"><strong>Q1.</strong> 보호자님께서는 입원 안내장에 포함된 내용을 모두 주치의를 통해 직접 설명을 듣고 동의하십니까?</p>
+    <div class="qopts" style="text-align:center; margin:6pt 0 12pt;">
+      <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.
+    </div>
+    <p style="margin:0;"><strong>Q2.</strong> 설명서의 내용 중 의문이 있는 부분에 대해 충분히 질문하고 설명을 들으셨습니까?</p>
+    <div class="qopts" style="text-align:center; margin:6pt 0 0;">
+      <span class="cb">☐</span> 네, 설명을 듣고 동의합니다.
+      &nbsp;&nbsp;&nbsp;&nbsp;
+      <span class="cb">☐</span> 아니오, 설명을 듣지 못했습니다.
+    </div>
   </div>
 
   {% if d.h_extra_note %}

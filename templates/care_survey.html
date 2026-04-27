@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>회복 안부 설문 - 24시루시드 동물병원</title>
+<title>회복 안부 설문 - {{ hospital_short }}</title>
 <style>
   * { box-sizing: border-box; }
   html, body {
@@ -83,7 +83,7 @@
     <div class="error-card">
       <h2>⚠️ {{ error }}</h2>
       <p style="margin-top:14px; color:#4b5563; font-weight:normal; font-size:14px;">
-        문의: 02-941-7900<br>24시 루시드 동물병원
+        문의: {{ hospital_phone }}<br>{{ hospital_short }}
       </p>
     </div>
 
@@ -92,7 +92,7 @@
       <h2>✅ 이미 답변하셨어요</h2>
       <p>{{ patient_name }} 보호자님, 답변 감사합니다.</p>
       <p>주치의가 검토 후 필요하면 연락드리겠습니다. 🙏</p>
-      <a href="tel:02-941-7900" class="call-btn">📞 02-941-7900 전화하기</a>
+      <a href="tel:{{ hospital_phone }}" class="call-btn">📞 {{ hospital_phone }} 전화하기</a>
     </div>
 
   {% else %}
@@ -194,7 +194,7 @@
     </div>
 
     <button type="button" id="btn-submit" class="submit-btn">✅ 답변 보내기</button>
-    <a href="tel:02-941-7900" class="call-btn">📞 직접 전화 (02-941-7900)</a>
+    <a href="tel:{{ hospital_phone }}" class="call-btn">📞 직접 전화 ({{ hospital_phone }})</a>
 
   </form>
 
@@ -235,8 +235,8 @@
         <div class="complete-card" style="background:#fff; padding:30px 20px; border-radius:12px; text-align:center;">
           <h2 style="color:#059669; margin:0 0 14px;">✅ 답변 감사합니다!</h2>
           <p style="color:#4b5563; line-height:1.7;">{{ patient_name }} 보호자님,<br>주치의가 검토 후 필요하면 연락드릴게요.</p>
-          <p style="color:#6b7280; font-size:13px; margin-top:18px;">🙏 24시 루시드 동물병원</p>
-          <a href="tel:02-941-7900" style="display:block; text-align:center; padding:14px; font-size:15px; background:#fff; color:#2563eb; border:2px solid #2563eb; border-radius:12px; text-decoration:none; font-weight:600; margin-top:18px;">📞 02-941-7900 전화하기</a>
+          <p style="color:#6b7280; font-size:13px; margin-top:18px;">🙏 {{ hospital_short }}</p>
+          <a href="tel:{{ hospital_phone }}" style="display:block; text-align:center; padding:14px; font-size:15px; background:#fff; color:#2563eb; border:2px solid #2563eb; border-radius:12px; text-decoration:none; font-weight:600; margin-top:18px;">📞 {{ hospital_phone }} 전화하기</a>
         </div>`;
     } catch (e) {
       document.getElementById('loading-overlay').style.display = 'none';
