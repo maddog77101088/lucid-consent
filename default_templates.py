@@ -13,21 +13,60 @@ DEFAULT_HEADER = """
 DEFAULT_DISCLAIMER = """
 <h4>다음 검사 및 처치에 대해 동의나 거절을 표시해주세요.</h4>
 <div class="consent-items">
-  <p>1. 전염병 예방을 위한 항체가 검사 &nbsp; <span class="cb">☐</span> 거절 &nbsp; <span class="cb">☐</span> 동의</p>
-  <p>2. 무증상성 심장병 파악을 위한 심장초음파 또는 ProBNP &nbsp; <span class="cb">☐</span> 거절 &nbsp; <span class="cb">☐</span> 동의</p>
-  <p>3. 혈액 응고 장애 검사를 위한 응고계 검사 &nbsp; <span class="cb">☐</span> 거절 &nbsp; <span class="cb">☐</span> 동의</p>
-  <p>4. 수술 중 혈압 강하 등 위험성이 발생했을 경우 응급처치 및 심폐소생술 &nbsp; <span class="cb">☐</span> 거절 &nbsp; <span class="cb">☐</span> 동의</p>
-  <p>5. 입원 기간 중 심폐소생술 &nbsp; <span class="cb">☐</span> 거절 &nbsp; <span class="cb">☐</span> 동의</p>
+  <p style="margin:0;">1. 전염병 예방을 위한 항체가 검사</p>
+  <div class="qopts" style="text-align:center; margin:4pt 0 10pt;">
+    <span class="cb">☐</span> 거절 &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 동의
+  </div>
+  <p style="margin:0;">2. 무증상성 심장병 파악을 위한 심장초음파 또는 ProBNP</p>
+  <div class="qopts" style="text-align:center; margin:4pt 0 10pt;">
+    <span class="cb">☐</span> 거절 &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 동의
+  </div>
+  <p style="margin:0;">3. 혈액 응고 장애 검사를 위한 응고계 검사</p>
+  <div class="qopts" style="text-align:center; margin:4pt 0 10pt;">
+    <span class="cb">☐</span> 거절 &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 동의
+  </div>
+  <p style="margin:0;">4. 수술 중 혈압 강하 등 위험성이 발생했을 경우 응급처치 및 심폐소생술</p>
+  <div class="qopts" style="text-align:center; margin:4pt 0 10pt;">
+    <span class="cb">☐</span> 거절 &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 동의
+  </div>
+  <p style="margin:0;">5. 입원 기간 중 심폐소생술</p>
+  <div class="qopts" style="text-align:center; margin:4pt 0 10pt;">
+    <span class="cb">☐</span> 거절 &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 동의
+  </div>
 </div>
 
 <h4 style="margin-top:14pt;">보호자의 약속</h4>
 <ol class="promise-list">
-  <li>저희 병원에서 진행된 수술이나 처치에 대해서 반드시 저희 병원으로 문의 및 상담을 하셔야 합니다. 급하지 않은 경우 카카오톡, 급한 경우 24시간 응급 내원 해주세요. 타원 의견은 소견서를 가져오시기 바랍니다. 정확하지 않은 의심은 환자와 의료진 사이에 신뢰를 무너뜨리고 결국 환자에게 피해가 갑니다. &nbsp; <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp; <span class="cb">☐</span> 아니오, 거절합니다.</li>
-  <li>주치의가 환자를 책임있게 진료하는 시스템입니다. 그러나 주치의와 시간이 맞지 않아 부득이 다른 수의사의 진료를 보는 경우, 주치의와 전화 예약을 해주시면 주치의가 직접 전화드리겠습니다. &nbsp; <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp; <span class="cb">☐</span> 아니오, 거절합니다.</li>
-  <li>우리의 환자는 자신의 증상에 대해서 말을 하지 못하기 때문에 보호자님과의 소통이 중요합니다. 보호자님께서는 지속적으로 주치의에게 환자 상태를 공유해주셔야 합니다. 입원기간에는 면회 후 환자상태를 카카오톡에 남겨주시고, 수술 직후 3일·퇴원 직후 3일간 환자의 상태(식욕·활력·기타증상)를 주치의에게 공유해 주십시오. &nbsp; <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp; <span class="cb">☐</span> 아니오, 거절합니다.</li>
-  <li>의견이 있거나 원장님 상담을 원하시면, 카카오톡으로 "원장님 상담 원합니다."라고 요청하시면 원장 상담이 가능합니다. &nbsp; <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp; <span class="cb">☐</span> 아니오, 거절합니다.</li>
-  <li>주치의가 정한 입원기간·통원치료일정·투약지시 등을 잘 따라주시고, 환자가 조금이라도 이상하면 지나치지 마시고 즉시 연락해주시기 바랍니다. &nbsp; <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp; <span class="cb">☐</span> 아니오, 거절합니다.</li>
-  <li>입원동의서 작성 전 입원전 주의사항 영상을 꼼꼼히 시청하였으며, 영상 내용에 모두 동의하십니까? &nbsp; <span class="cb">☐</span> 네, 시청했으며, 동의합니다.</li>
+  <li>저희 병원에서 진행된 수술이나 처치에 대해서 반드시 저희 병원으로 문의 및 상담을 하셔야 합니다. 급하지 않은 경우 카카오톡, 급한 경우 24시간 응급 내원 해주세요. 타원 의견은 소견서를 가져오시기 바랍니다. 정확하지 않은 의심은 환자와 의료진 사이에 신뢰를 무너뜨리고 결국 환자에게 피해가 갑니다.
+    <div class="qopts" style="text-align:center; margin:4pt 0 8pt;">
+      <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 아니오, 거절합니다.
+    </div>
+  </li>
+  <li>주치의가 환자를 책임있게 진료하는 시스템입니다. 그러나 주치의와 시간이 맞지 않아 부득이 다른 수의사의 진료를 보는 경우, 주치의와 전화 예약을 해주시면 주치의가 직접 전화드리겠습니다.
+    <div class="qopts" style="text-align:center; margin:4pt 0 8pt;">
+      <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 아니오, 거절합니다.
+    </div>
+  </li>
+  <li>우리의 환자는 자신의 증상에 대해서 말을 하지 못하기 때문에 보호자님과의 소통이 중요합니다. 보호자님께서는 지속적으로 주치의에게 환자 상태를 공유해주셔야 합니다. 입원기간에는 면회 후 환자상태를 카카오톡에 남겨주시고, 수술 직후 3일·퇴원 직후 3일간 환자의 상태(식욕·활력·기타증상)를 주치의에게 공유해 주십시오.
+    <div class="qopts" style="text-align:center; margin:4pt 0 8pt;">
+      <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 아니오, 거절합니다.
+    </div>
+  </li>
+  <li>의견이 있거나 원장님 상담을 원하시면, 카카오톡으로 "원장님 상담 원합니다."라고 요청하시면 원장 상담이 가능합니다.
+    <div class="qopts" style="text-align:center; margin:4pt 0 8pt;">
+      <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 아니오, 거절합니다.
+    </div>
+  </li>
+  <li>주치의가 정한 입원기간·통원치료일정·투약지시 등을 잘 따라주시고, 환자가 조금이라도 이상하면 지나치지 마시고 즉시 연락해주시기 바랍니다.
+    <div class="qopts" style="text-align:center; margin:4pt 0 8pt;">
+      <span class="cb">☐</span> 네, 꼭 지키겠습니다. &nbsp;&nbsp;&nbsp;&nbsp; <span class="cb">☐</span> 아니오, 거절합니다.
+    </div>
+  </li>
+  <li>입원동의서 작성 전 입원전 주의사항 영상을 꼼꼼히 시청하였으며, 영상 내용에 모두 동의하십니까?
+    <div class="qopts" style="text-align:center; margin:4pt 0 8pt;">
+      <span class="cb">☐</span> 네, 시청했으며, 동의합니다.
+    </div>
+  </li>
 </ol>
 <p class="small">위의 사항을 꼭 지켜주신다면 환자의 건강 회복을 위해 항상 최선을 다할 것이며, 믿음 가는 진료로 감사함을 보답하겠습니다.</p>
 

@@ -317,13 +317,21 @@ def init_db():
     else:
         # 자동 마이그레이션: 기존에 저장된 구버전 헤더를 새 버전(doc_title 변수화)으로 교체
         # 사용자가 직접 수정한 흔적이 없으면(기존 하드코딩 제목/안내문 그대로면) 덮어쓴다.
-        cur.execute("SELECT header_html FROM hospital_template WHERE id=1")
+        cur.execute("SELECT header_html, disclaimer_html FROM hospital_template WHERE id=1")
         row = cur.fetchone()
         if row and row[0]:
             hh = row[0]
             if ("수술 및 입원 동의서" in hh and "{{ doc_title }}" not in hh) or \
                ("본 동의서는 차트에 저장되며" in hh):
                 cur.execute("UPDATE hospital_template SET header_html=? WHERE id=1", (DEFAULT_HEADER,))
+        # disclaimer 자동 마이그레이션: 라디오 그룹 기본 양식 → 별도 줄 + 중앙 정렬 패턴
+        # 조건: "전염병 예방을 위한 항체가 검사" 기본 문구 + qopts 클래스 미포함 = 기본값 그대로
+        if row and row[1]:
+            dh = row[1]
+            if ("전염병 예방을 위한 항체가 검사" in dh
+                and "보호자의 약속" in dh
+                and "qopts" not in dh):
+                cur.execute("UPDATE hospital_template SET disclaimer_html=? WHERE id=1", (DEFAULT_DISCLAIMER,))
     cur.execute("SELECT COUNT(*) FROM surgeries")
     if cur.fetchone()[0] == 0:
         from seed_data import SEED_SURGERIES
@@ -485,6 +493,13 @@ def dashboard():
     signed_cnt = db.execute(
         "SELECT COUNT(*) FROM consent_records WHERE signed_at IS NOT NULL AND deleted_at IS NULL"
     ).fetchone()[0]
+    # 서명 완료 + 카톡 미발송 + 보호자 휴대폰 있음 (form_data에서 추출 — JSON LIKE)
+    signed_unsent_cnt = db.execute(
+        """SELECT COUNT(*) FROM consent_records
+           WHERE signed_at IS NOT NULL AND deleted_at IS NULL
+             AND share_sent_at IS NULL
+             AND (form_data LIKE '%guardian_mobile%' OR form_data LIKE '%guardian_phone%')"""
+    ).fetchone()[0]
     # 해피콜: 오늘 예정 건 + 밀린 건 (지난 날짜 미완료)
     today_str = datetime.now().strftime("%Y-%m-%d")
     # 카톡 안부 stats
@@ -512,6 +527,7 @@ def dashboard():
     hc_overdue = hc_approved
     return render_template("dashboard.html", counts=counts, total=sum(counts.values()),
                            pending_cnt=pending_cnt, signed_cnt=signed_cnt,
+                           signed_unsent_cnt=signed_unsent_cnt,
                            hc_today=hc_today, hc_overdue=hc_overdue,
                            hc_pending_draft=hc_pending_draft,
                            hc_drafted=hc_drafted,
