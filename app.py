@@ -2213,18 +2213,12 @@ def _try_schedule_kakao_for_happycall(hc_id):
 
 
 def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
-    """안내문 도착 알림톡 발송."""
-    type_label = {
-        "ce": "진료안내문",
-        "postop": "수술후 안내문",
-        "imd": "내과 퇴원 안내문",
-    }.get(doc_type, "안내문")
+    """안내문 도착 알림톡 발송. (안내문 종류는 본문 고정 — 검수 어뷰징 우려 회피)"""
     return _send_kakao_template(
         phone=phone,
         template_id=os.environ.get("KAKAO_TEMPLATE_ID_NOTICE", "").strip(),
         variables={
             "#{환자명}": patient_name or "환자",
-            "#{안내문종류}": type_label,
             "#{안내문URL}": notice_url,
         },
     )
