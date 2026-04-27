@@ -37,29 +37,6 @@
   {% endif %}
 </form>
 
-<script>
-(function(){
-  async function sendConsentKakao(token, phone, isResend){
-    const action = isResend ? '재발송' : '발송';
-    if (!confirm(`서명된 동의서 사본을 카카오 알림톡으로 ${action}합니다.\n수신: ${phone}\n진행할까요?`)) return;
-    const r = await fetch(`/api/consents/${token}/send-kakao`, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({guardian_phone: phone})
-    });
-    const j = await r.json();
-    if (!r.ok || !j.ok) { alert(`${action} 실패: ` + (j.error || '')); return; }
-    alert(`✓ 카톡 ${action} 완료`);
-    location.reload();
-  }
-  document.querySelectorAll('.btn-send-consent').forEach(btn => {
-    btn.addEventListener('click', () => sendConsentKakao(btn.dataset.token, btn.dataset.phone, false));
-  });
-  document.querySelectorAll('.btn-resend-consent').forEach(btn => {
-    btn.addEventListener('click', () => sendConsentKakao(btn.dataset.token, btn.dataset.phone, true));
-  });
-})();
-</script>
-
 {% if not rows %}
   <div class="card" style="padding:40px; text-align:center; color:#6b7280;
        background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
@@ -159,6 +136,29 @@
 </table>
 </div>
 {% endif %}
+
+<script>
+(function(){
+  async function sendConsentKakao(token, phone, isResend){
+    const action = isResend ? '재발송' : '발송';
+    if (!confirm(`서명된 동의서 사본을 카카오 알림톡으로 ${action}합니다.\n수신: ${phone}\n진행할까요?`)) return;
+    const r = await fetch(`/api/consents/${token}/send-kakao`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({guardian_phone: phone})
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) { alert(`${action} 실패: ` + (j.error || '')); return; }
+    alert(`✓ 카톡 ${action} 완료`);
+    location.reload();
+  }
+  document.querySelectorAll('.btn-send-consent').forEach(btn => {
+    btn.addEventListener('click', () => sendConsentKakao(btn.dataset.token, btn.dataset.phone, false));
+  });
+  document.querySelectorAll('.btn-resend-consent').forEach(btn => {
+    btn.addEventListener('click', () => sendConsentKakao(btn.dataset.token, btn.dataset.phone, true));
+  });
+})();
+</script>
 
 {% if current_user.role == 'admin' %}
 <!-- 삭제 확인 모달 (admin 전용) -->
