@@ -238,6 +238,15 @@
             ✏️ 편집
           </button>
         {% endif %}
+        {% if current_user.role == 'admin' %}
+        <button type="button" class="btn-hc-delete"
+                data-hcid="{{ r.id }}"
+                data-patient="{{ r.patient_name or '' }}"
+                title="안부 영구 삭제 (관리자)"
+                style="background:#fff; color:#dc2626; border:1px solid #fecaca;
+                       padding:5px 9px; border-radius:4px; font-size:11px; cursor:pointer;
+                       margin-left:3px;">🗑</button>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}
@@ -562,6 +571,102 @@
       location.reload();
     });
   });
+
+  {% if current_user.role == 'admin' %}
+  // ===== 안부 영구 삭제 모달 (admin 전용) =====
+  const delModal = document.getElementById('hc-delete-modal');
+  const delPatientDisplay = document.getElementById('hc-del-patient-display');
+  const delPatientInput = document.getElementById('hc-del-patient-input');
+  const delReasonInput = document.getElementById('hc-del-reason-input');
+  const delErrorEl = document.getElementById('hc-del-error');
+  const delCancelBtn = document.getElementById('hc-del-cancel');
+  const delConfirmBtn = document.getElementById('hc-del-confirm');
+  let delHcid = null;
+  let delPatient = '';
+
+  function showDelModal(hcid, patient){
+    delHcid = hcid; delPatient = patient;
+    delPatientDisplay.textContent = patient || '(이름 없음)';
+    delPatientInput.value = ''; delReasonInput.value = ''; delErrorEl.textContent = '';
+    delModal.style.display = 'flex';
+    setTimeout(() => delPatientInput.focus(), 50);
+  }
+  function hideDelModal(){ delModal.style.display = 'none'; delHcid = null; }
+
+  document.querySelectorAll('.btn-hc-delete').forEach(btn => {
+    btn.addEventListener('click', function(){
+      showDelModal(this.dataset.hcid, this.dataset.patient || '');
+    });
+  });
+  delCancelBtn.addEventListener('click', hideDelModal);
+  delModal.addEventListener('click', e => { if (e.target === delModal) hideDelModal(); });
+
+  delConfirmBtn.addEventListener('click', async function(){
+    const patient = delPatientInput.value.trim();
+    const reason = delReasonInput.value.trim();
+    if (!patient) { delErrorEl.textContent = '환자명을 입력해주세요.'; return; }
+    if (patient !== delPatient.trim()) {
+      delErrorEl.textContent = `환자명이 일치하지 않습니다. "${delPatient}"을(를) 정확히 입력해주세요.`;
+      return;
+    }
+    if (reason.length < 3) { delErrorEl.textContent = '삭제 사유를 3자 이상 입력해주세요.'; return; }
+    this.disabled = true; this.textContent = '삭제 중...';
+    try {
+      const r = await fetch(`/api/happy-calls/${delHcid}/delete`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({patient_name: patient, reason: reason})
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || '삭제 실패');
+      hideDelModal();
+      location.reload();
+    } catch (err) {
+      delErrorEl.textContent = err.message || '오류';
+    } finally {
+      this.disabled = false; this.textContent = '🗑 삭제 확정';
+    }
+  });
+  {% endif %}
 })();
 </script>
+
+{% if current_user.role == 'admin' %}
+<!-- 카톡 안부 영구 삭제 모달 (admin 전용) -->
+<div id="hc-delete-modal" style="display:none; position:fixed; inset:0;
+     background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:460px;
+              width:90%; box-shadow:0 10px 40px rgba(0,0,0,.3);">
+    <h3 style="margin:0 0 12px; font-size:18px; color:#dc2626;">⚠ 카톡 안부 영구 삭제 (관리자 전용)</h3>
+    <p style="margin:0 0 14px; font-size:13px; color:#4b5563; line-height:1.6;">
+      이 안부는 <strong>완전히 삭제</strong>되며 복구할 수 없습니다.<br>
+      실수 방지를 위해 <strong>환자명 재입력</strong>과 <strong>삭제 사유</strong>가 필요합니다.
+    </p>
+    <div style="background:#fef3c7; padding:10px 12px; border-radius:6px; margin-bottom:14px;
+                font-size:13px; color:#92400e;">
+      삭제할 환자: <strong id="hc-del-patient-display">-</strong>
+    </div>
+    <label style="display:block; font-size:13px; color:#374151; margin-bottom:4px;">
+      환자명 재입력 <span style="color:#dc2626;">*</span>
+    </label>
+    <input type="text" id="hc-del-patient-input" placeholder="환자명을 정확히 입력하세요"
+           style="width:100%; padding:9px 12px; font-size:14px; border:1.5px solid #d1d5db;
+                  border-radius:6px; margin-bottom:14px; box-sizing:border-box;">
+    <label style="display:block; font-size:13px; color:#374151; margin-bottom:4px;">
+      삭제 사유 <span style="color:#dc2626;">*</span>
+    </label>
+    <textarea id="hc-del-reason-input" rows="3" placeholder="예: 테스트용으로 잘못 작성함"
+              style="width:100%; padding:9px 12px; font-size:14px; border:1.5px solid #d1d5db;
+                     border-radius:6px; margin-bottom:14px; box-sizing:border-box;
+                     font-family:inherit; resize:vertical;"></textarea>
+    <div id="hc-del-error" style="color:#dc2626; font-size:12px; min-height:16px; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px;">
+      <button type="button" id="hc-del-cancel" style="flex:1; background:#f3f4f6; color:#374151;
+              border:0; padding:10px; border-radius:6px; font-size:14px; cursor:pointer;">취소</button>
+      <button type="button" id="hc-del-confirm" style="flex:2; background:#dc2626; color:#fff;
+              border:0; padding:10px; border-radius:6px; font-size:14px; font-weight:600;
+              cursor:pointer;">🗑 삭제 확정</button>
+    </div>
+  </div>
+</div>
+{% endif %}
 {% endblock %}

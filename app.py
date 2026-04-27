@@ -63,8 +63,20 @@ app.secret_key = os.environ.get("SECRET_KEY", "lucid-dev-secret-change-in-prod")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "data", "lucid.db"))
 
-HOSPITAL_NAME = "24시루시드동물메디컬센터"
-HOSPITAL_SHORT = "루시드 동물병원"
+# 병원 정보 (환경변수로 분점 분리 가능 - 미설정 시 미아본점 기본값)
+HOSPITAL_NAME = os.environ.get("HOSPITAL_NAME", "24시루시드동물메디컬센터").strip()
+HOSPITAL_SHORT = os.environ.get("HOSPITAL_SHORT", "루시드 동물병원").strip()
+HOSPITAL_PHONE = os.environ.get("HOSPITAL_PHONE", "02-941-7900").strip()
+HOSPITAL_PHONE_RAW = HOSPITAL_PHONE.replace("-", "")  # 솔라피 발신번호용 (010-xxxx-xxxx → 010xxxxxxxx)
+HOSPITAL_BRANCH = os.environ.get("HOSPITAL_BRANCH", "").strip()  # 예: "미아본점", "동대문점"
+
+
+def _prep_prompt(prompt_text):
+    """AI 프롬프트의 {hospital_phone}, {hospital_short}, {hospital_name} 자리표시자를 환경변수로 치환."""
+    return (prompt_text
+            .replace("{hospital_phone}", HOSPITAL_PHONE)
+            .replace("{hospital_short}", HOSPITAL_SHORT)
+            .replace("{hospital_name}", HOSPITAL_NAME))
 CATEGORIES = ["일반외과", "정형외과", "연부조직외과", "응급·기타"]
 HOSP_CATEGORIES = ["내과", "외과 회복", "중환자·응급", "감염·예방", "기타"]
 
@@ -400,7 +412,9 @@ def validate_password(pw, username="", display_name=""):
 def inject_user():
     return {
         "current_user": {"id": session.get("user_id"), "name": session.get("display_name"), "role": session.get("role")},
-        "hospital_name": HOSPITAL_NAME, "hospital_short": HOSPITAL_SHORT, "categories": CATEGORIES,
+        "hospital_name": HOSPITAL_NAME, "hospital_short": HOSPITAL_SHORT,
+        "hospital_phone": HOSPITAL_PHONE, "hospital_branch": HOSPITAL_BRANCH,
+        "categories": CATEGORIES,
     }
 
 
@@ -1323,7 +1337,7 @@ POSTOP_PROMPT = """당신은 한국 동물병원의 수의사가 수술 후 퇴�
 - 입력된 정보(약 이름·일수·날짜)는 정확히 그대로 반영.
 - 입력에 없는 정보는 추측 금지. 일반적으로 통용되는 상식 수준만 추가.
 - 응급 증상은 보호자가 즉시 알아차릴 수 있도록 구체적으로 (색·냄새·빈도 등).
-- 마지막 줄: "궁금한 점이 있으시면 언제든 병원으로 연락 주세요. 02-941-7900 · 24시 루시드 동물병원"
+- 마지막 줄: "궁금한 점이 있으시면 언제든 병원으로 연락 주세요. {hospital_phone} · {hospital_short}"
 """
 
 
@@ -1468,7 +1482,7 @@ def api_postop_generate():
             json={
                 "model": "claude-sonnet-4-6",
                 "max_tokens": 4000,
-                "system": POSTOP_PROMPT,
+                "system": _prep_prompt(POSTOP_PROMPT),
                 "messages": [{"role": "user", "content": user_msg}],
             },
             timeout=90,
@@ -1550,7 +1564,7 @@ IMD_PROMPT = """당신은 한국 동물병원의 수의사가 내과 입원 치�
 - 마크다운 코드블록·헤더(#) 금지. 이모지 + 줄글만.
 - 입력된 정보(약 이름·기간·날짜)는 정확히 반영.
 - 입력에 없는 정보는 추측 금지. 일반적 상식 수준만 추가.
-- 마지막 줄: "궁금한 점이 있으시면 언제든 병원으로 연락 주세요. 02-941-7900 · 24시 루시드 동물병원"
+- 마지막 줄: "궁금한 점이 있으시면 언제든 병원으로 연락 주세요. {hospital_phone} · {hospital_short}"
 """
 
 
@@ -1655,7 +1669,7 @@ def api_imd_generate():
             json={
                 "model": "claude-sonnet-4-6",
                 "max_tokens": 4000,
-                "system": IMD_PROMPT,
+                "system": _prep_prompt(IMD_PROMPT),
                 "messages": [{"role": "user", "content": user_msg}],
             },
             timeout=90,
@@ -1929,7 +1943,7 @@ def api_happy_call_detail(hc_id):
 # pending_draft → drafted → approved → sent → replied → done
 # 주치의가 AI초안 만들어 첨삭 후 승인 → 코디가 카톡으로 발송 → 답장 기록
 
-KAKAO_HC_PROMPT = """당신은 한국 24시루시드 동물병원의 코디네이터가 보호자에게 보낼 짧은 카톡 안부 메시지를 작성하는 전문가입니다.
+KAKAO_HC_PROMPT = """당신은 한국 동물병원({hospital_short})의 코디네이터가 보호자에게 보낼 짧은 카톡 안부 메시지를 작성하는 전문가입니다.
 
 **메시지 형식 (매우 짧게, 4~6줄)**:
 - 친근한 카톡 톤. 절대 길지 않게.
@@ -1946,7 +1960,7 @@ KAKAO_HC_PROMPT = """당신은 한국 24시루시드 동물병원의 코디네�
 - 넷째 줄(빈 줄)
 - 다섯째 줄: "[환자] 상태 1분 설문 부탁드려요 👇"
 - 여섯째 줄: "{SURVEY_URL}" (반드시 이 자리표시자 그대로 사용)
-- 마지막 줄: "답변 어려우시면 02-941-7900 연락주세요. 🙏"
+- 마지막 줄: "답변 어려우시면 {hospital_phone} 연락주세요. 🙏"
 
 **환자 상태별 톤 조절**:
 - "좋은 경과": "잘 회복되고 있는지 궁금해요"
@@ -2067,7 +2081,7 @@ def _send_kakao_template(phone, template_id, variables, scheduled_at=None):
     if not to or len(to) < 10:
         return False, f"휴대폰 번호 형식 오류: {phone}"
 
-    sender = os.environ.get("KAKAO_SENDER", "0294117900").strip()
+    sender = os.environ.get("KAKAO_SENDER", HOSPITAL_PHONE_RAW).strip()
     pf_id = os.environ.get("KAKAO_PFID", "").strip()
 
     payload = {
@@ -2228,6 +2242,32 @@ def _send_kakao_consent_copy(phone, patient_name, doc_type, doc_url):
             "#{문서URL}": doc_url,
         },
     )
+
+
+@app.route("/api/happy-calls/<int:hc_id>/delete", methods=["POST"])
+@login_required
+def api_happy_call_delete(hc_id):
+    """카톡 안부 영구 삭제 (admin 전용). 환자명 재입력 + 사유 필수."""
+    if session.get("role") != "admin":
+        return jsonify({"ok": False, "error": "관리자만 삭제 가능합니다."}), 403
+    data = request.get_json() or {}
+    patient_input = (data.get("patient_name") or "").strip()
+    reason = (data.get("reason") or "").strip()
+    if not patient_input:
+        return jsonify({"ok": False, "error": "환자명 재입력이 필요합니다."}), 400
+    if len(reason) < 3:
+        return jsonify({"ok": False, "error": "삭제 사유를 3자 이상 입력해주세요."}), 400
+
+    db = get_db()
+    row = db.execute("SELECT patient_name FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    if (row["patient_name"] or "").strip() != patient_input:
+        return jsonify({"ok": False, "error": "환자명이 일치하지 않습니다."}), 400
+
+    db.execute("DELETE FROM happy_calls WHERE id=?", (hc_id,))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/api/happy-calls/<int:hc_id>/toggle-auto", methods=["POST"])
@@ -2608,7 +2648,7 @@ def api_happy_call_generate_draft(hc_id):
             json={
                 "model": "claude-sonnet-4-6",
                 "max_tokens": 1500,
-                "system": KAKAO_HC_PROMPT,
+                "system": _prep_prompt(KAKAO_HC_PROMPT),
                 "messages": [{"role": "user", "content": user_msg}],
             },
             timeout=60,
