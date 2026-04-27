@@ -37,6 +37,29 @@
   {% endif %}
 </form>
 
+<script>
+(function(){
+  async function sendConsentKakao(token, phone, isResend){
+    const action = isResend ? '재발송' : '발송';
+    if (!confirm(`서명된 동의서 사본을 카카오 알림톡으로 ${action}합니다.\n수신: ${phone}\n진행할까요?`)) return;
+    const r = await fetch(`/api/consents/${token}/send-kakao`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({guardian_phone: phone})
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) { alert(`${action} 실패: ` + (j.error || '')); return; }
+    alert(`✓ 카톡 ${action} 완료`);
+    location.reload();
+  }
+  document.querySelectorAll('.btn-send-consent').forEach(btn => {
+    btn.addEventListener('click', () => sendConsentKakao(btn.dataset.token, btn.dataset.phone, false));
+  });
+  document.querySelectorAll('.btn-resend-consent').forEach(btn => {
+    btn.addEventListener('click', () => sendConsentKakao(btn.dataset.token, btn.dataset.phone, true));
+  });
+})();
+</script>
+
 {% if not rows %}
   <div class="card" style="padding:40px; text-align:center; color:#6b7280;
        background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
@@ -57,7 +80,8 @@
       <th style="padding:12px 10px; text-align:left; font-size:13px; color:#374151;">서명자</th>
       <th style="width:110px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">담당 수의사</th>
       <th style="width:140px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">서명일시</th>
-      <th style="width:140px; padding:12px 14px; text-align:right; font-size:13px; color:#374151;">동작</th>
+      <th style="width:120px; padding:12px 10px; text-align:left; font-size:13px; color:#374151;">카톡 발송</th>
+      <th style="width:200px; padding:12px 14px; text-align:right; font-size:13px; color:#374151;">동작</th>
     </tr>
   </thead>
   <tbody>
@@ -95,19 +119,36 @@
         <div>{{ parts[0] }}</div>
         <div style="color:#9ca3af;">{{ parts[1] if parts|length > 1 else '' }}</div>
       </td>
+      <td style="padding:14px 10px; vertical-align:middle; font-size:12px;">
+        {% if r.share_sent_at %}
+          <span style="background:#d1fae5; color:#047857; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap;">✅ 발송됨</span>
+          <div style="font-size:10px; color:#6b7280; margin-top:3px;">{{ r.share_sent_at[:16] }}</div>
+        {% else %}
+          <span style="background:#fef3c7; color:#92400e; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap;">⚠️ 미발송</span>
+        {% endif %}
+      </td>
       <td style="padding:14px; vertical-align:middle; text-align:right; white-space:nowrap;">
         <a href="{{ url_for('sign_pdf', token=r.token) }}" target="_blank"
-           style="background:#2563eb; color:#fff; padding:8px 14px; border-radius:4px;
-                  font-size:13px; font-weight:600; text-decoration:none; display:inline-block;">
+           style="background:#2563eb; color:#fff; padding:7px 12px; border-radius:4px;
+                  font-size:12px; font-weight:600; text-decoration:none; display:inline-block;">
           📄 열기
         </a>
+        {% if kakao_consent_enabled and r.guardian_phone %}
+          {% if r.share_sent_at %}
+          <button type="button" class="btn-resend-consent" data-token="{{ r.token }}" data-phone="{{ r.guardian_phone }}"
+                  style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:6px 10px; border-radius:4px; font-size:11px; cursor:pointer; margin-left:3px;">🔁 재발송</button>
+          {% else %}
+          <button type="button" class="btn-send-consent" data-token="{{ r.token }}" data-phone="{{ r.guardian_phone }}"
+                  style="background:#fbbc04; color:#3c3c3c; border:0; padding:6px 12px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer; margin-left:3px;">📤 카톡</button>
+          {% endif %}
+        {% endif %}
         {% if current_user.role == 'admin' %}
         <button type="button" class="btn-delete"
                 data-cid="{{ r.id }}"
                 data-patient="{{ r.patient_name or '' }}"
                 style="background:#fff; color:#dc2626; border:1px solid #fecaca;
-                       padding:7px 10px; border-radius:4px; font-size:12px; cursor:pointer;
-                       margin-left:4px;">
+                       padding:6px 9px; border-radius:4px; font-size:12px; cursor:pointer;
+                       margin-left:3px;">
           🗑
         </button>
         {% endif %}

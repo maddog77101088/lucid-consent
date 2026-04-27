@@ -186,6 +186,11 @@ def init_db():
         cur.execute("ALTER TABLE consent_records ADD COLUMN deleted_by INTEGER")
     if "delete_reason" not in cr_cols:
         cur.execute("ALTER TABLE consent_records ADD COLUMN delete_reason TEXT")
+    # 카톡 사본 발송용
+    if "share_sent_at" not in cr_cols:
+        cur.execute("ALTER TABLE consent_records ADD COLUMN share_sent_at TEXT")
+    if "share_sent_by" not in cr_cols:
+        cur.execute("ALTER TABLE consent_records ADD COLUMN share_sent_by INTEGER")
     # surgeries 마이그레이션: post_op_notes (수술후 기본 안내)
     cur.execute("PRAGMA table_info(surgeries)")
     sg_cols = [c[1] for c in cur.fetchall()]
@@ -2009,6 +2014,22 @@ def _kakao_notice_enabled():
     return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_NOTICE", "").strip())
 
 
+def _kakao_consent_enabled():
+    """동의서 사본 전달 발송 가능 여부."""
+    return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_CONSENT", "").strip())
+
+
+# 동의서 종류 라벨 매핑 (카카오 알림톡 변수용)
+CONSENT_DOC_LABELS = {
+    "surgery":    "수술 동의서",
+    "imaging":    "영상 촬영 마취 동의서",
+    "privacy":    "개인정보 수집·활용 동의서",
+    "euthanasia": "안락사 동의서",
+    "discharge":  "퇴원 요청 서약서",
+    "payment":    "치료비 미수금 지불 서약서",
+}
+
+
 def _normalize_phone(phone):
     """전화번호 정규화: '010-1234-5678' → '01012345678'."""
     return _re_phone.sub(r"[^0-9]", "", phone or "")
@@ -2191,6 +2212,20 @@ def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
             "#{환자명}": patient_name or "환자",
             "#{안내문종류}": type_label,
             "#{안내문URL}": notice_url,
+        },
+    )
+
+
+def _send_kakao_consent_copy(phone, patient_name, doc_type, doc_url):
+    """서명 완료된 동의서 사본 전달 알림톡 발송."""
+    type_label = CONSENT_DOC_LABELS.get(doc_type, "동의서")
+    return _send_kakao_template(
+        phone=phone,
+        template_id=os.environ.get("KAKAO_TEMPLATE_ID_CONSENT", "").strip(),
+        variables={
+            "#{환자명}": patient_name or "환자",
+            "#{동의서종류}": type_label,
+            "#{문서URL}": doc_url,
         },
     )
 
@@ -2811,6 +2846,53 @@ def notice_edit(doc_id):
     return render_template("notice_edit.html",
                            doc=row, type_label=type_label,
                            kakao_notice_enabled=_kakao_notice_enabled())
+
+
+@app.route("/api/consents/<token>/send-kakao", methods=["POST"])
+@login_required
+def api_consent_send_kakao(token):
+    """서명 완료된 동의서 사본을 보호자에게 카톡 발송 + 발송 시각 기록."""
+    if not _kakao_consent_enabled():
+        return jsonify({"ok": False, "error": "동의서 카톡 발송 미설정 (KAKAO_TEMPLATE_ID_CONSENT)"}), 400
+    data = request.get_json() or {}
+    phone_override = (data.get("guardian_phone") or "").strip()
+
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM consent_records WHERE token=? AND deleted_at IS NULL",
+        (token,)
+    ).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "동의서를 찾을 수 없음"}), 404
+    if not row["signed_at"]:
+        return jsonify({"ok": False, "error": "아직 서명되지 않은 동의서입니다."}), 400
+
+    # 폼 데이터에서 보호자 휴대폰 추출
+    try:
+        form_data = json.loads(row["form_data"] or "{}")
+    except Exception:
+        form_data = {}
+    phone = phone_override or form_data.get("guardian_mobile") or form_data.get("guardian_phone") or ""
+    if not phone:
+        return jsonify({"ok": False, "error": "보호자 휴대폰 번호 없음"}), 400
+
+    doc_url = f"{_sign_base_url()}/sign/{token}/pdf"
+    ok, result = _send_kakao_consent_copy(
+        phone=phone,
+        patient_name=row["patient_name"],
+        doc_type=row["doc_type"],
+        doc_url=doc_url,
+    )
+    if not ok:
+        return jsonify({"ok": False, "error": result}), 500
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        "UPDATE consent_records SET share_sent_at=?, share_sent_by=? WHERE token=?",
+        (now_str, session.get("user_id"), token)
+    )
+    db.commit()
+    return jsonify({"ok": True, "message_id": result, "doc_url": doc_url, "sent_at": now_str})
 
 
 @app.route("/notices", methods=["GET"])
@@ -3496,6 +3578,7 @@ def consents_history():
     sql = """
         SELECT cr.id, cr.token, cr.doc_type, cr.patient_name, cr.guardian_name,
                cr.vet_name, cr.signer_name, cr.signed_at, cr.created_at,
+               cr.share_sent_at, cr.form_data,
                u.display_name AS creator_name
         FROM consent_records cr
         LEFT JOIN users u ON u.id = cr.created_by
@@ -3512,9 +3595,20 @@ def consents_history():
         args.append(doc_type)
     sql += " ORDER BY cr.signed_at DESC LIMIT 300"
     rows = db.execute(sql, args).fetchall()
-    return render_template("consent_history.html", rows=rows,
+    # 보호자 휴대폰 추출 (form_data JSON에서)
+    enriched = []
+    for r in rows:
+        d = dict(r)
+        try:
+            fd = json.loads(d.get("form_data") or "{}")
+            d["guardian_phone"] = fd.get("guardian_mobile") or fd.get("guardian_phone") or ""
+        except Exception:
+            d["guardian_phone"] = ""
+        enriched.append(d)
+    return render_template("consent_history.html", rows=enriched,
                            q=q, doc_type=doc_type,
-                           doc_type_label=_doc_type_label)
+                           doc_type_label=_doc_type_label,
+                           kakao_consent_enabled=_kakao_consent_enabled())
 
 
 @app.route("/api/consents/<int:cid>/qr", methods=["GET"])
