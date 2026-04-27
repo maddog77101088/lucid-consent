@@ -2800,6 +2800,35 @@ def api_notice_update(doc_id):
     return jsonify({"ok": True})
 
 
+@app.route("/api/notices/<int:doc_id>/delete", methods=["POST"])
+@login_required
+def api_notice_delete(doc_id):
+    """안내문 영구 삭제 (admin 전용). 환자명 재입력 + 사유 필수."""
+    if session.get("role") != "admin":
+        return jsonify({"ok": False, "error": "관리자만 삭제 가능합니다."}), 403
+    data = request.get_json() or {}
+    patient_input = (data.get("patient_name") or "").strip()
+    reason = (data.get("reason") or "").strip()
+    if not patient_input:
+        return jsonify({"ok": False, "error": "환자명 재입력이 필요합니다."}), 400
+    if len(reason) < 3:
+        return jsonify({"ok": False, "error": "삭제 사유를 3자 이상 입력해주세요."}), 400
+
+    db = get_db()
+    row = db.execute(
+        "SELECT patient_name FROM patient_documents WHERE id=? AND doc_type IN ('ce','postop','imd')",
+        (doc_id,)
+    ).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    if (row["patient_name"] or "").strip() != patient_input:
+        return jsonify({"ok": False, "error": "환자명이 일치하지 않습니다."}), 400
+
+    db.execute("DELETE FROM patient_documents WHERE id=?", (doc_id,))
+    db.commit()
+    return jsonify({"ok": True})
+
+
 @app.route("/api/notices/<int:doc_id>/send-kakao", methods=["POST"])
 @login_required
 def api_notice_send_kakao(doc_id):
