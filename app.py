@@ -295,14 +295,16 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_doctype ON patient_documents(doc_type)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_created ON patient_documents(created_at)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_diagnosis ON patient_documents(diagnosis)")
-    # patient_documents 마이그레이션: 보호자 공유용 토큰
+    # patient_documents 마이그레이션: 보호자 공유용 토큰 + 의뢰병원 연결
     pd_cols = [r[1] for r in cur.execute("PRAGMA table_info(patient_documents)").fetchall()]
     for col, ddl in [
         ("share_token", "ALTER TABLE patient_documents ADD COLUMN share_token TEXT"),
         ("share_sent_at", "ALTER TABLE patient_documents ADD COLUMN share_sent_at TEXT"),
+        ("referral_hospital_id", "ALTER TABLE patient_documents ADD COLUMN referral_hospital_id INTEGER"),
     ]:
         if col not in pd_cols:
             cur.execute(ddl)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_referral ON patient_documents(referral_hospital_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_sharetoken ON patient_documents(share_token)")
     # 의뢰병원 DB
     cur.execute("""
@@ -522,6 +524,13 @@ def dashboard():
     rh_no_phone = db.execute(
         "SELECT COUNT(*) FROM referral_hospitals WHERE vet_phone IS NULL OR vet_phone = ''"
     ).fetchone()[0]
+    # 의뢰병원 보고서 stats
+    referral_total = db.execute(
+        "SELECT COUNT(*) FROM patient_documents WHERE doc_type='ce' AND referral_hospital_id IS NOT NULL"
+    ).fetchone()[0]
+    referral_unsent = db.execute(
+        "SELECT COUNT(*) FROM patient_documents WHERE doc_type='ce' AND referral_hospital_id IS NOT NULL AND share_sent_at IS NULL"
+    ).fetchone()[0]
     # 해피콜: 오늘 예정 건 + 밀린 건 (지난 날짜 미완료)
     today_str = datetime.now().strftime("%Y-%m-%d")
     # 카톡 안부 stats
@@ -555,7 +564,8 @@ def dashboard():
                            hc_drafted=hc_drafted,
                            hc_approved=hc_approved,
                            hc_urgent=hc_urgent,
-                           rh_total=rh_total, rh_no_phone=rh_no_phone)
+                           rh_total=rh_total, rh_no_phone=rh_no_phone,
+                           referral_total=referral_total, referral_unsent=referral_unsent)
 
 
 @app.route("/surgeries")
@@ -2815,7 +2825,8 @@ def _save_patient_document(doc_type, patient_name, *,
                            guardian_name="", guardian_phone="",
                            diagnosis="", surgery_id=None, hospitalization_id=None,
                            tags="", title="", body="", structured_data=None,
-                           vet_name="", related_consent_token="", related_happycall_id=None):
+                           vet_name="", related_consent_token="", related_happycall_id=None,
+                           referral_hospital_id=None):
     """모든 문서를 patient_documents 에 통합 저장. 실패해도 raise 안 함."""
     try:
         if not patient_name:
@@ -2828,15 +2839,15 @@ def _save_patient_document(doc_type, patient_name, *,
                (doc_type, patient_chart_id, patient_name, species, breed, age, sex,
                 guardian_name, guardian_phone, diagnosis, surgery_id, hospitalization_id,
                 tags, title, body, structured_data, vet_name,
-                related_consent_token, related_happycall_id, created_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                related_consent_token, related_happycall_id, referral_hospital_id, created_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (doc_type, (patient_chart_id or "").strip(), patient_name.strip(),
              species or "", breed or "", age or "", sex or "",
              guardian_name or "", guardian_phone or "",
              diagnosis or "", surgery_id, hospitalization_id,
              tags or "", title or "", body or "", structured_data or "",
              vet_name or session.get("display_name", ""),
-             related_consent_token or "", related_happycall_id,
+             related_consent_token or "", related_happycall_id, referral_hospital_id,
              session.get("user_id", 0))
         )
         db.commit()
@@ -3086,6 +3097,62 @@ def notice_edit(doc_id):
                            kakao_notice_enabled=_kakao_notice_enabled())
 
 
+@app.route("/referrals", methods=["GET"])
+@login_required
+def referrals_list():
+    """의뢰병원 보고서 목록 (CE 의뢰병원 모드로 작성된 것만)."""
+    q = (request.args.get("q") or "").strip()
+    sent_filter = (request.args.get("sent") or "").strip()
+    rh_filter = request.args.get("rh_id")
+    try:
+        rh_filter = int(rh_filter) if rh_filter else None
+    except (ValueError, TypeError):
+        rh_filter = None
+
+    db = get_db()
+    sql = """SELECT pd.id, pd.patient_name, pd.guardian_name, pd.diagnosis,
+                    pd.vet_name, pd.share_token, pd.share_sent_at, pd.created_at,
+                    pd.referral_hospital_id,
+                    rh.hospital_name, rh.district, rh.vet_name AS ref_vet_name,
+                    rh.vet_phone AS ref_vet_phone
+             FROM patient_documents pd
+             LEFT JOIN referral_hospitals rh ON rh.id = pd.referral_hospital_id
+             WHERE pd.doc_type='ce' AND pd.referral_hospital_id IS NOT NULL"""
+    args = []
+    if sent_filter == "yes":
+        sql += " AND pd.share_sent_at IS NOT NULL"
+    elif sent_filter == "no":
+        sql += " AND pd.share_sent_at IS NULL"
+    if rh_filter:
+        sql += " AND pd.referral_hospital_id=?"
+        args.append(rh_filter)
+    if q:
+        sql += " AND (pd.patient_name LIKE ? OR pd.guardian_name LIKE ? OR rh.hospital_name LIKE ? OR pd.vet_name LIKE ?)"
+        like = f"%{q}%"
+        args += [like, like, like, like]
+    sql += " ORDER BY pd.created_at DESC LIMIT 500"
+    rows = db.execute(sql, args).fetchall()
+
+    base = "doc_type='ce' AND referral_hospital_id IS NOT NULL"
+    stats = {
+        "total": db.execute(f"SELECT COUNT(*) FROM patient_documents WHERE {base}").fetchone()[0],
+        "sent": db.execute(f"SELECT COUNT(*) FROM patient_documents WHERE {base} AND share_sent_at IS NOT NULL").fetchone()[0],
+    }
+    # 의뢰병원별 상위 (TOP 5)
+    top_hospitals = db.execute(
+        """SELECT rh.id, rh.hospital_name, rh.district, COUNT(pd.id) AS cnt
+           FROM patient_documents pd
+           JOIN referral_hospitals rh ON rh.id = pd.referral_hospital_id
+           WHERE pd.doc_type='ce'
+           GROUP BY pd.referral_hospital_id
+           ORDER BY cnt DESC LIMIT 5"""
+    ).fetchall()
+    return render_template("referrals_list.html",
+                           rows=rows, stats=stats, top_hospitals=top_hospitals,
+                           q=q, sent_filter=sent_filter, rh_filter=rh_filter,
+                           kakao_referral_enabled=False)  # 검수 통과 후 활성
+
+
 @app.route("/api/consents/<token>/send-kakao", methods=["POST"])
 @login_required
 def api_consent_send_kakao(token):
@@ -3142,11 +3209,13 @@ def notices_list():
     sent_filter = (request.args.get("sent") or "").strip()  # 'yes' / 'no' / ''
     q = (request.args.get("q") or "").strip()
 
+    # 보호자용 안내문만 (의뢰병원 보고서는 /referrals 별도 페이지에서)
     sql = """SELECT id, doc_type, patient_chart_id, patient_name, guardian_name,
                     guardian_phone, diagnosis, vet_name, share_token, share_sent_at,
                     created_at
              FROM patient_documents
-             WHERE doc_type IN ('ce','postop','imd')"""
+             WHERE doc_type IN ('ce','postop','imd')
+               AND referral_hospital_id IS NULL"""
     args = []
     if doc_type_filter in ("ce", "postop", "imd"):
         sql += " AND doc_type=?"
@@ -3162,11 +3231,12 @@ def notices_list():
     sql += " ORDER BY created_at DESC LIMIT 500"
     rows = db.execute(sql, args).fetchall()
 
-    # 통계
+    # 통계 (보호자용만)
+    base_filter = "doc_type IN ('ce','postop','imd') AND referral_hospital_id IS NULL"
     stats = {
-        "total": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type IN ('ce','postop','imd')").fetchone()[0],
-        "sent": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type IN ('ce','postop','imd') AND share_sent_at IS NOT NULL").fetchone()[0],
-        "ce": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type='ce'").fetchone()[0],
+        "total": db.execute(f"SELECT COUNT(*) FROM patient_documents WHERE {base_filter}").fetchone()[0],
+        "sent": db.execute(f"SELECT COUNT(*) FROM patient_documents WHERE {base_filter} AND share_sent_at IS NOT NULL").fetchone()[0],
+        "ce": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type='ce' AND referral_hospital_id IS NULL").fetchone()[0],
         "postop": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type='postop'").fetchone()[0],
         "imd": db.execute("SELECT COUNT(*) FROM patient_documents WHERE doc_type='imd'").fetchone()[0],
     }
@@ -4552,6 +4622,11 @@ def api_ce_generate():
     ref_vet_name = (data.get("ref_vet_name") or "").strip()
     guardian_name = (data.get("guardian_name") or "").strip()
     patient_name = (data.get("patient_name") or "").strip()
+    referral_hospital_id = data.get("referral_hospital_id")
+    try:
+        referral_hospital_id = int(referral_hospital_id) if referral_hospital_id else None
+    except (ValueError, TypeError):
+        referral_hospital_id = None
     if not chart:
         return jsonify({"error": "차트 내용을 입력하세요."}), 400
 
@@ -4603,15 +4678,17 @@ def api_ce_generate():
             if text.startswith(("text", "markdown", "md")):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
-        # 통합 환자 문서 저장 (보호자 모드만)
+        # 통합 환자 문서 저장 (보호자 모드 + 의뢰병원 모드 모두)
         saved_doc_id = None
-        if mode == "guardian" and patient_name:
+        if patient_name:
+            title = "의뢰진료 보고서" if mode == "vet" else "진료안내문"
             saved_doc_id = _save_patient_document(
                 "ce", patient_name,
                 guardian_name=guardian_name,
-                title="진료안내문",
+                title=title,
                 body=text,
                 structured_data={"mode": mode, "ref_vet_name": ref_vet_name},
+                referral_hospital_id=referral_hospital_id if mode == "vet" else None,
             )
         return jsonify({"ok": True, "text": text, "mode": mode, "doc_id": saved_doc_id})
     except Exception as e:

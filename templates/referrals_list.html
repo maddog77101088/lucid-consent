@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+{% block title %}의뢰병원 보고서 - {{ hospital_short }}{% endblock %}
+{% block content %}
+<h1 style="display:flex; align-items:center; gap:10px;">
+  🏥 의뢰병원 보고서
+  <span class="muted" style="font-size:13px; font-weight:400;">({{ rows|length }}건 표시 / 전체 {{ stats.total }}건)</span>
+</h1>
+<p class="muted">CE 의뢰병원용 모드로 작성된 진료 경과 보고서. 의뢰 보낸 원장님께 카톡 발송 + 발송 상태 관리.</p>
+
+<!-- 통계 카드 -->
+<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; margin:16px 0;">
+  <a href="?" style="background:#fff; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if not sent_filter and not rh_filter %}#2563eb{% else %}#e5e7eb{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#1f2937;">📋 {{ stats.total }}</div>
+    <div style="font-size:12px; color:#4b5563; margin-top:4px;">전체</div>
+  </a>
+  <a href="?sent=yes" style="background:#d1fae5; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if sent_filter == 'yes' %}#059669{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#047857;">📤 {{ stats.sent }}</div>
+    <div style="font-size:12px; color:#065f46; margin-top:4px;">카톡 발송됨</div>
+  </a>
+  <a href="?sent=no" style="background:#fef3c7; padding:14px; border-radius:8px; text-decoration:none; border:2px solid {% if sent_filter == 'no' %}#d97706{% else %}transparent{% endif %};">
+    <div style="font-size:24px; font-weight:700; color:#92400e;">⚠️ {{ stats.total - stats.sent }}</div>
+    <div style="font-size:12px; color:#92400e; margin-top:4px;">미발송</div>
+  </a>
+</div>
+
+<!-- 자주 보내는 의뢰병원 (TOP 5) -->
+{% if top_hospitals %}
+<div style="background:#fff; padding:14px 16px; border-radius:8px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
+  <div style="font-size:12px; color:#6b7280; margin-bottom:8px; font-weight:600;">자주 의뢰받는 병원</div>
+  <div style="display:flex; gap:8px; flex-wrap:wrap;">
+    {% for h in top_hospitals %}
+    <a href="?rh_id={{ h.id }}" style="background:{% if rh_filter == h.id %}#dbeafe{% else %}#f3f4f6{% endif %}; color:#1f2937; padding:6px 12px; border-radius:16px; text-decoration:none; font-size:12.5px; border:1.5px solid {% if rh_filter == h.id %}#2563eb{% else %}transparent{% endif %};">
+      🏥 {{ h.hospital_name }}{% if h.district %} ({{ h.district }}){% endif %} · <strong>{{ h.cnt }}</strong>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 검색 -->
+<form method="get" action="{{ url_for('referrals_list') }}"
+      style="display:flex; gap:8px; margin:16px 0 22px; flex-wrap:wrap; align-items:center;
+             background:#fff; padding:14px 16px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
+  <input type="text" name="q" value="{{ q }}" placeholder="🔍 환자·보호자·의뢰병원·주치의 검색"
+         style="flex:1; min-width:200px; padding:10px 14px; font-size:14px;
+                border:1.5px solid #d1d5db; border-radius:6px;">
+  {% if sent_filter %}<input type="hidden" name="sent" value="{{ sent_filter }}">{% endif %}
+  {% if rh_filter %}<input type="hidden" name="rh_id" value="{{ rh_filter }}">{% endif %}
+  <button type="submit" style="background:#2563eb; color:#fff; border:0; padding:10px 24px;
+                               border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">검색</button>
+  {% if q or sent_filter or rh_filter %}
+  <a href="{{ url_for('referrals_list') }}" style="padding:10px 16px; color:#6b7280; text-decoration:none; font-size:13px;">초기화</a>
+  {% endif %}
+</form>
+
+{% if not rows %}
+  <div class="card" style="padding:40px; text-align:center; color:#6b7280; background:#fff; border-radius:8px;">
+    {% if q or sent_filter or rh_filter %}
+      검색 결과가 없습니다.
+    {% else %}
+      작성된 의뢰병원 보고서가 없습니다. CE 작성 페이지에서 [의뢰병원용] 모드로 작성하세요.
+    {% endif %}
+  </div>
+{% else %}
+
+<div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow-x:auto;">
+<table style="width:100%; min-width:900px; border-collapse:collapse; font-size:13.5px;">
+  <thead>
+    <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
+      <th style="width:130px; padding:10px 8px; text-align:left; white-space:nowrap;">작성일</th>
+      <th style="width:90px; padding:10px 8px; text-align:left; white-space:nowrap;">환자</th>
+      <th style="width:90px; padding:10px 8px; text-align:left; white-space:nowrap;">보호자</th>
+      <th style="width:80px; padding:10px 8px; text-align:left; white-space:nowrap;">주치의</th>
+      <th style="min-width:160px; padding:10px 8px; text-align:left;">의뢰병원 / 원장</th>
+      <th style="width:130px; padding:10px 8px; text-align:left; white-space:nowrap;">발송 상태</th>
+      <th style="width:200px; padding:10px 8px; text-align:right; white-space:nowrap;">동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr style="border-bottom:1px solid #f3f4f6;">
+      <td style="padding:10px 8px; font-size:12px; white-space:nowrap;">{{ r.created_at[:16] if r.created_at else '-' }}</td>
+      <td style="padding:10px 8px; font-weight:600; white-space:nowrap;">{{ r.patient_name or '-' }}</td>
+      <td style="padding:10px 8px; white-space:nowrap;">{{ r.guardian_name or '-' }}</td>
+      <td style="padding:10px 8px; font-size:12px; color:#374151; white-space:nowrap;">
+        {% if r.vet_name %}👨‍⚕️ {{ r.vet_name }}{% else %}<span style="color:#9ca3af;">-</span>{% endif %}
+      </td>
+      <td style="padding:10px 8px;">
+        <div style="font-weight:600; font-size:13px;">🏥 {{ r.hospital_name or '병원 정보 없음' }}{% if r.district %} <span style="color:#6b7280; font-weight:400; font-size:11px;">({{ r.district }})</span>{% endif %}</div>
+        <div style="font-size:11.5px; color:#4b5563; margin-top:2px;">
+          {% if r.ref_vet_name %}원장: {{ r.ref_vet_name }}{% endif %}
+          {% if r.ref_vet_phone %}<span style="color:#047857; margin-left:6px;">📱 {{ r.ref_vet_phone }}</span>
+          {% else %}<span style="background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:3px; margin-left:6px; font-size:10px;">⚠️ 휴대폰 미등록</span>{% endif %}
+        </div>
+      </td>
+      <td style="padding:10px 8px; white-space:nowrap;">
+        {% if r.share_sent_at %}
+          <span style="background:#d1fae5; color:#047857; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600;">✅ 발송됨</span>
+          <div style="font-size:10px; color:#6b7280; margin-top:3px;">{{ r.share_sent_at[:16] }}</div>
+        {% else %}
+          <span style="background:#fef3c7; color:#92400e; padding:3px 8px; border-radius:6px; font-size:11px; font-weight:600;">⚠️ 미발송</span>
+        {% endif %}
+      </td>
+      <td style="padding:10px 8px; text-align:right; white-space:nowrap;">
+        <a href="{{ url_for('notice_edit', doc_id=r.id) }}"
+           style="background:#2563eb; color:#fff; border:0; padding:5px 12px; border-radius:4px; font-size:11px; text-decoration:none; font-weight:600;">📝 보기·편집</a>
+        {% if kakao_referral_enabled and r.ref_vet_phone %}
+          {% if r.share_sent_at %}
+          <button type="button" data-doc-id="{{ r.id }}"
+                  style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;" disabled title="검수 통과 후 활성">🔁 재발송</button>
+          {% else %}
+          <button type="button" data-doc-id="{{ r.id }}"
+                  style="background:#fbbc04; color:#3c3c3c; border:0; padding:5px 12px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;" disabled title="검수 통과 후 활성">📤 카톡</button>
+          {% endif %}
+        {% elif not r.ref_vet_phone %}
+          <span style="color:#9ca3af; font-size:11px;">번호 없음</span>
+        {% endif %}
+        {% if current_user.role == 'admin' %}
+        <button type="button" class="btn-notice-delete"
+                data-doc-id="{{ r.id }}"
+                data-patient="{{ r.patient_name or '' }}"
+                title="보고서 영구 삭제 (관리자)"
+                style="background:#fff; color:#dc2626; border:1px solid #fecaca; padding:5px 9px; border-radius:4px; font-size:11px; cursor:pointer; margin-left:3px;">🗑</button>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% endif %}
+
+{% if current_user.role == 'admin' %}
+<!-- 영구 삭제 모달 (admin) — notices_list와 동일 패턴 -->
+<div id="notice-delete-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:460px; width:90%; box-shadow:0 10px 40px rgba(0,0,0,.3);">
+    <h3 style="margin:0 0 12px; font-size:18px; color:#dc2626;">⚠ 의뢰병원 보고서 영구 삭제 (관리자 전용)</h3>
+    <p style="margin:0 0 14px; font-size:13px; color:#4b5563; line-height:1.6;">
+      이 보고서는 <strong>완전히 삭제</strong>되며 복구할 수 없습니다.<br>
+      이미 카톡으로 발송된 링크는 <strong>404로 끊깁니다</strong>.
+    </p>
+    <div style="background:#fef3c7; padding:10px 12px; border-radius:6px; margin-bottom:14px; font-size:13px; color:#92400e;">
+      삭제할 환자: <strong id="notice-del-patient-display">-</strong>
+    </div>
+    <label style="display:block; font-size:13px; color:#374151; margin-bottom:4px;">환자명 재입력 <span style="color:#dc2626;">*</span></label>
+    <input type="text" id="notice-del-patient-input" style="width:100%; padding:9px 12px; font-size:14px; border:1.5px solid #d1d5db; border-radius:6px; margin-bottom:14px; box-sizing:border-box;">
+    <label style="display:block; font-size:13px; color:#374151; margin-bottom:4px;">삭제 사유 <span style="color:#dc2626;">*</span></label>
+    <textarea id="notice-del-reason-input" rows="3" placeholder="예: 테스트용으로 잘못 작성"
+              style="width:100%; padding:9px 12px; font-size:14px; border:1.5px solid #d1d5db; border-radius:6px; margin-bottom:14px; box-sizing:border-box; font-family:inherit; resize:vertical;"></textarea>
+    <div id="notice-del-error" style="color:#dc2626; font-size:12px; min-height:16px; margin-bottom:10px;"></div>
+    <div style="display:flex; gap:8px;">
+      <button type="button" id="notice-del-cancel" style="flex:1; background:#f3f4f6; color:#374151; border:0; padding:10px; border-radius:6px; font-size:14px; cursor:pointer;">취소</button>
+      <button type="button" id="notice-del-confirm" style="flex:2; background:#dc2626; color:#fff; border:0; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">🗑 삭제 확정</button>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+(function(){
+  {% if current_user.role == 'admin' %}
+  const delModal = document.getElementById('notice-delete-modal');
+  if (delModal) {
+    const dp = document.getElementById('notice-del-patient-display');
+    const di = document.getElementById('notice-del-patient-input');
+    const dr = document.getElementById('notice-del-reason-input');
+    const de = document.getElementById('notice-del-error');
+    const dc = document.getElementById('notice-del-cancel');
+    const dk = document.getElementById('notice-del-confirm');
+    let curId = null, curName = '';
+    function show(id, name){ curId = id; curName = name; dp.textContent = name || '-'; di.value=''; dr.value=''; de.textContent=''; delModal.style.display='flex'; setTimeout(() => di.focus(), 50); }
+    function hide(){ delModal.style.display='none'; curId=null; }
+    document.querySelectorAll('.btn-notice-delete').forEach(b => b.addEventListener('click', function(){
+      show(this.dataset.docId, this.dataset.patient || '');
+    }));
+    dc.addEventListener('click', hide);
+    delModal.addEventListener('click', e => { if (e.target === delModal) hide(); });
+    dk.addEventListener('click', async function(){
+      const p = di.value.trim(); const r = dr.value.trim();
+      if (!p) { de.textContent = '환자명을 입력해주세요.'; return; }
+      if (p !== curName.trim()) { de.textContent = `환자명 불일치. "${curName}" 정확히 입력.`; return; }
+      if (r.length < 3) { de.textContent = '사유 3자 이상.'; return; }
+      this.disabled = true; this.textContent = '삭제 중...';
+      try {
+        const resp = await fetch(`/api/notices/${curId}/delete`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({patient_name: p, reason: r})
+        });
+        const j = await resp.json();
+        if (!resp.ok || !j.ok) throw new Error(j.error || '실패');
+        hide(); location.reload();
+      } catch (err) { de.textContent = err.message; }
+      finally { this.disabled = false; this.textContent = '🗑 삭제 확정'; }
+    });
+  }
+  {% endif %}
+})();
+</script>
+{% endblock %}

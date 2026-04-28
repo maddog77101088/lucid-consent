@@ -256,7 +256,8 @@ async function generate() {
     const r = await fetch('/api/ce/generate', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({chart, mode, ref_vet_name, patient_name, guardian_name})
+      body: JSON.stringify({chart, mode, ref_vet_name, patient_name, guardian_name,
+                            referral_hospital_id: document.getElementById('rh-id').value || null})
     });
     const d = await r.json();
     if (!r.ok || !d.ok) throw new Error(d.error || '실패');

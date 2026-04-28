@@ -80,6 +80,23 @@
   </a>
 </div>
 
+<!-- 섹션 2-1: 의뢰병원 보고서 -->
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🏥 의뢰병원 보고서</h2>
+<div class="grid-2" style="margin-bottom:20px;">
+  <a class="card big-action" href="{{ url_for('referrals_list') }}"
+     style="{% if referral_unsent and referral_unsent > 0 %}border:2px solid #d97706;{% endif %}">
+    <div class="big-icon">📤</div>
+    <div>
+      <h2>의뢰병원 보고서 목록
+        {% if referral_unsent and referral_unsent > 0 %}
+          <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📤 미발송 {{ referral_unsent }}</span>
+        {% endif %}
+      </h2>
+      <p>전체 <strong>{{ referral_total or 0 }}건</strong>. 의뢰 보낸 원장님께 진료 경과 보고서 카톡 발송·재발송 관리.</p>
+    </div>
+  </a>
+</div>
+
 <!-- 섹션 3: 카톡 안부 -->
 <h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📱 카톡 안부 + 응답 피드백</h2>
 <div class="grid-2" style="margin-bottom:20px;">
