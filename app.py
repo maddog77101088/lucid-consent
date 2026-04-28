@@ -1377,7 +1377,7 @@ def postop_new():
                            today=datetime.now().strftime("%Y-%m-%d"),
                            vet_name=session.get("display_name", ""),
                            vet_list=_get_vet_list(),
-                           kakao_notice_enabled=_kakao_notice_enabled())
+                           kakao_notice_enabled=_kakao_notice_enabled("postop"))
 
 
 @app.route("/api/postop/generate", methods=["POST"])
@@ -1596,7 +1596,7 @@ def imd_new():
                            today=datetime.now().strftime("%Y-%m-%d"),
                            vet_name=session.get("display_name", ""),
                            vet_list=_get_vet_list(),
-                           kakao_notice_enabled=_kakao_notice_enabled())
+                           kakao_notice_enabled=_kakao_notice_enabled("imd"))
 
 
 @app.route("/api/imd/generate", methods=["POST"])
@@ -2045,9 +2045,30 @@ def _kakao_enabled():
     return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID", "").strip())
 
 
-def _kakao_notice_enabled():
-    """안내문 도착 알림 발송 가능 여부."""
-    return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_NOTICE", "").strip())
+def _kakao_notice_template_id(doc_type):
+    """doc_type별 안내문 도착 알림 templateId 반환 (없으면 빈 문자열).
+    우선순위: KAKAO_TEMPLATE_ID_NOTICE_<TYPE> → KAKAO_TEMPLATE_ID_NOTICE (구버전 fallback)
+    """
+    if doc_type:
+        v = os.environ.get(f"KAKAO_TEMPLATE_ID_NOTICE_{doc_type.upper()}", "").strip()
+        if v:
+            return v
+    return os.environ.get("KAKAO_TEMPLATE_ID_NOTICE", "").strip()
+
+
+def _kakao_notice_enabled(doc_type=None):
+    """안내문 도착 알림 발송 가능 여부.
+    doc_type 지정 시 해당 종류만 체크, 없으면 어느 하나라도 활성이면 True.
+    """
+    if not _kakao_base_enabled():
+        return False
+    if doc_type:
+        return bool(_kakao_notice_template_id(doc_type))
+    # 어느 doc_type 이라도 templateId 있으면 활성
+    for d in ("ce", "postop", "imd"):
+        if _kakao_notice_template_id(d):
+            return True
+    return False
 
 
 def _kakao_consent_enabled():
@@ -2235,10 +2256,15 @@ def _try_schedule_kakao_for_happycall(hc_id):
 
 
 def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
-    """안내문 도착 알림톡 발송. (안내문 종류는 본문 고정 — 검수 어뷰징 우려 회피)"""
+    """안내문 도착 알림톡 발송. doc_type별로 별도 templateId 사용.
+    각 템플릿 본문에 안내문 종류가 고정 텍스트로 명시되어 있어 변수 2개(#{환자명}, #{안내문URL})만 전달.
+    """
+    template_id = _kakao_notice_template_id(doc_type)
+    if not template_id:
+        return False, f"카카오 안내문 알림 템플릿 미설정 (doc_type={doc_type})"
     return _send_kakao_template(
         phone=phone,
-        template_id=os.environ.get("KAKAO_TEMPLATE_ID_NOTICE", "").strip(),
+        template_id=template_id,
         variables={
             "#{환자명}": patient_name or "환자",
             "#{안내문URL}": notice_url,
@@ -4384,7 +4410,7 @@ def ce_new():
     return render_template("ce_new.html",
                            vet_name=session.get("display_name", ""),
                            vet_list=_get_vet_list(),
-                           kakao_notice_enabled=_kakao_notice_enabled())
+                           kakao_notice_enabled=_kakao_notice_enabled("ce"))
 
 
 @app.route("/api/ce/generate", methods=["POST"])
