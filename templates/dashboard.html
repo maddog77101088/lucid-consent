@@ -12,8 +12,7 @@
     <div class="big-icon">📋</div>
     <div>
       <h2>동의서</h2>
-      {% if (pending_cnt and pending_cnt > 0) or (signed_unsent_cnt and signed_unsent_cnt > 0) %}
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
+      <div class="card-badges">
         {% if pending_cnt and pending_cnt > 0 %}
           <span style="background:#059669; color:#fff; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">서명대기 {{ pending_cnt }}</span>
         {% endif %}
@@ -21,7 +20,6 @@
           <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">📤 미발송 {{ signed_unsent_cnt }}</span>
         {% endif %}
       </div>
-      {% endif %}
       <p>수술·영상·개인정보·안락사·퇴원·미수금 동의서 작성 + 서명 관리.</p>
     </div>
   </a>
@@ -32,8 +30,7 @@
     <div class="big-icon">📢</div>
     <div>
       <h2>안내문 & 카톡 안부</h2>
-      {% if (hc_urgent and hc_urgent > 0) or (hc_pending_draft and hc_pending_draft > 0) or (referral_unsent and referral_unsent > 0) %}
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
+      <div class="card-badges">
         {% if hc_urgent and hc_urgent > 0 %}
           <span style="background:#dc2626; color:#fff; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">🚨 긴급 {{ hc_urgent }}</span>
         {% endif %}
@@ -44,7 +41,6 @@
           <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">🏥 의뢰 미발송 {{ referral_unsent }}</span>
         {% endif %}
       </div>
-      {% endif %}
       <p>CE·수술후·내과 안내문 + 의뢰병원 보고서 + 카톡 안부 + 응답 피드백.</p>
     </div>
   </a>
@@ -55,11 +51,11 @@
     <div class="big-icon">🗂</div>
     <div>
       <h2>DB 관리 & 환자</h2>
-      {% if rh_no_phone and rh_no_phone > 0 %}
-      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
-        <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">📞 미등록 {{ rh_no_phone }}</span>
+      <div class="card-badges">
+        {% if rh_no_phone and rh_no_phone > 0 %}
+          <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">📞 미등록 {{ rh_no_phone }}</span>
+        {% endif %}
       </div>
-      {% endif %}
       <p>수술·입원·영상·의뢰병원 DB + 환자별·진단별 히스토리.</p>
     </div>
   </a>
@@ -71,6 +67,7 @@
     <div class="big-icon">⚙</div>
     <div>
       <h2>관리자 설정</h2>
+      <div class="card-badges"></div>
       <p>병원 기본양식 편집 · 수의사·직원 계정 관리.</p>
     </div>
   </a>

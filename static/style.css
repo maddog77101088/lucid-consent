@@ -114,6 +114,11 @@ h4 { font-size: 14px; margin: 12px 0 4px; color: #374151; }
 .big-action .big-icon { font-size: 40px; color: var(--primary); line-height: 1; }
 .big-action h2 { margin: 0 0 6px; }
 .big-action p { margin: 0; color: var(--muted); }
+.big-action > div:last-child { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.card-badges {
+  display: flex; gap: 6px; flex-wrap: wrap;
+  min-height: 26px; margin-bottom: 6px;
+}
 
 /* ---------- 공통 토글 스위치 (사이즈는 .toggle-sm / .toggle-md 로 조절) ---------- */
 .toggle-switch {
