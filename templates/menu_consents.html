@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="margin-bottom:14px;">
+  <a href="{{ url_for('dashboard') }}" style="color:#6b7280; font-size:13px; text-decoration:none;">← 메인 대시보드로</a>
+</div>
+<h1 style="margin:0 0 4px;">📋 동의서</h1>
+<p class="muted" style="margin:0 0 22px;">동의서 작성 + 서명 관리.</p>
+
+<!-- 작성 -->
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📝 동의서 작성</h2>
+<div class="grid-2" style="margin-bottom:20px;">
+  <a class="card big-action" href="{{ url_for('consent_new') }}">
+    <div class="big-icon">＋</div>
+    <div>
+      <h2>새 수술동의서 작성</h2>
+      <p>수술·입원 동의서 작성. DB 연동 + AI 자동채움 + 차트 OCR 지원.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('imaging_consent_new') }}">
+    <div class="big-icon">🩻</div>
+    <div>
+      <h2>영상 촬영 마취 동의서</h2>
+      <p>CT·MRI·내시경 등 영상 검사 마취 동의서 작성.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('privacy_new') }}">
+    <div class="big-icon">🔐</div>
+    <div>
+      <h2>개인정보 수집 및 활용 동의서</h2>
+      <p>마약류·향정신성의약품 원외처방용. NIMS 제출 필수. 주민번호는 보호자가 스마트폰으로 직접 입력.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('euthanasia_new') }}">
+    <div class="big-icon">🕊</div>
+    <div>
+      <h2>안락사 동의서</h2>
+      <p>안락사 결정 환자용. 사후 장례 방법 선택 포함 (개별장례/합동화장/직접인수).</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('discharge_new') }}">
+    <div class="big-icon">🚪</div>
+    <div>
+      <h2>퇴원 요청 및 서약서</h2>
+      <p>보호자 요청에 의한 조기퇴원(치료 중단) 서약서. 병원 면책·민형사 이의 포기.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('payment_new') }}">
+    <div class="big-icon">🧾</div>
+    <div>
+      <h2>치료비 미수금 지불 서약서</h2>
+      <p>미납 진료비 납입 약속서. 금액·납입기한(자동계산) 명시, 기한 경과 시 법적 절차 고지.</p>
+    </div>
+  </a>
+</div>
+
+<!-- 서명 관리 -->
+<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🗂 서명 관리</h2>
+<div class="grid-2" style="margin-bottom:20px;">
+  <a class="card big-action" href="{{ url_for('consents_pending') }}"
+     style="{% if pending_cnt and pending_cnt > 0 %}border:2px solid #059669;{% endif %}">
+    <div class="big-icon">📋</div>
+    <div>
+      <h2>서명 대기 리스트
+        {% if pending_cnt and pending_cnt > 0 %}
+        <span style="background:#059669; color:#fff; padding:2px 10px; border-radius:12px; font-size:14px; margin-left:6px;">{{ pending_cnt }}</span>
+        {% endif %}
+      </h2>
+      <p>주치의가 미리 작성해둔 서명 대기 동의서 {{ pending_cnt or 0 }}건. 진료실에서 QR 띄워 서명받기.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('consents_history') }}"
+     style="{% if signed_unsent_cnt and signed_unsent_cnt > 0 %}border:2px solid #d97706;{% endif %}">
+    <div class="big-icon">🗃</div>
+    <div>
+      <h2>서명 완료 동의서
+        {% if signed_unsent_cnt and signed_unsent_cnt > 0 %}
+        <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📤 카톡 미발송 {{ signed_unsent_cnt }}</span>
+        {% endif %}
+      </h2>
+      <p>서명 완료 <strong>{{ signed_cnt or 0 }}건</strong> · 환자명·수의사로 검색, PDF 재출력, 보호자에게 카톡 사본 발송.</p>
+    </div>
+  </a>
+</div>
+
+{% endblock %}

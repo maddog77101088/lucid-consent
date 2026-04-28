@@ -499,9 +499,8 @@ def change_password():
     return render_template("change_password.html", forced=session.get("must_change_password", False))
 
 
-@app.route("/")
-@login_required
-def dashboard():
+def _dashboard_stats():
+    """대시보드·카테고리 페이지에서 공유하는 통계 dict."""
     db = get_db()
     counts = {c: db.execute("SELECT COUNT(*) FROM surgeries WHERE category=?", (c,)).fetchone()[0] for c in CATEGORIES}
     pending_cnt = db.execute(
@@ -556,16 +555,54 @@ def dashboard():
     # 호환성을 위해 기존 필드도 유지 (legacy)
     hc_today = hc_pending_draft + hc_drafted
     hc_overdue = hc_approved
-    return render_template("dashboard.html", counts=counts, total=sum(counts.values()),
-                           pending_cnt=pending_cnt, signed_cnt=signed_cnt,
-                           signed_unsent_cnt=signed_unsent_cnt,
-                           hc_today=hc_today, hc_overdue=hc_overdue,
-                           hc_pending_draft=hc_pending_draft,
-                           hc_drafted=hc_drafted,
-                           hc_approved=hc_approved,
-                           hc_urgent=hc_urgent,
-                           rh_total=rh_total, rh_no_phone=rh_no_phone,
-                           referral_total=referral_total, referral_unsent=referral_unsent)
+    return dict(counts=counts, total=sum(counts.values()),
+                pending_cnt=pending_cnt, signed_cnt=signed_cnt,
+                signed_unsent_cnt=signed_unsent_cnt,
+                hc_today=hc_today, hc_overdue=hc_overdue,
+                hc_pending_draft=hc_pending_draft,
+                hc_drafted=hc_drafted,
+                hc_approved=hc_approved,
+                hc_urgent=hc_urgent,
+                rh_total=rh_total, rh_no_phone=rh_no_phone,
+                referral_total=referral_total, referral_unsent=referral_unsent)
+
+
+@app.route("/", methods=["GET"])
+@login_required
+def dashboard():
+    """메인 대시보드 — 4개 큰 카테고리 카드만 표시."""
+    return render_template("dashboard.html", **_dashboard_stats())
+
+
+@app.route("/menu/consents", methods=["GET"])
+@login_required
+def menu_consents():
+    """카테고리: 📋 동의서."""
+    return render_template("menu_consents.html", **_dashboard_stats())
+
+
+@app.route("/menu/notices", methods=["GET"])
+@login_required
+def menu_notices():
+    """카테고리: 📢 안내문 & 카톡 안부."""
+    return render_template("menu_notices.html", **_dashboard_stats())
+
+
+@app.route("/menu/db", methods=["GET"])
+@login_required
+def menu_db():
+    """카테고리: 🗂 DB 관리 & 환자."""
+    return render_template("menu_db.html", **_dashboard_stats())
+
+
+@app.route("/menu/admin", methods=["GET"])
+@login_required
+def menu_admin():
+    """카테고리: ⚙ 관리자 (admin only)."""
+    if session.get("role") != "admin":
+        flash("관리자만 접근 가능합니다.", "error")
+        return redirect(url_for("dashboard"))
+    return render_template("menu_admin.html", **_dashboard_stats())
 
 
 @app.route("/surgeries")

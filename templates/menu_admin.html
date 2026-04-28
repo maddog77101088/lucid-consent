@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="margin-bottom:14px;">
+  <a href="{{ url_for('dashboard') }}" style="color:#6b7280; font-size:13px; text-decoration:none;">← 메인 대시보드로</a>
+</div>
+<h1 style="margin:0 0 4px;">⚙ 관리자 설정</h1>
+<p class="muted" style="margin:0 0 22px;">병원 양식 + 사용자 계정 관리. 관리자 전용.</p>
+
+<div class="grid-2" style="margin-bottom:20px;">
+  <a class="card big-action" href="{{ url_for('template_edit') }}"
+     style="border-left:3px solid #d97706;">
+    <div class="big-icon">📐</div>
+    <div>
+      <h2>기본양식 편집</h2>
+      <p>동의서 공통 헤더·보호자의 약속·알림 등 병원 기본양식 편집. YouTube 안내영상 URL 설정.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('users') }}"
+     style="border-left:3px solid #d97706;">
+    <div class="big-icon">👥</div>
+    <div>
+      <h2>사용자 관리</h2>
+      <p>수의사 계정 추가·삭제, 비밀번호 초기화, 권한 부여.</p>
+    </div>
+  </a>
+</div>
+
+{% endblock %}

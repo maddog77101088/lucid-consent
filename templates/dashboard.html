@@ -1,246 +1,74 @@
 {% extends "base.html" %}
 {% block content %}
-<!-- 섹션 1: 동의서 작성 -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📝 동의서 작성</h2>
-<div class="grid-2" style="margin-bottom:20px;">
-  <a class="card big-action" href="{{ url_for('consent_new') }}">
-    <div class="big-icon">＋</div>
-    <div>
-      <h2>새 수술동의서 작성</h2>
-      <p>수술·입원 동의서 작성. DB 연동 + AI 자동채움 + 차트 OCR 지원.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('imaging_consent_new') }}">
-    <div class="big-icon">🩻</div>
-    <div>
-      <h2>영상 촬영 마취 동의서</h2>
-      <p>CT·MRI·내시경 등 영상 검사 마취 동의서 작성.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('privacy_new') }}">
-    <div class="big-icon">🔐</div>
-    <div>
-      <h2>개인정보 수집 및 활용 동의서</h2>
-      <p>마약류·향정신성의약품 원외처방용. NIMS 제출 필수. 주민번호는 보호자가 스마트폰으로 직접 입력.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('euthanasia_new') }}">
-    <div class="big-icon">🕊</div>
-    <div>
-      <h2>안락사 동의서</h2>
-      <p>안락사 결정 환자용. 사후 장례 방법 선택 포함 (개별장례/합동화장/직접인수).</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('discharge_new') }}">
-    <div class="big-icon">🚪</div>
-    <div>
-      <h2>퇴원 요청 및 서약서</h2>
-      <p>보호자 요청에 의한 조기퇴원(치료 중단) 서약서. 병원 면책·민형사 이의 포기.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('payment_new') }}">
-    <div class="big-icon">🧾</div>
-    <div>
-      <h2>치료비 미수금 지불 서약서</h2>
-      <p>미납 진료비 납입 약속서. 금액·납입기한(자동계산) 명시, 기한 경과 시 법적 절차 고지.</p>
-    </div>
-  </a>
-</div>
 
-<!-- 섹션 2: 안내문 -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📢 안내문</h2>
+<h1 style="margin:8px 0 4px; font-size:22px;">🏠 메인 대시보드</h1>
+<p class="muted" style="margin:0 0 22px;">카테고리를 선택해 세부 메뉴로 이동하세요.</p>
+
 <div class="grid-2" style="margin-bottom:20px;">
-  <a class="card big-action" href="{{ url_for('ce_new') }}">
-    <div class="big-icon">💬</div>
-    <div>
-      <h2>진료안내문 (CE)</h2>
-      <p>차트 OCR 기반 보호자 안내 메시지 / 의뢰병원 진료경과 보고 자동 생성.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('postop_new') }}">
-    <div class="big-icon">🏥</div>
-    <div>
-      <h2>수술후 안내문</h2>
-      <p>수술 DB 기본값 + 처방·재진 정보 → AI가 보호자용 퇴원 안내문 자동 작성.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('imd_new') }}">
-    <div class="big-icon">🩺</div>
-    <div>
-      <h2>내과 퇴원 안내문</h2>
-      <p>입원 DB + 진단·처방·모니터링 정보 → AI가 진단별 응급증상까지 포함한 보호자 안내문 자동 작성.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('notices_list') }}">
+
+  <!-- 1. 동의서 -->
+  <a class="card big-action" href="{{ url_for('menu_consents') }}"
+     style="{% if pending_cnt and pending_cnt > 0 %}border:2px solid #059669;{% elif signed_unsent_cnt and signed_unsent_cnt > 0 %}border:2px solid #d97706;{% endif %}">
     <div class="big-icon">📋</div>
     <div>
-      <h2>안내문 목록</h2>
-      <p>작성된 CE/수술후/내과 안내문 통합 조회 + 카톡 발송 상태 + 재발송 가능.</p>
-    </div>
-  </a>
-</div>
-
-<!-- 섹션 2-1: 의뢰병원 보고서 -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🏥 의뢰병원 보고서</h2>
-<div class="grid-2" style="margin-bottom:20px;">
-  <a class="card big-action" href="{{ url_for('referrals_list') }}"
-     style="{% if referral_unsent and referral_unsent > 0 %}border:2px solid #d97706;{% endif %}">
-    <div class="big-icon">📤</div>
-    <div>
-      <h2>의뢰병원 보고서 목록
-        {% if referral_unsent and referral_unsent > 0 %}
-          <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📤 미발송 {{ referral_unsent }}</span>
+      <h2>동의서
+        {% if pending_cnt and pending_cnt > 0 %}
+          <span style="background:#059669; color:#fff; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">서명대기 {{ pending_cnt }}</span>
+        {% endif %}
+        {% if signed_unsent_cnt and signed_unsent_cnt > 0 %}
+          <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📤 미발송 {{ signed_unsent_cnt }}</span>
         {% endif %}
       </h2>
-      <p>전체 <strong>{{ referral_total or 0 }}건</strong>. 의뢰 보낸 원장님께 진료 경과 보고서 카톡 발송·재발송 관리.</p>
+      <p>수술·영상·개인정보·안락사·퇴원·미수금 동의서 작성 + 서명 관리.</p>
     </div>
   </a>
-</div>
 
-<!-- 섹션 3: 카톡 안부 -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📱 카톡 안부 + 응답 피드백</h2>
-<div class="grid-2" style="margin-bottom:20px;">
-  <a class="card big-action" href="{{ url_for('happy_calls_list') }}"
-     style="{% if hc_pending_draft and hc_pending_draft > 0 %}border:2px solid #dc2626;{% elif hc_approved and hc_approved > 0 %}border:2px solid #2563eb;{% endif %}">
-    <div class="big-icon">📱</div>
+  <!-- 2. 안내문 & 카톡 안부 -->
+  <a class="card big-action" href="{{ url_for('menu_notices') }}"
+     style="{% if hc_urgent and hc_urgent > 0 %}border:2px solid #dc2626;{% elif hc_pending_draft and hc_pending_draft > 0 %}border:2px solid #fee2e2;{% endif %}">
+    <div class="big-icon">📢</div>
     <div>
-      <h2>카톡 안부 관리
-        {% if hc_pending_draft and hc_pending_draft > 0 %}
-          <span style="background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📝 작성대기 {{ hc_pending_draft }}</span>
-        {% endif %}
-        {% if hc_approved and hc_approved > 0 %}
-          <span style="background:#dbeafe; color:#1e40af; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📤 발송대기 {{ hc_approved }}</span>
-        {% endif %}
-      </h2>
-      <p>퇴원 익일 짧은 안부 카톡 + 설문 링크 → 보호자 응답 자동 분류.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('care_feedback') }}"
-     style="{% if hc_urgent and hc_urgent > 0 %}border:2px solid #dc2626;{% endif %}">
-    <div class="big-icon">📊</div>
-    <div>
-      <h2>안부 응답 피드백
+      <h2>안내문 & 카톡 안부
         {% if hc_urgent and hc_urgent > 0 %}
           <span style="background:#dc2626; color:#fff; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">🚨 긴급 {{ hc_urgent }}</span>
         {% endif %}
-      </h2>
-      <p>보호자 설문 응답을 AI가 분류 → 정상회복/지연/악화 자동 판별. 긴급 건 우선 검토.</p>
-    </div>
-  </a>
-</div>
-
-<!-- 섹션 4: 환자 히스토리 (작업 중) -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">📋 환자 히스토리</h2>
-<div class="grid-2" style="margin-bottom:20px;">
-  <a class="card big-action" href="{{ url_for('patients_list') }}"
-     style="border:2px dashed #d1d5db; background:#fafafa;">
-    <div class="big-icon" style="opacity:0.6;">🐾</div>
-    <div>
-      <h2 style="color:#6b7280;">환자별 히스토리
-        <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:12px; margin-left:6px; font-weight:600;">🚧 작업 중</span>
-      </h2>
-      <p style="color:#9ca3af;">차트ID·환자명으로 검색 → 그 환자의 모든 동의서·안내문·해피콜 시간순 조회.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('diagnoses_list') }}"
-     style="border:2px dashed #d1d5db; background:#fafafa;">
-    <div class="big-icon" style="opacity:0.6;">🏷</div>
-    <div>
-      <h2 style="color:#6b7280;">진단별 분류
-        <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:12px; margin-left:6px; font-weight:600;">🚧 작업 중</span>
-      </h2>
-      <p style="color:#9ca3af;">진단·질환별 케이스 모음. 추후 처방식·영양제 AI 추천 + 해피콜 강화 기반.</p>
-    </div>
-  </a>
-</div>
-
-<!-- 섹션 5: 서명 관리 -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🗂 서명 관리</h2>
-<div class="grid-2" style="margin-bottom:20px;">
-  <a class="card big-action" href="{{ url_for('consents_pending') }}"
-     style="{% if pending_cnt and pending_cnt > 0 %}border:2px solid #059669;{% endif %}">
-    <div class="big-icon">📋</div>
-    <div>
-      <h2>서명 대기 리스트
-        {% if pending_cnt and pending_cnt > 0 %}
-        <span style="background:#059669; color:#fff; padding:2px 10px; border-radius:12px; font-size:14px; margin-left:6px;">{{ pending_cnt }}</span>
+        {% if hc_pending_draft and hc_pending_draft > 0 %}
+          <span style="background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📝 작성대기 {{ hc_pending_draft }}</span>
+        {% endif %}
+        {% if referral_unsent and referral_unsent > 0 %}
+          <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">🏥 의뢰 미발송 {{ referral_unsent }}</span>
         {% endif %}
       </h2>
-      <p>주치의가 미리 작성해둔 서명 대기 동의서 {{ pending_cnt or 0 }}건. 진료실에서 QR 띄워 서명받기.</p>
+      <p>CE·수술후·내과 안내문 + 의뢰병원 보고서 + 카톡 안부 + 응답 피드백.</p>
     </div>
   </a>
-  <a class="card big-action" href="{{ url_for('consents_history') }}"
-     style="{% if signed_unsent_cnt and signed_unsent_cnt > 0 %}border:2px solid #d97706;{% endif %}">
-    <div class="big-icon">🗃</div>
-    <div>
-      <h2>서명 완료 동의서
-        {% if signed_unsent_cnt and signed_unsent_cnt > 0 %}
-        <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📤 카톡 미발송 {{ signed_unsent_cnt }}</span>
-        {% endif %}
-      </h2>
-      <p>서명 완료 <strong>{{ signed_cnt or 0 }}건</strong> · 환자명·수의사로 검색, PDF 재출력, 보호자에게 카톡 사본 발송.</p>
-    </div>
-  </a>
-</div>
 
-<!-- 섹션 6: DB 관리 -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">🗂 DB 관리</h2>
-<div class="grid-2" style="margin-bottom:20px;">
-  <a class="card big-action" href="{{ url_for('surgery_list') }}">
-    <div class="big-icon">🔪</div>
-    <div>
-      <h2>수술 DB 관리</h2>
-      <p>현재 등록된 수술: <strong>{{ total }}건</strong></p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('hospitalization_list') }}">
-    <div class="big-icon">🛏</div>
-    <div>
-      <h2>입원 DB 관리</h2>
-      <p>내과 입원 케이스 템플릿 관리.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('imaging_list') }}">
-    <div class="big-icon">📷</div>
-    <div>
-      <h2>영상검사 DB 관리</h2>
-      <p>CT·MRI 등 영상검사 항목 템플릿 관리.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('referral_hospitals_list') }}"
+  <!-- 3. DB 관리 & 환자 -->
+  <a class="card big-action" href="{{ url_for('menu_db') }}"
      style="{% if rh_no_phone and rh_no_phone > 0 %}border:2px solid #d97706;{% endif %}">
-    <div class="big-icon">🏥</div>
+    <div class="big-icon">🗂</div>
     <div>
-      <h2>의뢰병원 DB 관리
+      <h2>DB 관리 & 환자
         {% if rh_no_phone and rh_no_phone > 0 %}
           <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; margin-left:6px; font-weight:600;">📞 미등록 {{ rh_no_phone }}</span>
         {% endif %}
       </h2>
-      <p>등록된 의뢰병원 <strong>{{ rh_total or 0 }}곳</strong>. 의뢰진료 보고서 카톡 발송용 원장님 휴대폰 관리.</p>
+      <p>수술·입원·영상·의뢰병원 DB + 환자별·진단별 히스토리.</p>
     </div>
   </a>
+
+  <!-- 4. 관리자 (admin only) -->
+  {% if current_user.role == 'admin' %}
+  <a class="card big-action" href="{{ url_for('menu_admin') }}"
+     style="border-left:3px solid #d97706;">
+    <div class="big-icon">⚙</div>
+    <div>
+      <h2>관리자 설정</h2>
+      <p>병원 기본양식 편집 · 수의사·직원 계정 관리.</p>
+    </div>
+  </a>
+  {% endif %}
+
 </div>
 
-{% if current_user.role == 'admin' %}
-<!-- 섹션 7: 관리자 전용 -->
-<h2 style="font-size:15px; color:#6b7280; margin:20px 0 10px; font-weight:600;">⚙ 관리자 설정</h2>
-<div class="grid-2" style="margin-bottom:20px;">
-  <a class="card big-action" href="{{ url_for('template_edit') }}"
-     style="border-left:3px solid #d97706;">
-    <div class="big-icon">📐</div>
-    <div>
-      <h2>기본양식 편집</h2>
-      <p>동의서 공통 헤더·보호자의 약속·알림 등 병원 기본양식 편집. YouTube 안내영상 URL 설정.</p>
-    </div>
-  </a>
-  <a class="card big-action" href="{{ url_for('users') }}"
-     style="border-left:3px solid #d97706;">
-    <div class="big-icon">👥</div>
-    <div>
-      <h2>사용자 관리</h2>
-      <p>수의사 계정 추가·삭제, 비밀번호 초기화, 권한 부여.</p>
-    </div>
-  </a>
-</div>
-{% endif %}
 {% endblock %}
