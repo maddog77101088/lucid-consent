@@ -104,11 +104,14 @@ h4 { font-size: 14px; margin: 12px 0 4px; color: #374151; }
 /* ---------- 대시보드 ---------- */
 .grid-2 {
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  align-items: stretch;
 }
 .big-action {
   display: flex; gap: 20px; align-items: flex-start;
   padding: 28px; border-left: 4px solid var(--primary);
   color: var(--text);
+  height: 100%;
+  box-sizing: border-box;
 }
 .big-action:hover { background: #f3f4f6; text-decoration: none; }
 .big-action .big-icon { font-size: 40px; color: var(--primary); line-height: 1; }
