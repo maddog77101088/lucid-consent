@@ -116,7 +116,11 @@ h4 { font-size: 14px; margin: 12px 0 4px; color: #374151; }
 .big-action:hover { background: #f3f4f6; text-decoration: none; }
 .big-action .big-icon { font-size: 40px; color: var(--primary); line-height: 1; }
 .big-action h2 { margin: 0 0 6px; }
-.big-action p { margin: 0; color: var(--muted); }
+.big-action p {
+  margin: 0; color: var(--muted);
+  line-height: 1.5;
+  min-height: 3em;  /* 본문이 1줄이어도 2줄 자리 확보 → 카드 높이 일관 */
+}
 .big-action > div:last-child { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .card-badges {
   display: flex; gap: 6px; flex-wrap: wrap;
