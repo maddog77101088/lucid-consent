@@ -65,6 +65,35 @@
       <span class="muted" style="font-size:12px;">간결·전문 톤 · 영문 약어/약물명 · 의뢰 원장님께 인사·감사 인사 포함</span>
     </label>
   </div>
+  <div id="ref-hospital-wrap" style="display:none; margin-top:14px; padding:12px 14px; background:#f9fafb; border-radius:8px; border-left:3px solid #2563eb;">
+    <label style="font-size:13px; font-weight:600;">🏥 의뢰병원 선택</label>
+    <div style="position:relative; margin-top:6px;">
+      <input type="text" id="rh-search" placeholder="🔍 병원명 / 지역구 / 원장명 검색 후 선택"
+             autocomplete="off"
+             style="width:100%; padding:9px 12px; border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-size:14px;">
+      <div id="rh-dropdown" style="display:none; position:absolute; top:100%; left:0; right:0; max-height:280px; overflow-y:auto;
+                                   background:#fff; border:1.5px solid #d1d5db; border-radius:6px; z-index:50;
+                                   box-shadow:0 4px 12px rgba(0,0,0,.1); margin-top:2px;"></div>
+    </div>
+    <input type="hidden" id="rh-id" value="">
+    <div id="rh-selected" style="display:none; margin-top:10px; padding:10px 12px; background:#fff; border-radius:6px; border:1px solid #d1d5db;">
+      <div style="font-size:14px; font-weight:600;" id="rh-selected-name"></div>
+      <div style="font-size:12.5px; color:#4b5563; margin-top:4px;" id="rh-selected-info"></div>
+      <div id="rh-no-phone-warning" style="display:none; margin-top:8px; padding:8px 10px; background:#fef2f2; border-left:3px solid #dc2626; border-radius:4px; font-size:12.5px; color:#991b1b;">
+        ⚠️ 원장님 휴대폰이 등록되어 있지 않습니다.<br>
+        📞 일반전화로 연락하여 휴대폰 번호를 확보 후, 아래 [휴대폰 등록]으로 추가해주세요.
+        <div style="margin-top:8px; display:flex; gap:6px; align-items:center;">
+          <input type="text" id="rh-quick-phone" placeholder="010-0000-0000"
+                 style="flex:1; padding:6px 10px; border:1px solid #d1d5db; border-radius:4px; font-size:13px;">
+          <button type="button" id="rh-quick-save" style="background:#dc2626; color:#fff; border:0; padding:6px 12px; border-radius:4px; font-size:12px; cursor:pointer;">📞 휴대폰 등록</button>
+        </div>
+      </div>
+    </div>
+    <p class="muted" style="font-size:11.5px; margin-top:8px;">
+      💡 등록된 의뢰병원이 없으면 <a href="{{ url_for('referral_hospitals_list') }}" target="_blank" style="color:#2563eb;">의뢰병원 DB 관리</a>에서 추가하세요.
+    </p>
+  </div>
+
   <label id="ref-vet-wrap" style="display:none;margin-top:10px;">의뢰 원장님 성명 (선택 — 첫 줄 인사에 반영)
     <input id="ref-vet-name" placeholder="예: 김영수">
   </label>
@@ -93,9 +122,119 @@
 <script>
 const modeRadios = document.querySelectorAll('input[name="ce-mode"]');
 const refVetWrap = document.getElementById('ref-vet-wrap');
+const refHospitalWrap = document.getElementById('ref-hospital-wrap');
 modeRadios.forEach(r => r.addEventListener('change', () => {
-  refVetWrap.style.display = (document.querySelector('input[name="ce-mode"]:checked').value === 'vet') ? 'block' : 'none';
+  const isVet = document.querySelector('input[name="ce-mode"]:checked').value === 'vet';
+  refVetWrap.style.display = isVet ? 'block' : 'none';
+  refHospitalWrap.style.display = isVet ? 'block' : 'none';
 }));
+
+// ===== 의뢰병원 검색·선택 =====
+(function(){
+  const searchInput = document.getElementById('rh-search');
+  const dropdown = document.getElementById('rh-dropdown');
+  const idHidden = document.getElementById('rh-id');
+  const selectedBox = document.getElementById('rh-selected');
+  const selectedName = document.getElementById('rh-selected-name');
+  const selectedInfo = document.getElementById('rh-selected-info');
+  const noPhoneWarn = document.getElementById('rh-no-phone-warning');
+  const quickPhone = document.getElementById('rh-quick-phone');
+  const quickSave = document.getElementById('rh-quick-save');
+  let allRows = [];
+  let currentSelected = null;
+
+  async function fetchHospitals(q){
+    const r = await fetch(`/api/referral-hospitals?q=${encodeURIComponent(q || '')}`);
+    const j = await r.json();
+    return j.rows || [];
+  }
+  function renderDropdown(rows){
+    if (!rows.length) {
+      dropdown.innerHTML = `<div style="padding:14px; color:#9ca3af; font-size:13px; text-align:center;">검색 결과 없음 — 의뢰병원 DB 관리에서 등록해주세요</div>`;
+      dropdown.style.display = 'block';
+      return;
+    }
+    dropdown.innerHTML = rows.map(r => `
+      <div class="rh-opt" data-id="${r.id}" style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #f3f4f6;">
+        <div style="font-weight:600; font-size:13.5px;">${r.hospital_name}${r.district ? ` <span style="color:#6b7280; font-weight:400; font-size:12px;">(${r.district})</span>` : ''}</div>
+        <div style="font-size:12px; color:#4b5563; margin-top:2px;">
+          ${r.vet_name ? '👨‍⚕️ ' + r.vet_name : ''}
+          ${r.vet_phone
+            ? `<span style="color:#047857; margin-left:6px;">📱 ${r.vet_phone}</span>`
+            : `<span style="background:#fef3c7; color:#92400e; padding:1px 6px; border-radius:3px; margin-left:6px; font-size:11px;">⚠️ 휴대폰 미등록</span>`}
+        </div>
+      </div>
+    `).join('');
+    dropdown.style.display = 'block';
+    dropdown.querySelectorAll('.rh-opt').forEach(opt => {
+      opt.addEventListener('click', function(){
+        const id = parseInt(this.dataset.id);
+        const row = allRows.find(x => x.id === id);
+        if (row) selectHospital(row);
+      });
+      opt.addEventListener('mouseover', () => opt.style.background = '#f3f4f6');
+      opt.addEventListener('mouseout', () => opt.style.background = '');
+    });
+  }
+  function selectHospital(row){
+    currentSelected = row;
+    idHidden.value = row.id;
+    searchInput.value = '';
+    dropdown.style.display = 'none';
+    selectedName.textContent = `🏥 ${row.hospital_name}${row.district ? ` (${row.district})` : ''}`;
+    const parts = [];
+    if (row.vet_name) parts.push(`👨‍⚕️ ${row.vet_name} 원장`);
+    if (row.vet_phone) parts.push(`📱 ${row.vet_phone}`);
+    if (row.general_phone) parts.push(`📞 일반: ${row.general_phone}`);
+    selectedInfo.innerHTML = parts.join(' · ') || '정보 없음';
+    selectedBox.style.display = 'block';
+    if (!row.vet_phone) {
+      noPhoneWarn.style.display = 'block';
+      quickPhone.value = '';
+    } else {
+      noPhoneWarn.style.display = 'none';
+    }
+    // 의뢰 원장명 자동 채움
+    if (row.vet_name) document.getElementById('ref-vet-name').value = row.vet_name;
+  }
+
+  searchInput.addEventListener('focus', async () => {
+    allRows = await fetchHospitals(searchInput.value.trim());
+    renderDropdown(allRows);
+  });
+  searchInput.addEventListener('input', async () => {
+    allRows = await fetchHospitals(searchInput.value.trim());
+    renderDropdown(allRows);
+  });
+  document.addEventListener('click', e => {
+    if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.style.display = 'none';
+    }
+  });
+
+  // 휴대폰 빠른 등록
+  quickSave.addEventListener('click', async function(){
+    if (!currentSelected) return;
+    const phone = quickPhone.value.trim();
+    if (!phone) { alert('휴대폰 번호를 입력해주세요.'); return; }
+    this.disabled = true;
+    try {
+      const r = await fetch(`/api/referral-hospitals/${currentSelected.id}`, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({vet_phone: phone})
+      });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || '실패');
+      currentSelected.vet_phone = phone;
+      selectHospital(currentSelected);
+      alert('✓ 휴대폰 등록 완료. 이제 카톡 발송 가능합니다.');
+    } catch (e) {
+      alert('실패: ' + e.message);
+    } finally {
+      this.disabled = false;
+    }
+  });
+})();
 
 async function generate() {
   const chart = document.getElementById('chart-text').value.trim();

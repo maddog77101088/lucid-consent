@@ -304,6 +304,23 @@ def init_db():
         if col not in pd_cols:
             cur.execute(ddl)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_sharetoken ON patient_documents(share_token)")
+    # 의뢰병원 DB
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS referral_hospitals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            hospital_name TEXT NOT NULL,
+            district TEXT,
+            vet_name TEXT,
+            vet_phone TEXT,
+            general_phone TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE(hospital_name, district)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_rh_name ON referral_hospitals(hospital_name)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_rh_district ON referral_hospitals(district)")
     con.commit()
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
@@ -500,6 +517,11 @@ def dashboard():
              AND share_sent_at IS NULL
              AND (form_data LIKE '%guardian_mobile%' OR form_data LIKE '%guardian_phone%')"""
     ).fetchone()[0]
+    # 의뢰병원 stats
+    rh_total = db.execute("SELECT COUNT(*) FROM referral_hospitals").fetchone()[0]
+    rh_no_phone = db.execute(
+        "SELECT COUNT(*) FROM referral_hospitals WHERE vet_phone IS NULL OR vet_phone = ''"
+    ).fetchone()[0]
     # 해피콜: 오늘 예정 건 + 밀린 건 (지난 날짜 미완료)
     today_str = datetime.now().strftime("%Y-%m-%d")
     # 카톡 안부 stats
@@ -532,7 +554,8 @@ def dashboard():
                            hc_pending_draft=hc_pending_draft,
                            hc_drafted=hc_drafted,
                            hc_approved=hc_approved,
-                           hc_urgent=hc_urgent)
+                           hc_urgent=hc_urgent,
+                           rh_total=rh_total, rh_no_phone=rh_no_phone)
 
 
 @app.route("/surgeries")
@@ -2936,6 +2959,110 @@ def notice_view(token):
     }.get(row["doc_type"], "📄 안내문")
     return render_template("notice_view.html",
                            doc=row, type_label=type_label, error=None)
+
+
+# ===================== 의뢰병원 DB 관리 =====================
+
+@app.route("/referral-hospitals", methods=["GET"])
+@login_required
+def referral_hospitals_list():
+    """의뢰병원 목록·검색."""
+    q = (request.args.get("q") or "").strip()
+    db = get_db()
+    sql = "SELECT * FROM referral_hospitals WHERE 1=1"
+    args = []
+    if q:
+        sql += " AND (hospital_name LIKE ? OR district LIKE ? OR vet_name LIKE ?)"
+        like = f"%{q}%"
+        args += [like, like, like]
+    sql += " ORDER BY hospital_name ASC, district ASC LIMIT 500"
+    rows = db.execute(sql, args).fetchall()
+    stats = {
+        "total": db.execute("SELECT COUNT(*) FROM referral_hospitals").fetchone()[0],
+        "with_phone": db.execute("SELECT COUNT(*) FROM referral_hospitals WHERE vet_phone IS NOT NULL AND vet_phone != ''").fetchone()[0],
+    }
+    return render_template("referral_hospitals.html", rows=rows, q=q, stats=stats)
+
+
+@app.route("/api/referral-hospitals", methods=["GET"])
+@login_required
+def api_referral_hospitals_list():
+    """의뢰병원 검색 (CE 페이지 드롭다운용 JSON)."""
+    q = (request.args.get("q") or "").strip()
+    db = get_db()
+    sql = "SELECT id, hospital_name, district, vet_name, vet_phone, general_phone FROM referral_hospitals WHERE 1=1"
+    args = []
+    if q:
+        sql += " AND (hospital_name LIKE ? OR district LIKE ? OR vet_name LIKE ?)"
+        like = f"%{q}%"
+        args += [like, like, like]
+    sql += " ORDER BY hospital_name ASC, district ASC LIMIT 100"
+    rows = [dict(r) for r in db.execute(sql, args).fetchall()]
+    return jsonify({"ok": True, "rows": rows})
+
+
+@app.route("/api/referral-hospitals", methods=["POST"])
+@login_required
+def api_referral_hospitals_create():
+    """의뢰병원 신규 등록."""
+    data = request.get_json() or {}
+    hospital_name = (data.get("hospital_name") or "").strip()
+    if not hospital_name:
+        return jsonify({"ok": False, "error": "병원명은 필수입니다."}), 400
+    district = (data.get("district") or "").strip()
+    db = get_db()
+    try:
+        cur = db.execute(
+            """INSERT INTO referral_hospitals
+               (hospital_name, district, vet_name, vet_phone, general_phone, notes)
+               VALUES (?,?,?,?,?,?)""",
+            (hospital_name, district,
+             (data.get("vet_name") or "").strip(),
+             (data.get("vet_phone") or "").strip(),
+             (data.get("general_phone") or "").strip(),
+             (data.get("notes") or "").strip())
+        )
+        db.commit()
+        return jsonify({"ok": True, "id": cur.lastrowid})
+    except sqlite3.IntegrityError:
+        return jsonify({"ok": False, "error": "같은 병원명+지역구 조합이 이미 등록되어 있습니다."}), 400
+
+
+@app.route("/api/referral-hospitals/<int:rh_id>", methods=["POST"])
+@login_required
+def api_referral_hospitals_update(rh_id):
+    """의뢰병원 정보 수정."""
+    data = request.get_json() or {}
+    db = get_db()
+    row = db.execute("SELECT id FROM referral_hospitals WHERE id=?", (rh_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    fields = []
+    args = []
+    for k in ("hospital_name", "district", "vet_name", "vet_phone", "general_phone", "notes"):
+        if k in data:
+            fields.append(f"{k}=?")
+            args.append((data[k] or "").strip())
+    if not fields:
+        return jsonify({"ok": False, "error": "변경할 필드 없음"}), 400
+    fields.append("updated_at=?")
+    args.append(datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    args.append(rh_id)
+    db.execute(f"UPDATE referral_hospitals SET {', '.join(fields)} WHERE id=?", args)
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/referral-hospitals/<int:rh_id>/delete", methods=["POST"])
+@login_required
+def api_referral_hospitals_delete(rh_id):
+    """의뢰병원 삭제 (admin 전용)."""
+    if session.get("role") != "admin":
+        return jsonify({"ok": False, "error": "관리자만 삭제 가능"}), 403
+    db = get_db()
+    db.execute("DELETE FROM referral_hospitals WHERE id=?", (rh_id,))
+    db.commit()
+    return jsonify({"ok": True})
 
 
 @app.route("/notices/<int:doc_id>", methods=["GET"])
