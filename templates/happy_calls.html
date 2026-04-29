@@ -41,10 +41,27 @@
     </select>
   </div>
   <div style="font-size:11.5px; color:#6b7280; flex:1; min-width:200px;">
-    💡 안내문 작성 시 다음날 설정한 시각으로 카톡 안부 발송이 예약됩니다. 개별 안부의 토글로 예외 가능.
+    💡 안내문 작성 시 다음날 설정한 시각으로 카톡 안부 발송이 예약됩니다.
   </div>
 </div>
 {% endif %}
+
+<!-- 전역 AI 자동초안 토글 -->
+<div style="background:#fff; padding:12px 16px; border-radius:8px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.06); display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+  <div style="display:flex; align-items:center; gap:10px;">
+    <label class="toggle-switch toggle-md">
+      <input type="checkbox" id="global-auto-draft-toggle" {% if auto_draft_global %}checked{% endif %}>
+      <span class="slider"></span>
+      <span class="knob"></span>
+    </label>
+    <span style="font-weight:600; font-size:13.5px;" id="global-auto-draft-label">
+      전체 AI 자동초안 <strong style="color:{{ '#059669' if auto_draft_global else '#9ca3af' }};">{{ 'ON' if auto_draft_global else 'OFF' }}</strong>
+    </span>
+  </div>
+  <div style="font-size:11.5px; color:#6b7280; flex:1; min-width:200px;">
+    💡 안내문 작성 시 AI가 카톡 안부 초안을 미리 자동으로 생성해둡니다. 코디가 [AI 초안] 버튼 따로 누를 필요 없음.
+  </div>
+</div>
 
 <form method="get" action="{{ url_for('happy_calls_list') }}"
       style="display:flex; gap:8px; margin:16px 0 22px; flex-wrap:wrap; align-items:center;
@@ -106,6 +123,7 @@
   <thead>
     <tr style="background:#f3f4f6; border-bottom:2px solid #e5e7eb;">
       <th style="width:100px; padding:10px 8px; text-align:left; white-space:nowrap;">상태</th>
+      <th style="width:70px; padding:10px 4px; text-align:center; white-space:nowrap; font-size:12px;" title="AI 자동초안 ON 시 안내문 작성과 동시에 초안 자동 생성">자동초안</th>
       <th style="width:70px; padding:10px 4px; text-align:center; white-space:nowrap; font-size:12px;" title="발송예약 여부 (예약된 시간에 카톡 자동 발송)">발송예약</th>
       <th style="width:80px; padding:10px 8px; text-align:left; white-space:nowrap;">유형</th>
       <th style="width:90px; padding:10px 8px; text-align:left; white-space:nowrap;">예정일</th>
@@ -135,6 +153,18 @@
         <div style="margin-top:3px; font-size:10px; color:#6d28d9; white-space:nowrap;">
           ⏰ {{ r.scheduled_send_at[:16].replace('T',' ') }}
         </div>
+        {% endif %}
+      </td>
+      <td style="padding:10px 4px; text-align:center;">
+        {% if r.status == 'pending_draft' %}
+        <label class="toggle-switch toggle-sm" title="AI 자동초안 ON/OFF">
+          <input type="checkbox" class="auto-draft-toggle" data-hcid="{{ r.id }}"
+                 {% if r.auto_draft %}checked{% endif %}>
+          <span class="slider"></span>
+          <span class="knob"></span>
+        </label>
+        {% else %}
+        <span style="color:#d1d5db; font-size:13px;">—</span>
         {% endif %}
       </td>
       <td style="padding:10px 4px; text-align:center;">
@@ -567,6 +597,48 @@
   }
   if (globalToggle) globalToggle.addEventListener('change', saveGlobalAuto);
   if (globalHour) globalHour.addEventListener('change', saveGlobalAuto);
+
+  // 전역 AI 자동초안 토글
+  const globalDraftToggle = document.getElementById('global-auto-draft-toggle');
+  const globalDraftLabel = document.getElementById('global-auto-draft-label');
+  async function saveGlobalAutoDraft(){
+    const enabled = globalDraftToggle.checked;
+    const r = await fetch('/api/settings/kakao-auto-draft', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({enabled})
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) { alert('저장 실패: ' + (j.error || '')); return; }
+    globalDraftLabel.innerHTML = '전체 AI 자동초안 <strong style="color:' +
+      (enabled ? '#059669' : '#9ca3af') + ';">' + (enabled ? 'ON' : 'OFF') + '</strong>';
+  }
+  if (globalDraftToggle) globalDraftToggle.addEventListener('change', saveGlobalAutoDraft);
+
+  // 개별 AI 자동초안 토글
+  document.querySelectorAll('.auto-draft-toggle').forEach(cb => {
+    cb.addEventListener('change', async function(){
+      const hcid = this.dataset.hcid;
+      const auto_draft = this.checked;
+      this.disabled = true;
+      try {
+        const r = await fetch(`/api/happy-calls/${hcid}/toggle-auto-draft`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({auto_draft})
+        });
+        const j = await r.json();
+        if (!r.ok || !j.ok) throw new Error(j.error || '실패');
+        if (j.draft_created) {
+          alert('✓ AI 초안 자동 생성 완료');
+          location.reload();
+        }
+      } catch (e) {
+        alert('실패: ' + e.message);
+        this.checked = !auto_draft;
+      } finally {
+        this.disabled = false;
+      }
+    });
+  });
 
   // 개별 자동 발송 토글
   document.querySelectorAll('.auto-toggle').forEach(cb => {

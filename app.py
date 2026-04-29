@@ -178,6 +178,8 @@ def init_db():
         cur.execute("ALTER TABLE hospital_template ADD COLUMN kakao_auto_send INTEGER DEFAULT 1")
     if "kakao_auto_send_hour" not in cols:
         cur.execute("ALTER TABLE hospital_template ADD COLUMN kakao_auto_send_hour INTEGER DEFAULT 10")
+    if "kakao_auto_draft" not in cols:
+        cur.execute("ALTER TABLE hospital_template ADD COLUMN kakao_auto_draft INTEGER DEFAULT 0")
     # 기존 row가 있고 URL이 비어있으면 기본값 주입
     cur.execute("UPDATE hospital_template SET youtube_url=? WHERE id=1 AND (youtube_url IS NULL OR youtube_url='')",
                 (DEFAULT_YOUTUBE_URL,))
@@ -186,6 +188,8 @@ def init_db():
     ucols = [c[1] for c in cur.fetchall()]
     if "must_change_password" not in ucols:
         cur.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+    if "phone" not in ucols:
+        cur.execute("ALTER TABLE users ADD COLUMN phone TEXT")
     # consent_records 마이그레이션: checked_boxes 컬럼 (보호자 체크 상태 JSON)
     cur.execute("PRAGMA table_info(consent_records)")
     cr_cols = [c[1] for c in cur.fetchall()]
@@ -254,6 +258,7 @@ def init_db():
         ("is_followup", "ALTER TABLE happy_calls ADD COLUMN is_followup INTEGER DEFAULT 0"),
         ("followup_of", "ALTER TABLE happy_calls ADD COLUMN followup_of INTEGER"),
         ("auto_send", "ALTER TABLE happy_calls ADD COLUMN auto_send INTEGER DEFAULT 1"),
+        ("auto_draft", "ALTER TABLE happy_calls ADD COLUMN auto_draft INTEGER DEFAULT 0"),
         ("scheduled_send_at", "ALTER TABLE happy_calls ADD COLUMN scheduled_send_at TEXT"),
         ("solapi_message_id", "ALTER TABLE happy_calls ADD COLUMN solapi_message_id TEXT"),
     ]:
@@ -389,6 +394,11 @@ def login_required(f):
         # 비번 강제 변경이 필요한 경우(/me/password 제외) 우회
         if session.get("must_change_password") and request.endpoint not in ("change_password", "logout", "static"):
             return redirect(url_for("change_password"))
+        # 전화번호 미입력 시 강제 입력 페이지로 (응답 알림 카톡 발송용)
+        if not session.get("phone") and request.endpoint not in (
+            "set_phone", "logout", "static", "change_password"
+        ):
+            return redirect(url_for("set_phone"))
         return f(*args, **kwargs)
     return wrapper
 
@@ -454,10 +464,14 @@ def login():
         if row and check_password_hash(row["password_hash"], p):
             session["user_id"] = row["id"]; session["display_name"] = row["display_name"]
             session["role"] = row["role"]; session["username"] = row["username"]
+            session["phone"] = row["phone"] if "phone" in row.keys() else ""
             session["must_change_password"] = bool(row["must_change_password"]) if "must_change_password" in row.keys() else False
             if session["must_change_password"]:
                 flash("보안을 위해 비밀번호를 변경해주세요.", "ok")
                 return redirect(url_for("change_password"))
+            if not session["phone"]:
+                flash("응답 알림 발송을 위해 본인 휴대폰 번호를 등록해주세요.", "ok")
+                return redirect(url_for("set_phone"))
             return redirect(request.args.get("next") or url_for("dashboard"))
         flash("아이디 또는 비밀번호가 올바르지 않습니다.", "error")
     return render_template("login.html")
@@ -467,6 +481,29 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/me/phone", methods=["GET", "POST"])
+def set_phone():
+    """본인 휴대폰 번호 등록·수정 (강제 입력)."""
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        phone = (request.form.get("phone") or "").strip()
+        # 간단한 형식 검증
+        digits = "".join(c for c in phone if c.isdigit())
+        if len(digits) < 10 or len(digits) > 11:
+            flash("휴대폰 번호 형식이 올바르지 않습니다 (예: 010-1234-5678).", "error")
+        else:
+            db = get_db()
+            db.execute("UPDATE users SET phone=? WHERE id=?", (phone, session["user_id"]))
+            db.commit()
+            session["phone"] = phone
+            flash("휴대폰 번호가 등록되었습니다.", "ok")
+            return redirect(url_for("dashboard"))
+    return render_template("set_phone.html",
+                           current_phone=session.get("phone", ""),
+                           forced=not session.get("phone"))
 
 
 @app.route("/me/password", methods=["GET","POST"])
@@ -1859,9 +1896,10 @@ def api_happy_call_create():
     initial_status = "next_day_revisit" if auto_skip else "pending_draft"
 
     db = get_db()
-    # 전역 발송예약 설정 → 새 row의 auto_send 기본값 결정
+    # 전역 설정 → 새 row의 기본값 결정
     auto_global, _send_hour = _get_auto_send_setting()
     initial_auto_send = 1 if auto_global else 0
+    initial_auto_draft = 1 if _get_auto_draft_setting() else 0
 
     # doc_body 는 참고용 짧은 요약만 저장 (전체 본문은 patient_documents에서 조회)
     full_body = (data.get("doc_body") or "").strip()
@@ -1870,8 +1908,8 @@ def api_happy_call_create():
         """INSERT INTO happy_calls
            (doc_type, patient_name, guardian_name, guardian_phone, diagnosis,
             vet_name, assignee_id, scheduled_date, status, doc_body, call_memo,
-            auto_send, created_by)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            auto_send, auto_draft, created_by)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (doc_type,
          patient,
          (data.get("guardian_name") or "").strip(),
@@ -1884,10 +1922,18 @@ def api_happy_call_create():
          body_summary,
          skip_memo,
          initial_auto_send,
+         initial_auto_draft,
          session.get("user_id", 0))
     )
     db.commit()
     hc_id = cur.lastrowid
+
+    # AI 초안 자동 생성 (전역 ON + 개별 ON 시) — 발송예약과 무관
+    if not auto_skip and initial_auto_draft:
+        try:
+            _try_create_ai_draft_for_happycall(hc_id)
+        except Exception:
+            pass
 
     # 자동 예약 발송 시도 (전역 ON + 개별 ON + 조건 충족 시에만)
     auto_scheduled_at = None
@@ -1952,6 +1998,7 @@ def happy_calls_list():
     rows = get_db().execute(sql, args).fetchall()
     today_str = datetime.now().strftime("%Y-%m-%d")
     auto_global, send_hour = _get_auto_send_setting()
+    auto_draft_global = _get_auto_draft_setting()
     return render_template("happy_calls.html",
                            rows=rows, today=today_str,
                            status_filter=status_filter,
@@ -1959,7 +2006,8 @@ def happy_calls_list():
                            doc_labels=HAPPYCALL_DOC_LABELS,
                            kakao_enabled=_kakao_enabled(),
                            auto_send_global=auto_global,
-                           auto_send_hour=send_hour)
+                           auto_send_hour=send_hour,
+                           auto_draft_global=auto_draft_global)
 
 
 @app.route("/api/happy-calls/<int:hc_id>/update", methods=["POST"])
@@ -2160,6 +2208,11 @@ def _kakao_referral_enabled():
     return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_VET_REFERRAL", "").strip())
 
 
+def _kakao_doctor_alert_enabled():
+    """카톡 안부 응답 → 주치의 알림 발송 가능 여부."""
+    return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_DOCTOR_ALERT", "").strip())
+
+
 # 동의서 종류 라벨 매핑 (카카오 알림톡 변수용)
 CONSENT_DOC_LABELS = {
     "surgery":    "수술 동의서",
@@ -2274,6 +2327,97 @@ def _get_auto_send_setting():
     return bool(row["kakao_auto_send"]), int(row["kakao_auto_send_hour"] or 10)
 
 
+def _get_auto_draft_setting():
+    """전역 AI 초안 자동작성 설정 반환."""
+    db = get_db()
+    row = db.execute("SELECT kakao_auto_draft FROM hospital_template WHERE id=1").fetchone()
+    if not row:
+        return False
+    return bool(row["kakao_auto_draft"])
+
+
+def _try_create_ai_draft_for_happycall(hc_id):
+    """auto_draft=1 + 전역 ON 일 때 AI 초안 자동 생성 호출.
+    api_happy_call_generate_draft 와 동일한 로직이지만 내부 호출용 (응답 X).
+    """
+    if requests is None:
+        return False, "requests 미설치"
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return False, "ANTHROPIC_API_KEY 미설정"
+    if not _get_auto_draft_setting():
+        return False, "전역 AI 자동초안 OFF"
+
+    db = get_db()
+    row = db.execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return False, "not found"
+    if not row["auto_draft"]:
+        return False, "개별 자동초안 OFF"
+    if row["draft_message"]:
+        return False, "이미 초안 있음"
+
+    patient = row["patient_name"] or ""
+    guardian = row["guardian_name"] or ""
+    diagnosis = row["diagnosis"] or ""
+    doc_type = row["doc_type"]
+
+    history_status = ""
+    history_row = db.execute(
+        """SELECT structured_data FROM patient_documents
+           WHERE patient_name=? AND doc_type IN ('postop','imd','ce')
+           ORDER BY created_at DESC LIMIT 1""", (patient,)
+    ).fetchone()
+    if history_row and history_row["structured_data"]:
+        try:
+            sd = json.loads(history_row["structured_data"])
+            history_status = sd.get("discharge_status", "") or ""
+        except (ValueError, TypeError):
+            pass
+
+    user_msg_parts = [
+        f"[환자 정보 - 짧은 카톡 안부 작성용]",
+        f"- 환자 이름: {patient}",
+        f"- 보호자: {guardian}",
+        f"- 진단/수술명: {diagnosis}",
+        f"- 안내문 유형: {HAPPYCALL_DOC_LABELS.get(doc_type, doc_type)}",
+    ]
+    if history_status:
+        status_map = {"good": "좋은 경과로 퇴원", "delayed": "회복 지연 중 퇴원", "worsening": "상태 악화 중 퇴원"}
+        user_msg_parts.append(f"- 퇴원 당시 상태: {status_map.get(history_status, history_status)}")
+    user_msg_parts.append("\n위 정보로 6줄 이내의 짧은 카톡 안부를 작성해주세요. {SURVEY_URL} 자리표시자 반드시 포함.")
+    user_msg_parts.append("절대로 안내문 본문을 카피하거나 진단/약물 정보를 메시지에 나열하지 마세요. 안내문은 어제 이미 보냈습니다.")
+    user_msg = "\n".join(user_msg_parts)
+
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
+            json={
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 1500,
+                "system": _prep_prompt(KAKAO_HC_PROMPT),
+                "messages": [{"role": "user", "content": user_msg}],
+            },
+            timeout=60,
+        )
+        if r.status_code != 200:
+            return False, f"Claude API {r.status_code}"
+        body = r.json()
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith(("text", "markdown", "md")):
+                text = text.split("\n", 1)[1] if "\n" in text else ""
+            text = text.strip().rstrip("`").strip()
+        db.execute("UPDATE happy_calls SET draft_message=? WHERE id=?", (text, hc_id))
+        db.commit()
+        return True, "초안 생성됨"
+    except Exception as e:
+        return False, str(e)
+
+
 def _try_schedule_kakao_for_happycall(hc_id):
     """해당 happy_call이 자동 발송 대상이면 솔라피에 예약 등록.
     조건: 카카오 활성 + auto_send=1 + guardian_phone 있음 + 전역 자동발송 ON.
@@ -2383,6 +2527,37 @@ def _send_kakao_consent_copy(phone, patient_name, doc_type, doc_url):
     )
 
 
+# 카톡 안부 응답 분류 → 한글 라벨 (주치의 알림용)
+DOCTOR_ALERT_CLS_LABELS = {
+    "good":       "정상회복",
+    "delayed":    "회복지연",
+    "worsening":  "상태악화(긴급)",
+    "medication": "투약/처치 문의(긴급)",
+    "other":      "기타",
+}
+
+
+def _send_kakao_doctor_alert(phone, patient_name, classification, summary, feedback_url):
+    """카톡 안부 응답이 도착하면 주치의에게 알림톡 발송.
+    phone: 주치의 본인 휴대폰 번호 (users.phone)
+    """
+    cls_label = DOCTOR_ALERT_CLS_LABELS.get(classification, "기타")
+    # 요약은 80자 제한 (카카오 변수 길이 안전 가드)
+    summary_short = (summary or "응답 도착").strip()
+    if len(summary_short) > 80:
+        summary_short = summary_short[:77] + "..."
+    return _send_kakao_template(
+        phone=phone,
+        template_id=os.environ.get("KAKAO_TEMPLATE_ID_DOCTOR_ALERT", "").strip(),
+        variables={
+            "#{환자명}": patient_name or "환자",
+            "#{분류}": cls_label,
+            "#{요약}": summary_short,
+            "#{피드백URL}": feedback_url,
+        },
+    )
+
+
 @app.route("/api/happy-calls/<int:hc_id>/delete", methods=["POST"])
 @login_required
 def api_happy_call_delete(hc_id):
@@ -2450,6 +2625,37 @@ def api_settings_kakao_auto_send():
         db.execute("UPDATE hospital_template SET kakao_auto_send=? WHERE id=1", (new_val,))
     db.commit()
     return jsonify({"ok": True, "enabled": new_val})
+
+
+@app.route("/api/settings/kakao-auto-draft", methods=["POST"])
+@login_required
+def api_settings_kakao_auto_draft():
+    """전역 AI 자동초안 ON/OFF 토글."""
+    data = request.get_json() or {}
+    new_val = 1 if data.get("enabled") else 0
+    db = get_db()
+    db.execute("UPDATE hospital_template SET kakao_auto_draft=? WHERE id=1", (new_val,))
+    db.commit()
+    return jsonify({"ok": True, "enabled": new_val})
+
+
+@app.route("/api/happy-calls/<int:hc_id>/toggle-auto-draft", methods=["POST"])
+@login_required
+def api_happy_call_toggle_auto_draft(hc_id):
+    """개별 안부의 AI 자동초안 ON/OFF. ON 전환 시 즉시 초안 생성 시도."""
+    data = request.get_json() or {}
+    new_val = 1 if data.get("auto_draft") else 0
+    db = get_db()
+    row = db.execute("SELECT id, status, draft_message FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "not found"}), 404
+    db.execute("UPDATE happy_calls SET auto_draft=? WHERE id=?", (new_val, hc_id))
+    db.commit()
+    created = False
+    if new_val and row["status"] == "pending_draft" and not row["draft_message"]:
+        ok, _result = _try_create_ai_draft_for_happycall(hc_id)
+        created = bool(ok)
+    return jsonify({"ok": True, "auto_draft": new_val, "draft_created": created})
 
 
 @app.route("/api/happy-calls/<int:hc_id>/send-kakao", methods=["POST"])
@@ -2606,6 +2812,25 @@ def care_survey_submit(token):
          row["id"])
     )
     db.commit()
+
+    # 주치의에게 카카오 알림톡 발송 (best-effort, 실패해도 응답 저장은 유지)
+    try:
+        if _kakao_doctor_alert_enabled() and row["assignee_id"]:
+            vet = db.execute(
+                "SELECT phone FROM users WHERE id=?", (row["assignee_id"],)
+            ).fetchone()
+            vet_phone = (vet["phone"] if vet and "phone" in vet.keys() else "") or ""
+            if vet_phone:
+                feedback_url = url_for("care_feedback", _external=True)
+                _send_kakao_doctor_alert(
+                    phone=vet_phone,
+                    patient_name=row["patient_name"],
+                    classification=classification,
+                    summary=summary,
+                    feedback_url=feedback_url,
+                )
+    except Exception as _e:
+        pass
 
     # 모든 분류는 일단 status='replied'로 두고 피드백 카드에서 주치의가 [✓ 종료] 또는
     # [🔁 재안부 등록] 액션으로 직접 처리. (자동 종료/자동 재안부 모두 폐지)

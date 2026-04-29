@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:480px; margin:40px auto;">
+  <div class="card" style="padding:28px;">
+    <h1 style="margin:0 0 12px;">📱 휴대폰 번호 등록</h1>
+    {% if forced %}
+    <div style="background:#fef3c7; padding:10px 14px; border-left:3px solid #d97706; border-radius:6px; margin-bottom:14px; font-size:13.5px; color:#92400e;">
+      ⚠️ 카톡 안부 응답이 들어오면 주치의 본인에게 카카오 알림톡으로 즉시 통보됩니다.<br>
+      이를 위해 휴대폰 번호 등록이 필요합니다.
+    </div>
+    {% else %}
+    <p class="muted" style="margin:0 0 14px;">본인 휴대폰 번호를 수정할 수 있습니다. 카톡 안부 응답 알림 수신용.</p>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div style="padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:13px;
+                    background:{% if cat == 'error' %}#fef2f2{% else %}#d1fae5{% endif %};
+                    color:{% if cat == 'error' %}#991b1b{% else %}#047857{% endif %};">
+          {{ msg }}
+        </div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="post" action="{{ url_for('set_phone') }}">
+      <label style="display:block; font-size:13px; color:#374151; margin-bottom:6px;">
+        휴대폰 번호 *
+      </label>
+      <input type="text" name="phone" value="{{ current_phone or '' }}"
+             placeholder="010-1234-5678" required autofocus
+             style="width:100%; padding:11px 14px; font-size:15px;
+                    border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box;
+                    margin-bottom:14px;">
+      <button type="submit" style="width:100%; background:#2563eb; color:#fff; border:0;
+                                    padding:12px; border-radius:6px; font-size:15px; font-weight:600;
+                                    cursor:pointer;">
+        💾 저장하고 계속하기
+      </button>
+    </form>
+
+    {% if not forced %}
+    <p style="margin-top:14px; text-align:center;">
+      <a href="{{ url_for('dashboard') }}" style="color:#6b7280; font-size:13px; text-decoration:none;">← 메인 대시보드로</a>
+    </p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
