@@ -37,11 +37,14 @@
         {% if hc_pending_draft and hc_pending_draft > 0 %}
           <span style="background:#fee2e2; color:#991b1b; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">📝 작성대기 {{ hc_pending_draft }}</span>
         {% endif %}
+        {% if notices_unsent and notices_unsent > 0 %}
+          <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">📋 CE 미발송 {{ notices_unsent }}</span>
+        {% endif %}
         {% if referral_unsent and referral_unsent > 0 %}
-          <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">🏥 의뢰 미발송 {{ referral_unsent }}</span>
+          <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">🏥 리퍼 미발송 {{ referral_unsent }}</span>
         {% endif %}
       </div>
-      <p>CE·수술후·내과 안내문 + 의뢰병원 보고서 + 카톡 안부 + 응답 피드백.</p>
+      <p>CE·수술후·내과 안내문 + 리퍼병원 보고서 + 카톡 안부 + 응답 피드백.</p>
     </div>
   </a>
 
@@ -56,7 +59,7 @@
           <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">📞 미등록 {{ rh_no_phone }}</span>
         {% endif %}
       </div>
-      <p>수술·입원·영상·의뢰병원 DB + 환자별·진단별 히스토리.</p>
+      <p>수술·입원·영상·리퍼병원 DB + 환자별·진단별 히스토리.</p>
     </div>
   </a>
 

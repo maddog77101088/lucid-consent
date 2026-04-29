@@ -43,9 +43,9 @@
 </section>
 
 {% if mode == 'vet' %}
-<!-- 의뢰병원 선택 (의뢰병원 모드 전용) -->
+<!-- 리퍼병원 선택 (리퍼병원 모드 전용) -->
 <section class="card" style="border-left:3px solid #6d28d9;">
-  <h2>🏥 의뢰병원 선택 *</h2>
+  <h2>🏥 리퍼병원 선택 *</h2>
   <div style="position:relative; margin-top:6px;">
     <input type="text" id="rh-search" placeholder="🔍 병원명 / 지역구 / 원장명 검색 후 선택"
            autocomplete="off"
@@ -69,7 +69,7 @@
     </div>
   </div>
   <p class="muted" style="font-size:11.5px; margin-top:8px;">
-    💡 등록된 의뢰병원이 없으면 <a href="{{ url_for('referral_hospitals_list') }}" target="_blank" style="color:#2563eb;">의뢰병원 DB 관리</a>에서 추가하세요.
+    💡 등록된 리퍼병원이 없으면 <a href="{{ url_for('referral_hospitals_list') }}" target="_blank" style="color:#2563eb;">리퍼병원 DB 관리</a>에서 추가하세요.
   </p>
   <label style="margin-top:10px; font-size:13px;">의뢰 원장님 성명 (선택 — 첫 줄 인사에 반영)
     <input id="ref-vet-name" placeholder="예: 김영수">
@@ -111,7 +111,7 @@
 const CE_MODE = {{ mode|tojson }};
 
 {% if mode == 'vet' %}
-// ===== 의뢰병원 검색·선택 =====
+// ===== 리퍼병원 검색·선택 =====
 (function(){
   const searchInput = document.getElementById('rh-search');
   const dropdown = document.getElementById('rh-dropdown');
@@ -132,7 +132,7 @@ const CE_MODE = {{ mode|tojson }};
   }
   function renderDropdown(rows){
     if (!rows.length) {
-      dropdown.innerHTML = `<div style="padding:14px; color:#9ca3af; font-size:13px; text-align:center;">검색 결과 없음 — 의뢰병원 DB 관리에서 등록해주세요</div>`;
+      dropdown.innerHTML = `<div style="padding:14px; color:#9ca3af; font-size:13px; text-align:center;">검색 결과 없음 — 리퍼병원 DB 관리에서 등록해주세요</div>`;
       dropdown.style.display = 'block';
       return;
     }
@@ -235,7 +235,7 @@ async function generate() {
   const f = gatherFormData();
   if (!f.patient_name) { alert('환자 이름을 입력해주세요.'); return; }
   if (CE_MODE === 'vet' && !f.referral_hospital_id) {
-    alert('의뢰병원을 선택해주세요.'); return;
+    alert('리퍼병원을 선택해주세요.'); return;
   }
   const btn = document.getElementById('btn-ce-generate');
   const status = document.getElementById('ce-status');
@@ -304,7 +304,7 @@ async function saveDoc(){
   const f = gatherFormData();
   if (!f.patient_name) { alert('환자 이름을 입력해주세요.'); return null; }
   if (CE_MODE === 'vet' && !f.referral_hospital_id) {
-    alert('의뢰병원을 선택해주세요.'); return null;
+    alert('리퍼병원을 선택해주세요.'); return null;
   }
   let docId = window._currentDocId;
   if (docId) {
@@ -391,8 +391,8 @@ if (ceSendKakaoBtn) {
         this.disabled = false;
       }
     } else {
-      // 의뢰병원 모드 — 의뢰병원 원장님께 발송
-      if (!confirm('의뢰병원 원장님께 카카오 알림톡으로 진료 경과 보고서를 발송합니다.\n진행할까요?')) return;
+      // 리퍼병원 모드 — 리퍼병원 원장님께 발송
+      if (!confirm('리퍼병원 원장님께 카카오 알림톡으로 진료 경과 보고서를 발송합니다.\n진행할까요?')) return;
       this.disabled = true;
       this.textContent = '⏳ 발송 중...';
       try {

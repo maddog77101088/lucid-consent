@@ -37,13 +37,13 @@
      style="{% if rh_no_phone and rh_no_phone > 0 %}border:2px solid #d97706;{% endif %}">
     <div class="big-icon">🏥</div>
     <div>
-      <h2>의뢰병원 DB 관리</h2>
+      <h2>리퍼병원 DB 관리</h2>
       <div class="card-badges">
         {% if rh_no_phone and rh_no_phone > 0 %}
           <span style="background:#fef3c7; color:#92400e; padding:2px 10px; border-radius:12px; font-size:13px; font-weight:600;">📞 미등록 {{ rh_no_phone }}</span>
         {% endif %}
       </div>
-      <p>등록된 의뢰병원 <strong>{{ rh_total or 0 }}곳</strong>. 의뢰진료 보고서 카톡 발송용 원장님 휴대폰 관리.</p>
+      <p>등록된 리퍼병원 <strong>{{ rh_total or 0 }}곳</strong>. 리퍼병원 보고서 카톡 발송용 원장님 휴대폰 관리.</p>
     </div>
   </a>
 </div>

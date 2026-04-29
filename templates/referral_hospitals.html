@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}의뢰병원 DB 관리 - {{ hospital_short }}{% endblock %}
+{% block title %}리퍼병원 DB 관리 - {{ hospital_short }}{% endblock %}
 {% block content %}
 <h1 style="display:flex; align-items:center; gap:10px;">
-  🏥 의뢰병원 DB 관리
+  🏥 리퍼병원 DB 관리
   <span class="muted" style="font-size:13px; font-weight:400;">
     ({{ stats.total }}곳 등록 · 휴대폰 {{ stats.with_phone }}곳)
   </span>
 </h1>
-<p class="muted">의뢰진료 보고서를 카톡으로 보낼 의뢰병원 명단. 휴대폰 등록된 병원만 카톡 발송 가능.</p>
+<p class="muted">리퍼병원 보고서를 카톡으로 보낼 리퍼병원 명단. 휴대폰 등록된 병원만 카톡 발송 가능.</p>
 
 <!-- 검색 + 신규 등록 -->
 <div style="display:flex; gap:10px; margin:16px 0; flex-wrap:wrap; align-items:center;
@@ -21,12 +21,12 @@
                                  border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">검색</button>
   </form>
   <button type="button" id="btn-new" style="background:#059669; color:#fff; border:0; padding:10px 18px;
-                                 border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">+ 새 의뢰병원 등록</button>
+                                 border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">+ 새 리퍼병원 등록</button>
 </div>
 
 {% if not rows %}
   <div class="card" style="padding:40px; text-align:center; color:#6b7280; background:#fff;">
-    {% if q %}검색 결과 없음.{% else %}등록된 의뢰병원이 없습니다.{% endif %}
+    {% if q %}검색 결과 없음.{% else %}등록된 리퍼병원이 없습니다.{% endif %}
   </div>
 {% else %}
 <div style="background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow-x:auto;">
@@ -75,7 +75,7 @@
 <!-- 등록·편집 모달 -->
 <div id="rh-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
   <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:520px; width:92%; box-shadow:0 10px 40px rgba(0,0,0,.3);">
-    <h3 id="rh-modal-title" style="margin:0 0 14px; font-size:18px;">🏥 의뢰병원 등록</h3>
+    <h3 id="rh-modal-title" style="margin:0 0 14px; font-size:18px;">🏥 리퍼병원 등록</h3>
     <input type="hidden" id="rh-id">
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
       <label style="font-size:13px;">병원명 *
@@ -123,11 +123,11 @@
 
   function openModal(rh){
     if (rh) {
-      title.textContent = '🏥 의뢰병원 편집';
+      title.textContent = '🏥 리퍼병원 편집';
       idInput.value = rh.id;
       fields.forEach(f => document.getElementById('rh-'+f).value = rh[f] || '');
     } else {
-      title.textContent = '🏥 의뢰병원 등록';
+      title.textContent = '🏥 리퍼병원 등록';
       idInput.value = '';
       fields.forEach(f => document.getElementById('rh-'+f).value = '');
     }
@@ -183,7 +183,7 @@
     btn.addEventListener('click', async function(){
       const id = this.dataset.id;
       const name = this.dataset.name;
-      if (!confirm(`"${name}" 의뢰병원을 삭제할까요?\n복구 불가능합니다.`)) return;
+      if (!confirm(`"${name}" 리퍼병원을 삭제할까요?\n복구 불가능합니다.`)) return;
       const r = await fetch(`/api/referral-hospitals/${id}/delete`, {method:'POST'});
       const j = await r.json();
       if (!r.ok || !j.ok) { alert('삭제 실패: ' + (j.error || '')); return; }

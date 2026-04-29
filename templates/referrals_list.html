@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}의뢰병원 보고서 - {{ hospital_short }}{% endblock %}
+{% block title %}리퍼병원 보고서 - {{ hospital_short }}{% endblock %}
 {% block content %}
 <h1 style="display:flex; align-items:center; gap:10px;">
-  🏥 의뢰병원 보고서
+  🏥 리퍼병원 보고서
   <span class="muted" style="font-size:13px; font-weight:400;">({{ rows|length }}건 표시 / 전체 {{ stats.total }}건)</span>
 </h1>
-<p class="muted">CE 의뢰병원용 모드로 작성된 진료 경과 보고서. 의뢰 보낸 원장님께 카톡 발송 + 발송 상태 관리.</p>
+<p class="muted">CE 리퍼병원용 모드로 작성된 진료 경과 보고서. 리퍼 보낸 원장님께 카톡 발송 + 발송 상태 관리.</p>
 
 <!-- 통계 카드 -->
 <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(140px, 1fr)); gap:10px; margin:16px 0;">
@@ -23,7 +23,7 @@
   </a>
 </div>
 
-<!-- 자주 보내는 의뢰병원 (TOP 5) -->
+<!-- 자주 보내는 리퍼병원 (TOP 5) -->
 {% if top_hospitals %}
 <div style="background:#fff; padding:14px 16px; border-radius:8px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
   <div style="font-size:12px; color:#6b7280; margin-bottom:8px; font-weight:600;">자주 의뢰받는 병원</div>
@@ -41,7 +41,7 @@
 <form method="get" action="{{ url_for('referrals_list') }}"
       style="display:flex; gap:8px; margin:16px 0 22px; flex-wrap:wrap; align-items:center;
              background:#fff; padding:14px 16px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.06);">
-  <input type="text" name="q" value="{{ q }}" placeholder="🔍 환자·보호자·의뢰병원·주치의 검색"
+  <input type="text" name="q" value="{{ q }}" placeholder="🔍 환자·보호자·리퍼병원·주치의 검색"
          style="flex:1; min-width:200px; padding:10px 14px; font-size:14px;
                 border:1.5px solid #d1d5db; border-radius:6px;">
   {% if sent_filter %}<input type="hidden" name="sent" value="{{ sent_filter }}">{% endif %}
@@ -58,7 +58,7 @@
     {% if q or sent_filter or rh_filter %}
       검색 결과가 없습니다.
     {% else %}
-      작성된 의뢰병원 보고서가 없습니다. CE 작성 페이지에서 [의뢰병원용] 모드로 작성하세요.
+      작성된 리퍼병원 보고서가 없습니다. CE 작성 페이지에서 [리퍼병원용] 모드로 작성하세요.
     {% endif %}
   </div>
 {% else %}
@@ -71,7 +71,7 @@
       <th style="width:90px; padding:10px 8px; text-align:left; white-space:nowrap;">환자</th>
       <th style="width:90px; padding:10px 8px; text-align:left; white-space:nowrap;">보호자</th>
       <th style="width:80px; padding:10px 8px; text-align:left; white-space:nowrap;">주치의</th>
-      <th style="min-width:160px; padding:10px 8px; text-align:left;">의뢰병원 / 원장</th>
+      <th style="min-width:160px; padding:10px 8px; text-align:left;">리퍼병원 / 원장</th>
       <th style="width:130px; padding:10px 8px; text-align:left; white-space:nowrap;">발송 상태</th>
       <th style="width:200px; padding:10px 8px; text-align:right; white-space:nowrap;">동작</th>
     </tr>
@@ -106,11 +106,11 @@
            style="background:#2563eb; color:#fff; border:0; padding:5px 12px; border-radius:4px; font-size:11px; text-decoration:none; font-weight:600;">📝 보기·편집</a>
         {% if kakao_referral_enabled and r.ref_vet_phone %}
           {% if r.share_sent_at %}
-          <button type="button" data-doc-id="{{ r.id }}"
-                  style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;" disabled title="검수 통과 후 활성">🔁 재발송</button>
+          <button type="button" class="btn-resend-ref" data-doc-id="{{ r.id }}"
+                  style="background:#fff; color:#d97706; border:1px solid #fbbf24; padding:5px 10px; border-radius:4px; font-size:11px; cursor:pointer;">🔁 재발송</button>
           {% else %}
-          <button type="button" data-doc-id="{{ r.id }}"
-                  style="background:#fbbc04; color:#3c3c3c; border:0; padding:5px 12px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;" disabled title="검수 통과 후 활성">📤 카톡</button>
+          <button type="button" class="btn-send-ref" data-doc-id="{{ r.id }}"
+                  style="background:#fbbc04; color:#3c3c3c; border:0; padding:5px 12px; border-radius:4px; font-size:11px; font-weight:700; cursor:pointer;">📤 카톡</button>
           {% endif %}
         {% elif not r.ref_vet_phone %}
           <span style="color:#9ca3af; font-size:11px;">번호 없음</span>
@@ -135,7 +135,7 @@
 <!-- 영구 삭제 모달 (admin) — notices_list와 동일 패턴 -->
 <div id="notice-delete-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
   <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:460px; width:90%; box-shadow:0 10px 40px rgba(0,0,0,.3);">
-    <h3 style="margin:0 0 12px; font-size:18px; color:#dc2626;">⚠ 의뢰병원 보고서 영구 삭제 (관리자 전용)</h3>
+    <h3 style="margin:0 0 12px; font-size:18px; color:#dc2626;">⚠ 리퍼병원 보고서 영구 삭제 (관리자 전용)</h3>
     <p style="margin:0 0 14px; font-size:13px; color:#4b5563; line-height:1.6;">
       이 보고서는 <strong>완전히 삭제</strong>되며 복구할 수 없습니다.<br>
       이미 카톡으로 발송된 링크는 <strong>404로 끊깁니다</strong>.
@@ -159,6 +159,23 @@
 
 <script>
 (function(){
+  // 리퍼병원 보고서 카톡 발송
+  async function sendReferralKakao(docId, isResend){
+    const action = isResend ? '재발송' : '발송';
+    if (!confirm(`리퍼병원 보고서를 리퍼병원 원장님께 카톡으로 ${action}합니다.\n진행할까요?`)) return;
+    const r = await fetch(`/api/referrals/${docId}/send-kakao`, {method:'POST'});
+    const j = await r.json();
+    if (!r.ok || !j.ok) { alert(`${action} 실패: ` + (j.error || '')); return; }
+    alert(`✓ ${action} 완료`);
+    location.reload();
+  }
+  document.querySelectorAll('.btn-send-ref').forEach(btn => {
+    btn.addEventListener('click', () => sendReferralKakao(btn.dataset.docId, false));
+  });
+  document.querySelectorAll('.btn-resend-ref').forEach(btn => {
+    btn.addEventListener('click', () => sendReferralKakao(btn.dataset.docId, true));
+  });
+
   {% if current_user.role == 'admin' %}
   const delModal = document.getElementById('notice-delete-modal');
   if (delModal) {

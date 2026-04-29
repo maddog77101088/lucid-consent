@@ -295,7 +295,7 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_doctype ON patient_documents(doc_type)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_created ON patient_documents(created_at)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_diagnosis ON patient_documents(diagnosis)")
-    # patient_documents 마이그레이션: 보호자 공유용 토큰 + 의뢰병원 연결
+    # patient_documents 마이그레이션: 보호자 공유용 토큰 + 리퍼병원 연결
     pd_cols = [r[1] for r in cur.execute("PRAGMA table_info(patient_documents)").fetchall()]
     for col, ddl in [
         ("share_token", "ALTER TABLE patient_documents ADD COLUMN share_token TEXT"),
@@ -306,7 +306,7 @@ def init_db():
             cur.execute(ddl)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_referral ON patient_documents(referral_hospital_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_pd_sharetoken ON patient_documents(share_token)")
-    # 의뢰병원 DB
+    # 리퍼병원 DB
     cur.execute("""
         CREATE TABLE IF NOT EXISTS referral_hospitals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -518,17 +518,25 @@ def _dashboard_stats():
              AND share_sent_at IS NULL
              AND (form_data LIKE '%guardian_mobile%' OR form_data LIKE '%guardian_phone%')"""
     ).fetchone()[0]
-    # 의뢰병원 stats
+    # 리퍼병원 stats
     rh_total = db.execute("SELECT COUNT(*) FROM referral_hospitals").fetchone()[0]
     rh_no_phone = db.execute(
         "SELECT COUNT(*) FROM referral_hospitals WHERE vet_phone IS NULL OR vet_phone = ''"
     ).fetchone()[0]
-    # 의뢰병원 보고서 stats
+    # 리퍼병원 보고서 stats
     referral_total = db.execute(
         "SELECT COUNT(*) FROM patient_documents WHERE doc_type='ce' AND referral_hospital_id IS NOT NULL"
     ).fetchone()[0]
     referral_unsent = db.execute(
         "SELECT COUNT(*) FROM patient_documents WHERE doc_type='ce' AND referral_hospital_id IS NOT NULL AND share_sent_at IS NULL"
+    ).fetchone()[0]
+    # 보호자용 안내문 (CE/postop/imd) 미발송 + 보호자 휴대폰 있는 건수
+    notices_unsent = db.execute(
+        """SELECT COUNT(*) FROM patient_documents
+           WHERE doc_type IN ('ce','postop','imd')
+             AND referral_hospital_id IS NULL
+             AND share_sent_at IS NULL
+             AND guardian_phone IS NOT NULL AND guardian_phone != ''"""
     ).fetchone()[0]
     # 해피콜: 오늘 예정 건 + 밀린 건 (지난 날짜 미완료)
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -564,7 +572,8 @@ def _dashboard_stats():
                 hc_approved=hc_approved,
                 hc_urgent=hc_urgent,
                 rh_total=rh_total, rh_no_phone=rh_no_phone,
-                referral_total=referral_total, referral_unsent=referral_unsent)
+                referral_total=referral_total, referral_unsent=referral_unsent,
+                notices_unsent=notices_unsent)
 
 
 @app.route("/", methods=["GET"])
@@ -2147,7 +2156,7 @@ def _kakao_consent_enabled():
 
 
 def _kakao_referral_enabled():
-    """의뢰진료보고서 도착 알림 발송 가능 여부."""
+    """리퍼병원 보고서 도착 알림 발송 가능 여부."""
     return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_VET_REFERRAL", "").strip())
 
 
@@ -2348,7 +2357,7 @@ def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
 
 
 def _send_kakao_vet_referral(phone, guardian_name, patient_name, report_url):
-    """의뢰진료보고서 도착 알림톡 발송 (의뢰병원 원장님께)."""
+    """리퍼병원 보고서 도착 알림톡 발송 (리퍼병원 원장님께)."""
     return _send_kakao_template(
         phone=phone,
         template_id=os.environ.get("KAKAO_TEMPLATE_ID_VET_REFERRAL", "").strip(),
@@ -2939,7 +2948,7 @@ def api_ce_save():
     except (ValueError, TypeError):
         referral_hospital_id = None
 
-    title = "의뢰진료 보고서" if mode == "vet" else "진료안내문"
+    title = "리퍼병원 보고서" if mode == "vet" else "진료안내문"
     saved_doc_id = _save_patient_document(
         "ce", patient_name,
         guardian_name=guardian_name,
@@ -3067,12 +3076,12 @@ def notice_view(token):
                            doc=row, type_label=type_label, error=None)
 
 
-# ===================== 의뢰병원 DB 관리 =====================
+# ===================== 리퍼병원 DB 관리 =====================
 
 @app.route("/referral-hospitals", methods=["GET"])
 @login_required
 def referral_hospitals_list():
-    """의뢰병원 목록·검색."""
+    """리퍼병원 목록·검색."""
     q = (request.args.get("q") or "").strip()
     db = get_db()
     sql = "SELECT * FROM referral_hospitals WHERE 1=1"
@@ -3093,7 +3102,7 @@ def referral_hospitals_list():
 @app.route("/api/referral-hospitals", methods=["GET"])
 @login_required
 def api_referral_hospitals_list():
-    """의뢰병원 검색 (CE 페이지 드롭다운용 JSON)."""
+    """리퍼병원 검색 (CE 페이지 드롭다운용 JSON)."""
     q = (request.args.get("q") or "").strip()
     db = get_db()
     sql = "SELECT id, hospital_name, district, vet_name, vet_phone, general_phone FROM referral_hospitals WHERE 1=1"
@@ -3110,7 +3119,7 @@ def api_referral_hospitals_list():
 @app.route("/api/referral-hospitals", methods=["POST"])
 @login_required
 def api_referral_hospitals_create():
-    """의뢰병원 신규 등록."""
+    """리퍼병원 신규 등록."""
     data = request.get_json() or {}
     hospital_name = (data.get("hospital_name") or "").strip()
     if not hospital_name:
@@ -3137,7 +3146,7 @@ def api_referral_hospitals_create():
 @app.route("/api/referral-hospitals/<int:rh_id>", methods=["POST"])
 @login_required
 def api_referral_hospitals_update(rh_id):
-    """의뢰병원 정보 수정."""
+    """리퍼병원 정보 수정."""
     data = request.get_json() or {}
     db = get_db()
     row = db.execute("SELECT id FROM referral_hospitals WHERE id=?", (rh_id,)).fetchone()
@@ -3162,7 +3171,7 @@ def api_referral_hospitals_update(rh_id):
 @app.route("/api/referral-hospitals/<int:rh_id>/delete", methods=["POST"])
 @login_required
 def api_referral_hospitals_delete(rh_id):
-    """의뢰병원 삭제 (admin 전용)."""
+    """리퍼병원 삭제 (admin 전용)."""
     if session.get("role") != "admin":
         return jsonify({"ok": False, "error": "관리자만 삭제 가능"}), 403
     db = get_db()
@@ -3195,9 +3204,9 @@ def notice_edit(doc_id):
 @app.route("/api/referrals/<int:doc_id>/send-kakao", methods=["POST"])
 @login_required
 def api_referral_send_kakao(doc_id):
-    """의뢰진료보고서를 의뢰병원 원장님께 카톡 발송."""
+    """리퍼병원 보고서를 리퍼병원 원장님께 카톡 발송."""
     if not _kakao_referral_enabled():
-        return jsonify({"ok": False, "error": "의뢰진료보고서 카톡 발송 미설정 (KAKAO_TEMPLATE_ID_VET_REFERRAL)"}), 400
+        return jsonify({"ok": False, "error": "리퍼병원 보고서 카톡 발송 미설정 (KAKAO_TEMPLATE_ID_VET_REFERRAL)"}), 400
 
     db = get_db()
     row = db.execute(
@@ -3208,11 +3217,11 @@ def api_referral_send_kakao(doc_id):
         (doc_id,)
     ).fetchone()
     if not row:
-        return jsonify({"ok": False, "error": "의뢰병원 보고서를 찾을 수 없음"}), 404
+        return jsonify({"ok": False, "error": "리퍼병원 보고서를 찾을 수 없음"}), 404
 
     phone = row["ref_vet_phone"]
     if not phone:
-        return jsonify({"ok": False, "error": f"의뢰병원({row['ref_hospital_name']}) 원장님 휴대폰이 등록되지 않음"}), 400
+        return jsonify({"ok": False, "error": f"리퍼병원({row['ref_hospital_name']}) 원장님 휴대폰이 등록되지 않음"}), 400
 
     # 공유 토큰 생성 (없으면)
     token = row["share_token"]
@@ -3243,7 +3252,7 @@ def api_referral_send_kakao(doc_id):
 @app.route("/referrals", methods=["GET"])
 @login_required
 def referrals_list():
-    """의뢰병원 보고서 목록 (CE 의뢰병원 모드로 작성된 것만)."""
+    """리퍼병원 보고서 목록 (CE 리퍼병원 모드로 작성된 것만)."""
     q = (request.args.get("q") or "").strip()
     sent_filter = (request.args.get("sent") or "").strip()
     rh_filter = request.args.get("rh_id")
@@ -3281,7 +3290,7 @@ def referrals_list():
         "total": db.execute(f"SELECT COUNT(*) FROM patient_documents WHERE {base}").fetchone()[0],
         "sent": db.execute(f"SELECT COUNT(*) FROM patient_documents WHERE {base} AND share_sent_at IS NOT NULL").fetchone()[0],
     }
-    # 의뢰병원별 상위 (TOP 5)
+    # 리퍼병원별 상위 (TOP 5)
     top_hospitals = db.execute(
         """SELECT rh.id, rh.hospital_name, rh.district, COUNT(pd.id) AS cnt
            FROM patient_documents pd
@@ -3352,7 +3361,7 @@ def notices_list():
     sent_filter = (request.args.get("sent") or "").strip()  # 'yes' / 'no' / ''
     q = (request.args.get("q") or "").strip()
 
-    # 보호자용 안내문만 (의뢰병원 보고서는 /referrals 별도 페이지에서)
+    # 보호자용 안내문만 (리퍼병원 보고서는 /referrals 별도 페이지에서)
     sql = """SELECT id, doc_type, patient_chart_id, patient_name, guardian_name,
                     guardian_phone, diagnosis, vet_name, share_token, share_sent_at,
                     created_at
@@ -4759,10 +4768,10 @@ def ce_new():
 @app.route("/ce/vet/new", methods=["GET"])
 @login_required
 def ce_vet_new():
-    """의뢰병원용 진료 경과 보고서 작성."""
+    """리퍼병원 보고서 작성."""
     return render_template("ce_new.html",
                            mode="vet",
-                           page_title="의뢰병원 진료 경과 보고서",
+                           page_title="리퍼병원 보고서",
                            vet_name=session.get("display_name", ""),
                            vet_list=_get_vet_list(),
                            kakao_enabled=_kakao_referral_enabled())
@@ -4771,7 +4780,7 @@ def ce_vet_new():
 @app.route("/api/ce/generate", methods=["POST"])
 @login_required
 def api_ce_generate():
-    """차트 내용으로 보호자안내 또는 의뢰병원용 CE 메시지 생성."""
+    """차트 내용으로 보호자안내 또는 리퍼병원용 CE 메시지 생성."""
     if requests is None:
         return jsonify({"error": "'requests' 패키지가 설치되어 있지 않습니다."}), 500
     data = request.get_json() or {}
@@ -4837,10 +4846,10 @@ def api_ce_generate():
             if text.startswith(("text", "markdown", "md")):
                 text = text.split("\n", 1)[1] if "\n" in text else ""
             text = text.strip().rstrip("`").strip()
-        # 통합 환자 문서 저장 (보호자 모드 + 의뢰병원 모드 모두)
+        # 통합 환자 문서 저장 (보호자 모드 + 리퍼병원 모드 모두)
         saved_doc_id = None
         if patient_name:
-            title = "의뢰진료 보고서" if mode == "vet" else "진료안내문"
+            title = "리퍼병원 보고서" if mode == "vet" else "진료안내문"
             saved_doc_id = _save_patient_document(
                 "ce", patient_name,
                 guardian_name=guardian_name,
