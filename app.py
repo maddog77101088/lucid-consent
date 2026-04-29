@@ -2146,6 +2146,11 @@ def _kakao_consent_enabled():
     return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_CONSENT", "").strip())
 
 
+def _kakao_referral_enabled():
+    """의뢰진료보고서 도착 알림 발송 가능 여부."""
+    return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_VET_REFERRAL", "").strip())
+
+
 # 동의서 종류 라벨 매핑 (카카오 알림톡 변수용)
 CONSENT_DOC_LABELS = {
     "surgery":    "수술 동의서",
@@ -2338,6 +2343,19 @@ def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
         variables={
             "#{환자명}": patient_name or "환자",
             "#{안내문URL}": notice_url,
+        },
+    )
+
+
+def _send_kakao_vet_referral(phone, guardian_name, patient_name, report_url):
+    """의뢰진료보고서 도착 알림톡 발송 (의뢰병원 원장님께)."""
+    return _send_kakao_template(
+        phone=phone,
+        template_id=os.environ.get("KAKAO_TEMPLATE_ID_VET_REFERRAL", "").strip(),
+        variables={
+            "#{보호자명}": guardian_name or "보호자",
+            "#{환자명}": patient_name or "환자",
+            "#{보고서URL}": report_url,
         },
     )
 
@@ -2896,6 +2914,44 @@ def _save_patient_document(doc_type, patient_name, *,
 
 
 
+@app.route("/api/ce/save", methods=["POST"])
+@login_required
+def api_ce_save():
+    """CE 수동 입력 저장 (AI 생성 안 거치고 직접 입력한 경우).
+    필수: mode, patient_name, body
+    선택: guardian_name, ref_vet_name, referral_hospital_id
+    """
+    data = request.get_json() or {}
+    mode = (data.get("mode") or "guardian").strip()
+    patient_name = (data.get("patient_name") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not patient_name:
+        return jsonify({"ok": False, "error": "환자명을 입력해주세요."}), 400
+    if not body:
+        return jsonify({"ok": False, "error": "본문을 입력해주세요."}), 400
+
+    guardian_name = (data.get("guardian_name") or "").strip()
+    ref_vet_name = (data.get("ref_vet_name") or "").strip()
+    referral_hospital_id = data.get("referral_hospital_id")
+    try:
+        referral_hospital_id = int(referral_hospital_id) if referral_hospital_id else None
+    except (ValueError, TypeError):
+        referral_hospital_id = None
+
+    title = "의뢰진료 보고서" if mode == "vet" else "진료안내문"
+    saved_doc_id = _save_patient_document(
+        "ce", patient_name,
+        guardian_name=guardian_name,
+        title=title,
+        body=body,
+        structured_data={"mode": mode, "ref_vet_name": ref_vet_name, "manual": True},
+        referral_hospital_id=referral_hospital_id if mode == "vet" else None,
+    )
+    if not saved_doc_id:
+        return jsonify({"ok": False, "error": "저장 실패"}), 500
+    return jsonify({"ok": True, "doc_id": saved_doc_id})
+
+
 @app.route("/api/notices/<int:doc_id>/update", methods=["POST"])
 @login_required
 def api_notice_update(doc_id):
@@ -3134,6 +3190,54 @@ def notice_edit(doc_id):
                            kakao_notice_enabled=_kakao_notice_enabled())
 
 
+@app.route("/api/referrals/<int:doc_id>/send-kakao", methods=["POST"])
+@login_required
+def api_referral_send_kakao(doc_id):
+    """의뢰진료보고서를 의뢰병원 원장님께 카톡 발송."""
+    if not _kakao_referral_enabled():
+        return jsonify({"ok": False, "error": "의뢰진료보고서 카톡 발송 미설정 (KAKAO_TEMPLATE_ID_VET_REFERRAL)"}), 400
+
+    db = get_db()
+    row = db.execute(
+        """SELECT pd.*, rh.vet_phone AS ref_vet_phone, rh.hospital_name AS ref_hospital_name
+           FROM patient_documents pd
+           LEFT JOIN referral_hospitals rh ON rh.id = pd.referral_hospital_id
+           WHERE pd.id=? AND pd.doc_type='ce' AND pd.referral_hospital_id IS NOT NULL""",
+        (doc_id,)
+    ).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "의뢰병원 보고서를 찾을 수 없음"}), 404
+
+    phone = row["ref_vet_phone"]
+    if not phone:
+        return jsonify({"ok": False, "error": f"의뢰병원({row['ref_hospital_name']}) 원장님 휴대폰이 등록되지 않음"}), 400
+
+    # 공유 토큰 생성 (없으면)
+    token = row["share_token"]
+    if not token:
+        token = _make_survey_token()
+        db.execute("UPDATE patient_documents SET share_token=? WHERE id=?", (token, doc_id))
+        db.commit()
+
+    report_url = f"{_sign_base_url()}/notice/{token}"
+    ok, result = _send_kakao_vet_referral(
+        phone=phone,
+        guardian_name=row["guardian_name"],
+        patient_name=row["patient_name"],
+        report_url=report_url,
+    )
+    if not ok:
+        return jsonify({"ok": False, "error": result}), 500
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        "UPDATE patient_documents SET share_sent_at=? WHERE id=?",
+        (now_str, doc_id)
+    )
+    db.commit()
+    return jsonify({"ok": True, "message_id": result, "report_url": report_url, "sent_at": now_str})
+
+
 @app.route("/referrals", methods=["GET"])
 @login_required
 def referrals_list():
@@ -3187,7 +3291,7 @@ def referrals_list():
     return render_template("referrals_list.html",
                            rows=rows, stats=stats, top_hospitals=top_hospitals,
                            q=q, sent_filter=sent_filter, rh_filter=rh_filter,
-                           kakao_referral_enabled=False)  # 검수 통과 후 활성
+                           kakao_referral_enabled=_kakao_referral_enabled())
 
 
 @app.route("/api/consents/<token>/send-kakao", methods=["POST"])
@@ -4641,10 +4745,25 @@ CE_VET_PROMPT = """당신은 한국 동물병원의 수의사가 다른 의뢰 �
 @app.route("/ce/new", methods=["GET"])
 @login_required
 def ce_new():
+    """보호자용 진료안내문 작성."""
     return render_template("ce_new.html",
+                           mode="guardian",
+                           page_title="진료안내문 (보호자용)",
                            vet_name=session.get("display_name", ""),
                            vet_list=_get_vet_list(),
-                           kakao_notice_enabled=_kakao_notice_enabled("ce"))
+                           kakao_enabled=_kakao_notice_enabled("ce"))
+
+
+@app.route("/ce/vet/new", methods=["GET"])
+@login_required
+def ce_vet_new():
+    """의뢰병원용 진료 경과 보고서 작성."""
+    return render_template("ce_new.html",
+                           mode="vet",
+                           page_title="의뢰병원 진료 경과 보고서",
+                           vet_name=session.get("display_name", ""),
+                           vet_list=_get_vet_list(),
+                           kakao_enabled=_kakao_referral_enabled())
 
 
 @app.route("/api/ce/generate", methods=["POST"])

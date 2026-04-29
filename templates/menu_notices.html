@@ -12,9 +12,17 @@
   <a class="card big-action" href="{{ url_for('ce_new') }}">
     <div class="big-icon">💬</div>
     <div>
-      <h2>CE, 의뢰병원 보고서 작성</h2>
+      <h2>진료안내문 (보호자용)</h2>
       <div class="card-badges"></div>
-      <p>차트 OCR 기반 보호자 안내 메시지 / 의뢰병원 진료경과 보고 자동 생성.</p>
+      <p>차트 OCR 기반 보호자 안내 메시지. AI 자동 생성 또는 수동 입력 → 보호자에게 카톡 발송.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('ce_vet_new') }}">
+    <div class="big-icon">🏥</div>
+    <div>
+      <h2>의뢰병원 진료 경과 보고서</h2>
+      <div class="card-badges"></div>
+      <p>의뢰 보낸 원장님께 보낼 진료 경과 보고. AI 자동 생성 또는 수동 입력 → 카톡 발송.</p>
     </div>
   </a>
   <a class="card big-action" href="{{ url_for('postop_new') }}">
