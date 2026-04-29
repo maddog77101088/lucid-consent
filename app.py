@@ -2483,9 +2483,10 @@ def _try_schedule_kakao_for_happycall(hc_id):
     return True, scheduled_iso
 
 
-def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
+def _send_kakao_notice(phone, patient_name, doc_type, notice_url, scheduled_at=None):
     """안내문 도착 알림톡 발송. doc_type별로 별도 templateId 사용.
     각 템플릿 본문에 안내문 종류가 고정 텍스트로 명시되어 있어 변수 2개(#{환자명}, #{안내문URL})만 전달.
+    scheduled_at: ISO8601 (예약 발송), None이면 즉시 발송.
     """
     template_id = _kakao_notice_template_id(doc_type)
     if not template_id:
@@ -2497,6 +2498,7 @@ def _send_kakao_notice(phone, patient_name, doc_type, notice_url):
             "#{환자명}": patient_name or "환자",
             "#{안내문URL}": notice_url,
         },
+        scheduled_at=scheduled_at,
     )
 
 
@@ -3243,6 +3245,19 @@ def api_notice_send_kakao(doc_id):
     data = request.get_json() or {}
     phone_override = (data.get("guardian_phone") or "").strip()  # 폼에서 직접 받기 옵션
 
+    # 발송 시점: delay_minutes 0=즉시 / 10/30/60 = N분 뒤 예약
+    try:
+        delay_minutes = int(data.get("delay_minutes") or 0)
+    except (TypeError, ValueError):
+        delay_minutes = 0
+    if delay_minutes not in (0, 10, 30, 60):
+        delay_minutes = 0
+    scheduled_at = None
+    if delay_minutes > 0:
+        # 솔라피 v4: ISO8601 (KST 오프셋 포함)
+        sched_dt = datetime.now() + timedelta(minutes=delay_minutes)
+        scheduled_at = sched_dt.strftime("%Y-%m-%dT%H:%M:%S+09:00")
+
     db = get_db()
     row = db.execute(
         "SELECT id, doc_type, patient_name, guardian_phone, share_token FROM patient_documents WHERE id=?",
@@ -3268,17 +3283,32 @@ def api_notice_send_kakao(doc_id):
         patient_name=row["patient_name"],
         doc_type=row["doc_type"],
         notice_url=notice_url,
+        scheduled_at=scheduled_at,
     )
     if not ok:
         return jsonify({"ok": False, "error": result}), 500
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    db.execute(
-        "UPDATE patient_documents SET share_sent_at=?, guardian_phone=COALESCE(NULLIF(?,''), guardian_phone) WHERE id=?",
-        (now_str, phone, doc_id)
-    )
+    # 즉시 발송이면 share_sent_at 기록, 예약이면 scheduled 정보만 저장 (실제 발송시간은 솔라피가 처리)
+    if scheduled_at:
+        db.execute(
+            "UPDATE patient_documents SET guardian_phone=COALESCE(NULLIF(?,''), guardian_phone) WHERE id=?",
+            (phone, doc_id)
+        )
+    else:
+        db.execute(
+            "UPDATE patient_documents SET share_sent_at=?, guardian_phone=COALESCE(NULLIF(?,''), guardian_phone) WHERE id=?",
+            (now_str, phone, doc_id)
+        )
     db.commit()
-    return jsonify({"ok": True, "message_id": result, "notice_url": notice_url, "sent_at": now_str})
+    return jsonify({
+        "ok": True,
+        "message_id": result,
+        "notice_url": notice_url,
+        "sent_at": now_str,
+        "scheduled_at": scheduled_at,
+        "delay_minutes": delay_minutes,
+    })
 
 
 @app.route("/notice/<token>", methods=["GET"])

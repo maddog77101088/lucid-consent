@@ -100,6 +100,15 @@
     <button id="btn-ce-copy" type="button" class="btn-ghost">📋 복사</button>
     <button id="btn-ce-regen" type="button" class="btn-ghost">🔄 다시 생성</button>
     {% if kakao_enabled %}
+    {% if mode == 'guardian' %}
+    <select id="ce-send-delay" title="발송 시점 선택"
+            style="padding:8px 10px; border:1.5px solid #d1d5db; border-radius:6px; font-size:13.5px; background:#fff; cursor:pointer;">
+      <option value="0">⏱ 즉시 발송</option>
+      <option value="10">⏰ 10분 후</option>
+      <option value="30">⏰ 30분 후</option>
+      <option value="60">⏰ 1시간 후</option>
+    </select>
+    {% endif %}
     <button id="btn-ce-send-kakao" type="button" style="background:#fbbc04; color:#3c3c3c; border:0; padding:8px 18px; border-radius:6px; font-weight:700; cursor:pointer;">📤 카톡 발송</button>
     {% endif %}
     <span id="copy-status" class="muted"></span>
@@ -373,18 +382,24 @@ if (ceSendKakaoBtn) {
     if (CE_MODE === 'guardian') {
       const phone = (document.getElementById('guardian_mobile')?.value || '').trim();
       if (!phone) { alert('보호자 휴대전화 번호가 비어있습니다.'); return; }
-      if (!confirm(`보호자에게 카카오 알림톡으로 안내문 링크를 발송합니다.\n수신: ${phone}\n진행할까요?`)) return;
+      const delaySel = document.getElementById('ce-send-delay');
+      const delayMinutes = delaySel ? parseInt(delaySel.value || '0', 10) : 0;
+      const delayLabelMap = {0: '즉시 발송', 10: '10분 후 예약 발송', 30: '30분 후 예약 발송', 60: '1시간 후 예약 발송'};
+      const delayLabel = delayLabelMap[delayMinutes] || '즉시 발송';
+      if (!confirm(`보호자에게 카카오 알림톡으로 안내문 링크를 발송합니다.\n수신: ${phone}\n발송 시점: ${delayLabel}\n진행할까요?`)) return;
       this.disabled = true;
-      this.textContent = '⏳ 발송 중...';
+      this.textContent = delayMinutes > 0 ? '⏳ 예약 중...' : '⏳ 발송 중...';
       try {
         const r = await fetch(`/api/notices/${docId}/send-kakao`, {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({guardian_phone: phone})
+          body: JSON.stringify({guardian_phone: phone, delay_minutes: delayMinutes})
         });
         const j = await r.json();
         if (!r.ok || !j.ok) throw new Error(j.error || '발송 실패');
-        this.textContent = '✓ 발송됨 — 메인으로 이동...';
-        setTimeout(() => { window.location.href = '/'; }, 700);
+        this.textContent = (j.delay_minutes > 0)
+          ? `✓ ${delayLabel} 예약됨 — 메인으로 이동...`
+          : '✓ 발송됨 — 메인으로 이동...';
+        setTimeout(() => { window.location.href = '/'; }, 900);
       } catch (e) {
         alert('발송 실패: ' + e.message);
         this.textContent = '📤 카톡 발송';
