@@ -2931,6 +2931,7 @@ def api_ce_save():
         return jsonify({"ok": False, "error": "본문을 입력해주세요."}), 400
 
     guardian_name = (data.get("guardian_name") or "").strip()
+    guardian_mobile = (data.get("guardian_mobile") or "").strip()
     ref_vet_name = (data.get("ref_vet_name") or "").strip()
     referral_hospital_id = data.get("referral_hospital_id")
     try:
@@ -2942,6 +2943,7 @@ def api_ce_save():
     saved_doc_id = _save_patient_document(
         "ce", patient_name,
         guardian_name=guardian_name,
+        guardian_phone=guardian_mobile,
         title=title,
         body=body,
         structured_data={"mode": mode, "ref_vet_name": ref_vet_name, "manual": True},
@@ -4777,6 +4779,7 @@ def api_ce_generate():
     mode = (data.get("mode") or "guardian").strip()  # "guardian" / "vet"
     ref_vet_name = (data.get("ref_vet_name") or "").strip()
     guardian_name = (data.get("guardian_name") or "").strip()
+    guardian_mobile = (data.get("guardian_mobile") or "").strip()
     patient_name = (data.get("patient_name") or "").strip()
     referral_hospital_id = data.get("referral_hospital_id")
     try:
@@ -4841,6 +4844,7 @@ def api_ce_generate():
             saved_doc_id = _save_patient_document(
                 "ce", patient_name,
                 guardian_name=guardian_name,
+                guardian_phone=guardian_mobile,
                 title=title,
                 body=text,
                 structured_data={"mode": mode, "ref_vet_name": ref_vet_name},

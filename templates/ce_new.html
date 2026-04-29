@@ -323,6 +323,7 @@ async function saveDoc(){
         mode: CE_MODE,
         patient_name: f.patient_name,
         guardian_name: f.guardian_name,
+        guardian_mobile: f.guardian_mobile,
         ref_vet_name: f.ref_vet_name,
         referral_hospital_id: f.referral_hospital_id,
         body: text,
@@ -341,8 +342,8 @@ document.getElementById('btn-ce-save').addEventListener('click', async function(
   try {
     const id = await saveDoc();
     if (id) {
-      this.textContent = '✓ 저장됨';
-      setTimeout(() => { this.textContent = '💾 저장'; this.disabled = false; }, 1500);
+      this.textContent = '✓ 저장됨 — 메인으로 이동...';
+      setTimeout(() => { window.location.href = '/'; }, 700);
     } else {
       this.textContent = '💾 저장';
       this.disabled = false;
@@ -382,9 +383,8 @@ if (ceSendKakaoBtn) {
         });
         const j = await r.json();
         if (!r.ok || !j.ok) throw new Error(j.error || '발송 실패');
-        alert('✓ 카톡 발송 완료');
-        this.textContent = '✓ 발송됨';
-        setTimeout(() => { this.textContent = '📤 카톡 발송'; this.disabled = false; }, 2000);
+        this.textContent = '✓ 발송됨 — 메인으로 이동...';
+        setTimeout(() => { window.location.href = '/'; }, 700);
       } catch (e) {
         alert('발송 실패: ' + e.message);
         this.textContent = '📤 카톡 발송';
@@ -399,9 +399,8 @@ if (ceSendKakaoBtn) {
         const r = await fetch(`/api/referrals/${docId}/send-kakao`, {method:'POST'});
         const j = await r.json();
         if (!r.ok || !j.ok) throw new Error(j.error || '발송 실패');
-        alert('✓ 카톡 발송 완료');
-        this.textContent = '✓ 발송됨';
-        setTimeout(() => { this.textContent = '📤 카톡 발송'; this.disabled = false; }, 2000);
+        this.textContent = '✓ 발송됨 — 메인으로 이동...';
+        setTimeout(() => { window.location.href = '/'; }, 700);
       } catch (e) {
         alert('발송 실패: ' + e.message);
         this.textContent = '📤 카톡 발송';
