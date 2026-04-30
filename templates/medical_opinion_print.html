@@ -26,12 +26,10 @@
 .mo-table th { background:#f9fafb; text-align:left; width:22%; font-weight:600; color:#374151; }
 .mo-block { padding:10pt 12pt; border:1pt solid #d1d5db; border-radius:2pt; min-height:50pt; white-space:pre-wrap; line-height:1.65; }
 .mo-issue { margin-top:24pt; padding-top:14pt; border-top:1.5pt solid #111; }
-.mo-issue-row { display:flex; justify-content:space-between; align-items:flex-end; gap:24pt; }
-.mo-vet-info { flex:1; line-height:1.85; font-size:11pt; }
+.mo-vet-info { line-height:1.95; font-size:11pt; }
 .mo-vet-info .lbl { display:inline-block; width:84pt; color:#4b5563; }
-.mo-stamp { width:120pt; min-height:120pt; text-align:center; position:relative; }
-.mo-stamp img { max-width:90pt; max-height:90pt; opacity:0.92; }
-.mo-stamp .stamp-text { font-size:9pt; color:#888; }
+.mo-sign-inline { max-height:42pt; max-width:120pt; opacity:0.92; vertical-align:middle; margin-left:14pt; }
+.mo-stamp-fallback { font-size:9pt; color:#888; margin-left:14pt; }
 .mo-action-bar { max-width:210mm; margin:8px auto; display:flex; gap:8px; }
 </style>
 
@@ -104,23 +102,21 @@
 
   <!-- 발급 -->
   <div class="mo-issue">
-    <div class="mo-issue-row">
-      <div class="mo-vet-info">
-        <div><span class="lbl">발행 목적</span>: {{ d.issue_purpose or '보험청구용' }}</div>
-        <div><span class="lbl">발행일</span>: {{ d.issue_date or '' }}</div>
-        <div><span class="lbl">수의사 면허 번호</span>: {{ d.vet_license or '' }}</div>
-        <div><span class="lbl">수의사 이름</span>: {{ d.vet_name or '' }}</div>
-        <div><span class="lbl">전화번호</span>: {{ d.vet_phone or hospital_phone }}</div>
-      </div>
-      <div class="mo-stamp">
+    <div class="mo-vet-info">
+      <div><span class="lbl">발행 목적</span>: {{ d.issue_purpose or '보험청구용' }}</div>
+      <div><span class="lbl">발행일</span>: {{ d.issue_date or '' }}</div>
+      <div><span class="lbl">수의사 면허 번호</span>: {{ d.vet_license or '' }}</div>
+      <div>
+        <span class="lbl">수의사 이름</span>: {{ d.vet_name or '' }}
         {% if vet_signature %}
-          <img src="data:image/png;base64,{{ vet_signature }}" alt="수의사 도장">
+          <img src="data:image/png;base64,{{ vet_signature }}" alt="수의사 사인" class="mo-sign-inline">
         {% elif hospital_stamp %}
-          <img src="data:image/png;base64,{{ hospital_stamp }}" alt="병원 직인">
+          <img src="data:image/png;base64,{{ hospital_stamp }}" alt="병원 직인" class="mo-sign-inline">
         {% else %}
-          <div class="stamp-text" style="margin-top:36pt;">(도장 미등록)</div>
+          <span class="mo-stamp-fallback">(서명 미등록)</span>
         {% endif %}
       </div>
+      <div><span class="lbl">전화번호</span>: {{ d.vet_phone or hospital_phone }}</div>
     </div>
   </div>
 </div>
