@@ -2213,6 +2213,11 @@ def _kakao_doctor_alert_enabled():
     return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_DOCTOR_ALERT", "").strip())
 
 
+def _kakao_hospital_video_enabled():
+    """입원 환자 보호자에게 입원전 안내영상 카톡 발송 가능 여부."""
+    return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_HOSPITAL_VIDEO", "").strip())
+
+
 # 동의서 종류 라벨 매핑 (카카오 알림톡 변수용)
 CONSENT_DOC_LABELS = {
     "surgery":    "수술 동의서",
@@ -2537,6 +2542,20 @@ DOCTOR_ALERT_CLS_LABELS = {
     "medication": "투약/처치 문의(긴급)",
     "other":      "기타",
 }
+
+
+def _send_kakao_hospital_video(phone, patient_name, video_url):
+    """입원 환자 보호자에게 입원전 안내영상 알림톡 발송.
+    동의서 서명 완료 직후 자동 호출.
+    """
+    return _send_kakao_template(
+        phone=phone,
+        template_id=os.environ.get("KAKAO_TEMPLATE_ID_HOSPITAL_VIDEO", "").strip(),
+        variables={
+            "#{환자명}": patient_name or "환자",
+            "#{영상URL}": video_url,
+        },
+    )
 
 
 def _send_kakao_doctor_alert(phone, patient_name, classification, summary, feedback_url):
@@ -4163,6 +4182,36 @@ def sign_submit(token):
             (b64, signer_name, signed_at, json.dumps(checked_boxes), token)
         )
     db.commit()
+
+    # 입원 환자(surgery_hospital / hospital_only) 보호자에게 입원전 안내영상 카톡 자동발송 (best-effort)
+    try:
+        if _kakao_hospital_video_enabled() and row["doc_type"] == "surgery":
+            try:
+                fdata = json.loads(row["form_data"])
+            except (ValueError, TypeError):
+                fdata = {}
+            pt = (fdata.get("patient_type") or "").strip()
+            if pt in ("surgery_hospital", "hospital_only"):
+                guardian_phone = (fdata.get("guardian_mobile") or fdata.get("guardian_phone") or "").strip()
+                if guardian_phone:
+                    # 유튜브 URL: hospital_template DB → 없으면 기본값 fallback
+                    tpl = db.execute("SELECT youtube_url FROM hospital_template WHERE id=1").fetchone()
+                    yt_url = (tpl["youtube_url"] if tpl and "youtube_url" in tpl.keys() else "") or ""
+                    if not yt_url:
+                        try:
+                            from default_templates import DEFAULT_YOUTUBE_URL
+                            yt_url = DEFAULT_YOUTUBE_URL
+                        except Exception:
+                            yt_url = ""
+                    if yt_url:
+                        _send_kakao_hospital_video(
+                            phone=guardian_phone,
+                            patient_name=fdata.get("patient_name") or "환자",
+                            video_url=yt_url,
+                        )
+    except Exception as _e:
+        pass
+
     return jsonify({
         "ok": True,
         "redirect": url_for("sign_complete", token=token),
