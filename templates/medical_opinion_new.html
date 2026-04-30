@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>📄 {{ page_title }}</h1>
-<p class="muted">차트 paste + 환자 히스토리 기반으로 보험청구용 소견서를 자동 생성합니다. 결과는 편집 가능합니다.</p>
+<p class="muted">차트 paste + 환자 히스토리 기반으로 진료 소견서 본문을 자동 생성합니다. 결과는 편집 가능합니다.</p>
 
 <!-- ⓪ 차트 OCR (선택) -->
 <section class="card" style="border-left:3px solid #2563eb;">
@@ -124,6 +124,20 @@
 <section class="card">
   <h2>⑤ 발급 정보</h2>
   <div class="row-3">
+    <label>발행 목적 *
+      <select id="issue_purpose">
+        <option value="보험청구용" selected>보험청구용</option>
+        <option value="기타">기타 (직접 입력)</option>
+      </select>
+    </label>
+    <label id="issue_purpose_other_wrap" style="display:none; grid-column:span 2;">
+      기타 발행 목적 *
+      <input id="issue_purpose_other" placeholder="예: 동물등록 말소용, 사망진단용, 타 병원 의뢰용 등">
+    </label>
+    <label class="purpose-spacer"></label>
+    <label class="purpose-spacer"></label>
+  </div>
+  <div class="row-3" style="margin-top:8px;">
     <label>발행일
       <input id="issue_date" type="date" value="">
     </label>
@@ -194,12 +208,28 @@ function gather() {
     diagnosis_detail: document.getElementById('diagnosis_detail').value.trim(),
     diagnosis_summary: document.getElementById('diagnosis_summary').value.trim(),
     reference_note: document.getElementById('reference_note').value.trim(),
+    issue_purpose: getIssuePurpose(),
     issue_date: document.getElementById('issue_date').value,
     vet_name: document.getElementById('vet_name').value,
     vet_license: document.getElementById('vet_license').value.trim(),
     vet_phone: document.getElementById('vet_phone').value.trim(),
   };
 }
+
+// 발행 목적: "기타" 선택 시 직접 입력 노출
+function getIssuePurpose() {
+  const sel = document.getElementById('issue_purpose').value;
+  if (sel === '기타') {
+    return document.getElementById('issue_purpose_other').value.trim() || '기타';
+  }
+  return sel;
+}
+document.getElementById('issue_purpose').addEventListener('change', function(){
+  const wrap = document.getElementById('issue_purpose_other_wrap');
+  const isOther = this.value === '기타';
+  wrap.style.display = isOther ? '' : 'none';
+  if (isOther) document.getElementById('issue_purpose_other').focus();
+});
 
 // ===== AI 생성 =====
 document.getElementById('btn-ai-generate').addEventListener('click', async () => {

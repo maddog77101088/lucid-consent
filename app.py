@@ -5267,7 +5267,7 @@ def medical_opinion_new():
     ).fetchone()
     return render_template(
         "medical_opinion_new.html",
-        page_title="진료 소견서 (보험청구용)",
+        page_title="진료 소견서",
         vet_name=session.get("display_name", ""),
         vet_phone=(me["phone"] if me else "") or "",
         vet_license=(me["license_number"] if me else "") or "",
@@ -5381,6 +5381,7 @@ def api_medical_opinion_save():
         "diagnosis_detail": (data.get("diagnosis_detail") or "").strip(),
         "diagnosis_summary":(data.get("diagnosis_summary") or "").strip(),
         "reference_note":   (data.get("reference_note") or "").strip(),
+        "issue_purpose":    (data.get("issue_purpose") or "보험청구용").strip(),
         "issue_date":       (data.get("issue_date") or datetime.now().strftime("%Y-%m-%d")),
         "vet_name":         (data.get("vet_name") or session.get("display_name", "")).strip(),
         "vet_license":      (data.get("vet_license") or "").strip(),

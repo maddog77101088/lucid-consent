@@ -106,6 +106,7 @@
   <div class="mo-issue">
     <div class="mo-issue-row">
       <div class="mo-vet-info">
+        <div><span class="lbl">발행 목적</span>: {{ d.issue_purpose or '보험청구용' }}</div>
         <div><span class="lbl">발행일</span>: {{ d.issue_date or '' }}</div>
         <div><span class="lbl">수의사 면허 번호</span>: {{ d.vet_license or '' }}</div>
         <div><span class="lbl">수의사 이름</span>: {{ d.vet_name or '' }}</div>
