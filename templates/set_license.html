@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:520px; margin:40px auto;">
+  <div class="card" style="padding:28px;">
+    <h1 style="margin:0 0 12px;">📄 수의사 면허번호 등록</h1>
+    {% if forced %}
+    <div style="background:#fef3c7; padding:10px 14px; border-left:3px solid #d97706; border-radius:6px; margin-bottom:14px; font-size:13.5px; color:#92400e;">
+      ⚠️ 진료 소견서(보험청구용) 발급 시 수의사 면허번호가 자동으로 양식에 들어갑니다.<br>
+      이를 위해 본인 면허번호 등록이 필요합니다. (1회만)
+    </div>
+    {% else %}
+    <p class="muted" style="margin:0 0 14px;">본인 면허번호와 도장 이미지를 등록·수정할 수 있습니다.</p>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div style="padding:8px 12px; border-radius:6px; margin-bottom:10px; font-size:13px;
+                    background:{% if cat == 'error' %}#fef2f2{% else %}#d1fae5{% endif %};
+                    color:{% if cat == 'error' %}#991b1b{% else %}#047857{% endif %};">
+          {{ msg }}
+        </div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="post" action="{{ url_for('set_license') }}">
+      <input type="hidden" name="signature_image_b64" id="sig-b64">
+
+      <label style="display:block; font-size:13px; color:#374151; margin-bottom:6px;">
+        수의사 면허번호 * <span class="muted" style="font-size:12px;">(숫자만)</span>
+      </label>
+      <input type="text" name="license_number" value="{{ current_license or '' }}"
+             placeholder="예: 10444" required autofocus inputmode="numeric" pattern="[0-9]+"
+             style="width:100%; padding:11px 14px; font-size:15px;
+                    border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box;
+                    margin-bottom:18px;">
+
+      <label style="display:block; font-size:13px; color:#374151; margin-bottom:6px;">
+        개인 도장 이미지 <span class="muted" style="font-size:12px;">(선택 — 나중에 등록 가능)</span>
+      </label>
+
+      {% if current_signature %}
+      <div style="margin-bottom:10px; padding:10px; background:#f9fafb; border:1px dashed #d1d5db; border-radius:6px; text-align:center;">
+        <div style="font-size:12px; color:#6b7280; margin-bottom:6px;">현재 등록된 도장</div>
+        <img src="data:image/png;base64,{{ current_signature }}" alt="현재 도장"
+             style="max-width:80px; max-height:80px;">
+      </div>
+      {% endif %}
+
+      <input type="file" id="sig-file" accept="image/png,image/jpeg"
+             onchange="readSig(this)"
+             style="width:100%; padding:8px; font-size:13px;
+                    border:1.5px dashed #d1d5db; border-radius:6px;
+                    margin-bottom:8px; box-sizing:border-box;">
+
+      <div id="sig-preview-wrap" style="display:none; margin-bottom:14px; padding:10px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:6px; text-align:center;">
+        <div style="font-size:12px; color:#0369a1; margin-bottom:6px;">새로 업로드할 도장 미리보기</div>
+        <img id="sig-preview" style="max-width:80px; max-height:80px;">
+      </div>
+
+      <p class="muted" style="font-size:12px; margin:0 0 14px; line-height:1.5;">
+        💡 도장은 <strong>투명 배경 PNG</strong>를 권장합니다. 진료 소견서 양식에 자동 삽입됩니다.<br>
+        도장 없이 면허번호만 먼저 등록하셔도 됩니다.
+      </p>
+
+      <button type="submit" style="width:100%; background:#2563eb; color:#fff; border:0;
+                                    padding:12px; border-radius:6px; font-size:15px; font-weight:600;
+                                    cursor:pointer;">
+        💾 저장하고 계속하기
+      </button>
+    </form>
+
+    {% if not forced %}
+    <p style="margin-top:14px; text-align:center;">
+      <a href="{{ url_for('dashboard') }}" style="color:#6b7280; font-size:13px; text-decoration:none;">← 메인 대시보드로</a>
+    </p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function readSig(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('sig-b64').value = e.target.result;
+    document.getElementById('sig-preview').src = e.target.result;
+    document.getElementById('sig-preview-wrap').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+</script>
+{% endblock %}

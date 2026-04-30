@@ -473,6 +473,7 @@ def login():
             session["user_id"] = row["id"]; session["display_name"] = row["display_name"]
             session["role"] = row["role"]; session["username"] = row["username"]
             session["phone"] = row["phone"] if "phone" in row.keys() else ""
+            session["license_number"] = row["license_number"] if "license_number" in row.keys() else ""
             session["must_change_password"] = bool(row["must_change_password"]) if "must_change_password" in row.keys() else False
             if session["must_change_password"]:
                 flash("보안을 위해 비밀번호를 변경해주세요.", "ok")
@@ -480,6 +481,10 @@ def login():
             if not session["phone"]:
                 flash("응답 알림 발송을 위해 본인 휴대폰 번호를 등록해주세요.", "ok")
                 return redirect(url_for("set_phone"))
+            # 수의사 계정은 면허번호 미등록 시 강제 입력
+            if session["role"] == "vet" and not session["license_number"]:
+                flash("진료 소견서 발급을 위해 수의사 면허번호를 등록해주세요.", "ok")
+                return redirect(url_for("set_license"))
             return redirect(request.args.get("next") or url_for("dashboard"))
         flash("아이디 또는 비밀번호가 올바르지 않습니다.", "error")
     return render_template("login.html")
@@ -512,6 +517,51 @@ def set_phone():
     return render_template("set_phone.html",
                            current_phone=session.get("phone", ""),
                            forced=not session.get("phone"))
+
+
+@app.route("/me/license", methods=["GET", "POST"])
+def set_license():
+    """수의사 본인 면허번호 + 개인 도장 등록 (vet 역할 강제 입력)."""
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    if request.method == "POST":
+        license_number = (request.form.get("license_number") or "").strip()
+        sig_image = request.form.get("signature_image_b64") or ""
+        # data:image/png;base64,XXX 형태면 base64만 추출
+        if sig_image.startswith("data:image/"):
+            try:
+                _, sig_image = sig_image.split(",", 1)
+            except ValueError:
+                sig_image = ""
+        if not license_number:
+            flash("면허번호를 입력해주세요.", "error")
+        elif not license_number.isdigit():
+            flash("면허번호는 숫자만 입력해주세요.", "error")
+        else:
+            db = get_db()
+            if sig_image:
+                db.execute(
+                    "UPDATE users SET license_number=?, signature_image=? WHERE id=?",
+                    (license_number, sig_image, session["user_id"])
+                )
+            else:
+                db.execute(
+                    "UPDATE users SET license_number=? WHERE id=?",
+                    (license_number, session["user_id"])
+                )
+            db.commit()
+            session["license_number"] = license_number
+            flash("면허번호가 등록되었습니다.", "ok")
+            return redirect(url_for("dashboard"))
+    db = get_db()
+    me = db.execute(
+        "SELECT license_number, signature_image FROM users WHERE id=?",
+        (session["user_id"],)
+    ).fetchone()
+    return render_template("set_license.html",
+                           current_license=(me["license_number"] if me else "") or "",
+                           current_signature=(me["signature_image"] if me else "") or "",
+                           forced=not session.get("license_number"))
 
 
 @app.route("/me/password", methods=["GET","POST"])
