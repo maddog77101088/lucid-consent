@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-<div style="max-width:520px; margin:40px auto;">
+<div style="max-width:560px; margin:40px auto;">
   <div class="card" style="padding:28px;">
-    <h1 style="margin:0 0 12px;">📄 수의사 면허번호 등록</h1>
+    <h1 style="margin:0 0 12px;">📄 수의사 면허번호 · 사인 등록</h1>
     {% if forced %}
     <div style="background:#fef3c7; padding:10px 14px; border-left:3px solid #d97706; border-radius:6px; margin-bottom:14px; font-size:13.5px; color:#92400e;">
-      ⚠️ 진료 소견서(보험청구용) 발급 시 수의사 면허번호가 자동으로 양식에 들어갑니다.<br>
-      이를 위해 본인 면허번호 등록이 필요합니다. (1회만)
+      ⚠️ 진료 소견서(보험청구용) 발급 시 수의사 면허번호와 본인 사인이 자동으로 양식에 들어갑니다.<br>
+      이를 위해 등록이 필요합니다. (1회만)
     </div>
     {% else %}
-    <p class="muted" style="margin:0 0 14px;">본인 면허번호와 도장 이미지를 등록·수정할 수 있습니다.</p>
+    <p class="muted" style="margin:0 0 14px;">본인 면허번호와 사인을 등록·수정할 수 있습니다.</p>
     {% endif %}
 
     {% with messages = get_flashed_messages(with_categories=true) %}
@@ -22,7 +22,7 @@
       {% endfor %}
     {% endwith %}
 
-    <form method="post" action="{{ url_for('set_license') }}">
+    <form method="post" action="{{ url_for('set_license') }}" id="license-form">
       <input type="hidden" name="signature_image_b64" id="sig-b64">
 
       <label style="display:block; font-size:13px; color:#374151; margin-bottom:6px;">
@@ -35,31 +35,36 @@
                     margin-bottom:18px;">
 
       <label style="display:block; font-size:13px; color:#374151; margin-bottom:6px;">
-        개인 도장 이미지 <span class="muted" style="font-size:12px;">(선택 — 나중에 등록 가능)</span>
+        본인 사인 <span class="muted" style="font-size:12px;">(선택 — 나중에 등록 가능)</span>
       </label>
 
       {% if current_signature %}
       <div style="margin-bottom:10px; padding:10px; background:#f9fafb; border:1px dashed #d1d5db; border-radius:6px; text-align:center;">
-        <div style="font-size:12px; color:#6b7280; margin-bottom:6px;">현재 등록된 도장</div>
-        <img src="data:image/png;base64,{{ current_signature }}" alt="현재 도장"
-             style="max-width:80px; max-height:80px;">
+        <div style="font-size:12px; color:#6b7280; margin-bottom:6px;">현재 등록된 사인</div>
+        <img src="data:image/png;base64,{{ current_signature }}" alt="현재 사인"
+             style="max-width:120px; max-height:80px;">
+        <div style="font-size:11px; color:#9ca3af; margin-top:4px;">아래에 새로 그리면 교체됩니다 (그대로 두면 유지)</div>
       </div>
       {% endif %}
 
-      <input type="file" id="sig-file" accept="image/png,image/jpeg"
-             onchange="readSig(this)"
-             style="width:100%; padding:8px; font-size:13px;
-                    border:1.5px dashed #d1d5db; border-radius:6px;
-                    margin-bottom:8px; box-sizing:border-box;">
+      <div id="pad-wrap" style="position:relative; border:1.5px solid #d1d5db; border-radius:6px; background:#fff; height:180px; touch-action:none; overflow:hidden; margin-bottom:8px;">
+        <canvas id="pad" style="width:100%; height:100%; display:block; cursor:crosshair;"></canvas>
+        <div id="pad-hint" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; pointer-events:none; color:#9ca3af; font-size:14px;">
+          ✎ 마우스 또는 손가락으로 사인해주세요
+        </div>
+      </div>
 
-      <div id="sig-preview-wrap" style="display:none; margin-bottom:14px; padding:10px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:6px; text-align:center;">
-        <div style="font-size:12px; color:#0369a1; margin-bottom:6px;">새로 업로드할 도장 미리보기</div>
-        <img id="sig-preview" style="max-width:80px; max-height:80px;">
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <button type="button" id="btn-clear"
+                style="flex:1; padding:8px; background:#f3f4f6; color:#374151; border:1px solid #d1d5db;
+                       border-radius:6px; font-size:13px; cursor:pointer;">
+          🔄 다시 그리기
+        </button>
       </div>
 
       <p class="muted" style="font-size:12px; margin:0 0 14px; line-height:1.5;">
-        💡 도장은 <strong>투명 배경 PNG</strong>를 권장합니다. 진료 소견서 양식에 자동 삽입됩니다.<br>
-        도장 없이 면허번호만 먼저 등록하셔도 됩니다.
+        💡 사인은 진료 소견서 양식에 자동 삽입됩니다.<br>
+        사인 없이 면허번호만 먼저 등록하셔도 됩니다.
       </p>
 
       <button type="submit" style="width:100%; background:#2563eb; color:#fff; border:0;
@@ -78,16 +83,90 @@
 </div>
 
 <script>
-function readSig(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('sig-b64').value = e.target.result;
-    document.getElementById('sig-preview').src = e.target.result;
-    document.getElementById('sig-preview-wrap').style.display = 'block';
-  };
-  reader.readAsDataURL(file);
-}
+(function(){
+  const canvas = document.getElementById('pad');
+  const hint = document.getElementById('pad-hint');
+  const ctx = canvas.getContext('2d');
+  const sigInput = document.getElementById('sig-b64');
+  let drawing = false, touched = false;
+  let lastX = 0, lastY = 0;
+
+  function resizeCanvas() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const data = touched ? canvas.toDataURL() : null;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111827';
+    if (data) {
+      const img = new Image();
+      img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+      img.src = data;
+    }
+  }
+
+  function getPos(e) {
+    const rect = canvas.getBoundingClientRect();
+    const t = e.touches ? e.touches[0] : e;
+    return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+  }
+
+  function start(e) {
+    e.preventDefault();
+    drawing = true;
+    touched = true;
+    hint.style.display = 'none';
+    const p = getPos(e);
+    lastX = p.x; lastY = p.y;
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+  }
+  function move(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = getPos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    lastX = p.x; lastY = p.y;
+  }
+  function end(e) {
+    if (!drawing) return;
+    if (e) e.preventDefault();
+    drawing = false;
+    ctx.closePath();
+  }
+
+  canvas.addEventListener('mousedown', start);
+  canvas.addEventListener('mousemove', move);
+  canvas.addEventListener('mouseup', end);
+  canvas.addEventListener('mouseleave', end);
+  canvas.addEventListener('touchstart', start, {passive:false});
+  canvas.addEventListener('touchmove', move, {passive:false});
+  canvas.addEventListener('touchend', end);
+  canvas.addEventListener('touchcancel', end);
+
+  document.getElementById('btn-clear').addEventListener('click', function(){
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    touched = false;
+    hint.style.display = 'flex';
+    sigInput.value = '';
+  });
+
+  document.getElementById('license-form').addEventListener('submit', function(e){
+    if (touched) {
+      sigInput.value = canvas.toDataURL('image/png');
+    } else {
+      sigInput.value = '';
+    }
+  });
+
+  window.addEventListener('resize', () => setTimeout(resizeCanvas, 50));
+  setTimeout(resizeCanvas, 50);
+})();
 </script>
 {% endblock %}
