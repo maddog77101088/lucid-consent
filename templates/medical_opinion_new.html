@@ -124,15 +124,8 @@
       <input id="vet_license" value="{{ vet_license }}" placeholder="예: 10444">
     </label>
   </div>
-  <div class="row-3" style="margin-top:8px;">
-    <label>발급 수의사 전화번호
-      <input id="vet_phone" value="{{ vet_phone }}" placeholder="010-0000-0000">
-    </label>
-    <label></label>
-    <label></label>
-  </div>
   <p class="muted" style="font-size:11.5px; margin-top:8px;">
-    💡 면허번호·사인은 [/me/license] 또는 [관리자 → 사용자 관리]에서 본인 계정에 한 번 등록해두면 자동으로 채워집니다.
+    💡 면허번호·사인은 [/me/license] 또는 [관리자 → 사용자 관리]에서 본인 계정에 한 번 등록해두면 자동으로 채워집니다. 인쇄 양식의 전화번호는 병원 대표번호가 자동으로 들어갑니다.
   </p>
 </section>
 
@@ -212,7 +205,6 @@ function gather() {
     issue_date: document.getElementById('issue_date').value,
     vet_name: document.getElementById('vet_name').value,
     vet_license: document.getElementById('vet_license').value.trim(),
-    vet_phone: document.getElementById('vet_phone').value.trim(),
   };
 }
 
@@ -382,10 +374,25 @@ document.getElementById('btn-chart-ocr').addEventListener('click', async () => {
       species: 'species', breed: 'breed', age: 'age', sex: 'sex',
       coat_color: 'coat_color', rfid: 'rfid',
     };
+    // OCR 출력 형식 → 폼 select 옵션 값으로 변환
+    const sexMap = {
+      '암컷(중성화)': '중성화 암컷',
+      '수컷(중성화)': '중성화 수컷',
+      '중성화 암컷': '중성화 암컷',
+      '중성화 수컷': '중성화 수컷',
+      '중성화 Female': '중성화 암컷',
+      '중성화 Male': '중성화 수컷',
+      'Spayed': '중성화 암컷',
+      'Castrated': '중성화 수컷',
+      'Neutered': '중성화 수컷',
+      'Female': '암컷', '여': '암컷', '암': '암컷', 'F': '암컷',
+      'Male': '수컷',   '남': '수컷', '수': '수컷', 'M': '수컷',
+    };
     let filled = 0;
     for (const [src, dstId] of Object.entries(map)) {
-      const v = d.data?.[src];
+      let v = d.data?.[src];
       if (v) {
+        if (src === 'sex') v = sexMap[v] || v;
         const el = document.getElementById(dstId);
         if (el) { el.value = v; filled++; }
       }
