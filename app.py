@@ -811,29 +811,18 @@ def api_surgery_ai_generate():
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "수술명을 입력하세요."}), 400
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다. README 참고."}), 400
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 8000,
-                "system": AI_SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": f"수술명: {name}\n\n웹검색으로 사망률·치명적 합병증·재수술률을 확인하세요. 모든 검색·추론이 끝나면 JSON 객체 하나만 출력하세요. 요약·설명·서두 문장 금지. 첫 문자는 '{{' 이어야 합니다."}],
-                "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
-            },
-            timeout=120,
-        )
-        if r.status_code != 200:
-            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 8000,
+            "system": AI_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": f"수술명: {name}\n\n웹검색으로 사망률·치명적 합병증·재수술률을 확인하세요. 모든 검색·추론이 끝나면 JSON 객체 하나만 출력하세요. 요약·설명·서두 문장 금지. 첫 문자는 '{{' 이어야 합니다."}],
+            "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
+        }, timeout=120)
+        if not ok:
+            return jsonify({"error": err}), 502
         # 여러 content 블록 중 text 블록만 합치기 (server tool use 블록 제외)
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
@@ -897,9 +886,8 @@ OCR_SYSTEM_PROMPT = """이미지는 한국 동물병원 PMS365(우리엔) 차트
 def api_chart_ocr():
     if requests is None:
         return jsonify({"error": "requests 패키지가 설치되어 있지 않습니다."}), 500
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 필요합니다."}), 400
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
     if "image" not in request.files:
         return jsonify({"error": "image 파일이 없습니다."}), 400
     img = request.files["image"]
@@ -911,26 +899,20 @@ def api_chart_ocr():
         media_type = "image/png"
     b64 = base64.b64encode(img_bytes).decode("utf-8")
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 2000,
-                "system": OCR_SYSTEM_PROMPT,
-                "messages": [{
-                    "role": "user",
-                    "content": [
-                        {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
-                        {"type": "text", "text": "차트에서 보호자·동물 정보를 추출해 JSON만 출력하세요."}
-                    ]
-                }],
-            },
-            timeout=60,
-        )
-        if r.status_code != 200:
-            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 2000,
+            "system": OCR_SYSTEM_PROMPT,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
+                    {"type": "text", "text": "차트에서 보호자·동물 정보를 추출해 JSON만 출력하세요."}
+                ]
+            }],
+        }, timeout=60)
+        if not ok:
+            return jsonify({"error": err}), 502
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
         if text.startswith("```"):
@@ -1499,13 +1481,12 @@ def postop_new():
 @app.route("/api/postop/generate", methods=["POST"])
 @login_required
 def api_postop_generate():
-    """구조화 입력 + 수술 DB post_op_notes → Claude 로 보호자 안내문 생성."""
+    """구조화 입력 + 수술 DB post_op_notes → AI(Claude/OpenAI) 로 보호자 안내문 생성."""
     if requests is None:
         return jsonify({"error": "'requests' 패키지가 설치되어 있지 않습니다."}), 500
     data = request.get_json() or {}
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수 미설정"}), 400
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
 
     patient = (data.get("patient_name") or "").strip()
     guardian = (data.get("guardian_name") or "").strip()
@@ -1604,24 +1585,14 @@ def api_postop_generate():
     user_msg = "\n".join(user_msg_parts)
 
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 4000,
-                "system": _prep_prompt(POSTOP_PROMPT),
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-            timeout=90,
-        )
-        if r.status_code != 200:
-            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 4000,
+            "system": _prep_prompt(POSTOP_PROMPT),
+            "messages": [{"role": "user", "content": user_msg}],
+        }, timeout=90)
+        if not ok:
+            return jsonify({"error": err}), 502
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
         if text.startswith("```"):
@@ -1722,9 +1693,8 @@ def api_imd_generate():
     if requests is None:
         return jsonify({"error": "'requests' 패키지 미설치"}), 500
     data = request.get_json() or {}
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수 미설정"}), 400
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
 
     patient = (data.get("patient_name") or "").strip()
     guardian = (data.get("guardian_name") or "").strip()
@@ -1791,24 +1761,14 @@ def api_imd_generate():
     user_msg = "\n".join(user_msg_parts)
 
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 4000,
-                "system": _prep_prompt(IMD_PROMPT),
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-            timeout=90,
-        )
-        if r.status_code != 200:
-            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 4000,
+            "system": _prep_prompt(IMD_PROMPT),
+            "messages": [{"role": "user", "content": user_msg}],
+        }, timeout=90)
+        if not ok:
+            return jsonify({"error": err}), 502
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
         if text.startswith("```"):
@@ -2234,6 +2194,174 @@ def _normalize_phone(phone):
     return _re_phone.sub(r"[^0-9]", "", phone or "")
 
 
+# ============================================================
+# AI 호출 통합 헬퍼 — Claude 우선 + OpenAI(ChatGPT) 자동 폴백
+# ============================================================
+#
+# AI_PROVIDER 환경변수 (선택):
+#   "auto"   (기본) — Claude 시도 → 실패 시 OpenAI 재시도
+#   "claude" — Claude만 사용
+#   "openai" — OpenAI만 사용
+#
+# 필요 환경변수:
+#   ANTHROPIC_API_KEY (Claude용)
+#   OPENAI_API_KEY    (OpenAI용)
+# ============================================================
+
+# Anthropic 모델 → OpenAI 모델 매핑 (vision 지원 모델 사용)
+_ANTHROPIC_TO_OPENAI_MODEL = {
+    "claude-opus-4-6":     "gpt-4o",
+    "claude-sonnet-4-6":   "gpt-4o",
+    "claude-haiku-4-5-20251001": "gpt-4o-mini",
+    # 구버전 호환
+    "claude-3-5-sonnet-20241022": "gpt-4o",
+    "claude-3-5-haiku-20241022":  "gpt-4o-mini",
+}
+
+
+def _anthropic_to_openai_payload(payload):
+    """Anthropic Messages API 페이로드 → OpenAI Chat Completions 페이로드."""
+    msgs = []
+    if payload.get("system"):
+        msgs.append({"role": "system", "content": payload["system"]})
+    for m in payload.get("messages", []):
+        role = m.get("role", "user")
+        content = m.get("content", "")
+        # 문자열은 그대로
+        if isinstance(content, str):
+            msgs.append({"role": role, "content": content})
+            continue
+        # 멀티모달 (text + image) 변환
+        oa_parts = []
+        for part in content:
+            ptype = part.get("type")
+            if ptype == "text":
+                oa_parts.append({"type": "text", "text": part.get("text", "")})
+            elif ptype == "image":
+                src = part.get("source") or {}
+                if src.get("type") == "base64":
+                    media = src.get("media_type", "image/jpeg")
+                    data = src.get("data", "")
+                    oa_parts.append({
+                        "type": "image_url",
+                        "image_url": {"url": f"data:{media};base64,{data}"}
+                    })
+        msgs.append({"role": role, "content": oa_parts if oa_parts else ""})
+
+    out = {
+        "model": _ANTHROPIC_TO_OPENAI_MODEL.get(payload.get("model", ""), "gpt-4o"),
+        "messages": msgs,
+        "max_tokens": payload.get("max_tokens", 2000),
+    }
+    if "temperature" in payload:
+        out["temperature"] = payload["temperature"]
+    return out
+
+
+def _openai_body_to_anthropic(oa_body):
+    """OpenAI 응답 body → Anthropic 형식({content:[{type:'text',text:'...'}]})으로 정규화."""
+    try:
+        text = oa_body["choices"][0]["message"]["content"] or ""
+    except (KeyError, IndexError, TypeError):
+        text = ""
+    return {
+        "content": [{"type": "text", "text": text}],
+        "stop_reason": (oa_body.get("choices") or [{}])[0].get("finish_reason"),
+        "usage": oa_body.get("usage", {}),
+        "_provider": "openai",
+    }
+
+
+def _try_anthropic(payload, timeout=60):
+    """Anthropic API 호출. (ok, body_dict, error_msg) 반환."""
+    if requests is None:
+        return False, None, "requests 패키지 미설치"
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return False, None, "ANTHROPIC_API_KEY 미설정"
+    try:
+        r = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json=payload,
+            timeout=timeout,
+        )
+        if r.status_code != 200:
+            return False, None, f"Claude {r.status_code}: {r.text[:300]}"
+        body = r.json()
+        body["_provider"] = "claude"
+        return True, body, None
+    except Exception as e:
+        return False, None, f"Claude 호출 예외: {e}"
+
+
+def _try_openai(payload_anthropic, timeout=60):
+    """OpenAI Chat Completions 호출 (Anthropic 형식 페이로드 입력).
+    응답은 Anthropic 형식으로 정규화해서 반환. (ok, body_dict, error_msg)"""
+    if requests is None:
+        return False, None, "requests 패키지 미설치"
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return False, None, "OPENAI_API_KEY 미설정"
+    oa_payload = _anthropic_to_openai_payload(payload_anthropic)
+    try:
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json=oa_payload,
+            timeout=timeout,
+        )
+        if r.status_code != 200:
+            return False, None, f"OpenAI {r.status_code}: {r.text[:300]}"
+        return True, _openai_body_to_anthropic(r.json()), None
+    except Exception as e:
+        return False, None, f"OpenAI 호출 예외: {e}"
+
+
+def _ai_messages_call(payload, *, timeout=60):
+    """통합 AI 호출. AI_PROVIDER 환경변수로 동작 결정.
+    payload: Anthropic Messages API 형식 (model, system?, messages, max_tokens, ...)
+    반환: (ok, body_dict, error_msg)
+      body_dict: 항상 Anthropic 형식 — body['content'][i]['text'] 로 텍스트 접근
+    """
+    prefer = (os.environ.get("AI_PROVIDER", "auto") or "auto").strip().lower()
+    if prefer not in ("auto", "claude", "openai"):
+        prefer = "auto"
+
+    if prefer == "openai":
+        return _try_openai(payload, timeout=timeout)
+
+    # claude 또는 auto
+    ok, body, err = _try_anthropic(payload, timeout=timeout)
+    if ok:
+        return True, body, None
+    if prefer == "claude":
+        return False, None, err
+
+    # auto: Claude 실패 → OpenAI 시도
+    ok2, body2, err2 = _try_openai(payload, timeout=timeout)
+    if ok2:
+        # 둘 다 시도한 경우 fallback 정보 추가
+        body2["_fallback_reason"] = err
+        return True, body2, None
+    return False, None, f"Claude·OpenAI 모두 실패 — Claude: {err} / OpenAI: {err2}"
+
+
+def _ai_has_any_key():
+    """ANTHROPIC_API_KEY 또는 OPENAI_API_KEY 중 하나라도 설정되어 있는가."""
+    return bool(
+        os.environ.get("ANTHROPIC_API_KEY", "").strip()
+        or os.environ.get("OPENAI_API_KEY", "").strip()
+    )
+
+
 def _doc_type_to_visit(doc_type):
     """doc_type → 진료유형 한글 변환."""
     return {"ce": "진료", "postop": "수술", "imd": "퇴원"}.get(doc_type, "진료")
@@ -2347,9 +2475,8 @@ def _try_create_ai_draft_for_happycall(hc_id):
     """
     if requests is None:
         return False, "requests 미설치"
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return False, "ANTHROPIC_API_KEY 미설정"
+    if not _ai_has_any_key():
+        return False, "AI API 키 미설정"
     if not _get_auto_draft_setting():
         return False, "전역 AI 자동초안 OFF"
 
@@ -2395,20 +2522,14 @@ def _try_create_ai_draft_for_happycall(hc_id):
     user_msg = "\n".join(user_msg_parts)
 
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 1500,
-                "system": _prep_prompt(KAKAO_HC_PROMPT),
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-            timeout=60,
-        )
-        if r.status_code != 200:
-            return False, f"Claude API {r.status_code}"
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 1500,
+            "system": _prep_prompt(KAKAO_HC_PROMPT),
+            "messages": [{"role": "user", "content": user_msg}],
+        }, timeout=60)
+        if not ok:
+            return False, err
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
         if text.startswith("```"):
@@ -2796,30 +2917,25 @@ def care_survey_submit(token):
     # AI 분류 (실패해도 응답 저장은 됨)
     classification, summary, needs_action, action_suggestion = "other", "", False, ""
     try:
-        if requests is not None:
-            api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-            if api_key:
-                resp_text = "\n".join([f"- {k}: {v}" for k, v in responses.items() if v])
-                user_msg = f"환자: {row['patient_name']}\n진단/수술: {row['diagnosis']}\n\n[설문 응답]\n{resp_text}\n\n위 응답을 분석해 분류해주세요."
-                r = requests.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-                    json={"model": "claude-sonnet-4-6", "max_tokens": 600,
-                          "system": CARE_SURVEY_PROMPT,
-                          "messages": [{"role": "user", "content": user_msg}]},
-                    timeout=30,
-                )
-                if r.status_code == 200:
-                    body = r.json()
-                    text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
-                    text = "\n".join(text_parts).strip()
-                    if text.startswith("```"):
-                        text = text.split("```", 2)[1].strip().lstrip("json").strip()
-                    parsed = json.loads(text)
-                    classification = parsed.get("classification", "other")
-                    summary = parsed.get("summary", "")
-                    needs_action = bool(parsed.get("needs_action", False))
-                    action_suggestion = parsed.get("action_suggestion", "")
+        if requests is not None and _ai_has_any_key():
+            resp_text = "\n".join([f"- {k}: {v}" for k, v in responses.items() if v])
+            user_msg = f"환자: {row['patient_name']}\n진단/수술: {row['diagnosis']}\n\n[설문 응답]\n{resp_text}\n\n위 응답을 분석해 분류해주세요."
+            ok_ai, body, _err = _ai_messages_call({
+                "model": "claude-sonnet-4-6",
+                "max_tokens": 600,
+                "system": CARE_SURVEY_PROMPT,
+                "messages": [{"role": "user", "content": user_msg}],
+            }, timeout=30)
+            if ok_ai:
+                text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+                text = "\n".join(text_parts).strip()
+                if text.startswith("```"):
+                    text = text.split("```", 2)[1].strip().lstrip("json").strip()
+                parsed = json.loads(text)
+                classification = parsed.get("classification", "other")
+                summary = parsed.get("summary", "")
+                needs_action = bool(parsed.get("needs_action", False))
+                action_suggestion = parsed.get("action_suggestion", "")
     except Exception as _e:
         pass
 
@@ -2981,9 +3097,8 @@ def api_happy_call_generate_draft(hc_id):
     """주치의가 클릭 → AI가 환자 정보 기반 카톡 안부 메시지 초안 생성."""
     if requests is None:
         return jsonify({"ok": False, "error": "'requests' 패키지 미설치"}), 500
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"ok": False, "error": "ANTHROPIC_API_KEY 미설정"}), 400
+    if not _ai_has_any_key():
+        return jsonify({"ok": False, "error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
 
     db = get_db()
     row = db.execute("SELECT * FROM happy_calls WHERE id=?", (hc_id,)).fetchone()
@@ -3027,20 +3142,14 @@ def api_happy_call_generate_draft(hc_id):
     user_msg = "\n".join(user_msg_parts)
 
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 1500,
-                "system": _prep_prompt(KAKAO_HC_PROMPT),
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-            timeout=60,
-        )
-        if r.status_code != 200:
-            return jsonify({"ok": False, "error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 1500,
+            "system": _prep_prompt(KAKAO_HC_PROMPT),
+            "messages": [{"role": "user", "content": user_msg}],
+        }, timeout=60)
+        if not ok:
+            return jsonify({"ok": False, "error": err}), 502
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
         if text.startswith("```"):
@@ -4670,36 +4779,25 @@ HOSP_AI_SYSTEM_PROMPT = """당신은 한국의 동물병원(소동물 수의학)
 @app.route("/api/hospitalization/ai-generate", methods=["POST"])
 @login_required
 def api_hospitalization_ai_generate():
-    """Claude API로 입원 케이스 정보 자동 생성."""
+    """AI(Claude/OpenAI)로 입원 케이스 정보 자동 생성."""
     if requests is None:
         return jsonify({"error": "'requests' 패키지가 설치되어 있지 않습니다."}), 500
     data = request.get_json() or {}
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "병증명을 입력하세요."}), 400
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다."}), 400
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 8000,
-                "system": HOSP_AI_SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": f"병증/입원 사유: {name}\n\n웹검색으로 주요 합병증·입원기간·사망률을 확인하세요. 검색·추론이 끝나면 JSON 객체 하나만 출력하세요. 첫 문자는 '{{' 이어야 합니다."}],
-                "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
-            },
-            timeout=120,
-        )
-        if r.status_code != 200:
-            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 8000,
+            "system": HOSP_AI_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": f"병증/입원 사유: {name}\n\n웹검색으로 주요 합병증·입원기간·사망률을 확인하세요. 검색·추론이 끝나면 JSON 객체 하나만 출력하세요. 첫 문자는 '{{' 이어야 합니다."}],
+            "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
+        }, timeout=120)
+        if not ok:
+            return jsonify({"error": err}), 502
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
         if text.startswith("```"):
@@ -4871,36 +4969,25 @@ IMG_AI_SYSTEM_PROMPT = """당신은 한국의 동물병원(소동물 수의학) 
 @app.route("/api/imaging/ai-generate", methods=["POST"])
 @login_required
 def api_imaging_ai_generate():
-    """Claude API로 영상검사 정보 자동 생성."""
+    """AI(Claude/OpenAI)로 영상검사 정보 자동 생성."""
     if requests is None:
         return jsonify({"error": "'requests' 패키지가 설치되어 있지 않습니다."}), 500
     data = request.get_json() or {}
     name = (data.get("name") or "").strip()
     if not name:
         return jsonify({"error": "검사명을 입력하세요."}), 400
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다."}), 400
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 8000,
-                "system": IMG_AI_SYSTEM_PROMPT,
-                "messages": [{"role": "user", "content": f"영상검사명: {name}\n\n웹검색으로 해당 검사의 마취 위험·조영제 부작용·소요시간·비용을 확인하세요. 검색·추론이 끝나면 JSON 객체 하나만 출력하세요. 첫 문자는 '{{' 이어야 합니다."}],
-                "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
-            },
-            timeout=120,
-        )
-        if r.status_code != 200:
-            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 8000,
+            "system": IMG_AI_SYSTEM_PROMPT,
+            "messages": [{"role": "user", "content": f"영상검사명: {name}\n\n웹검색으로 해당 검사의 마취 위험·조영제 부작용·소요시간·비용을 확인하세요. 검색·추론이 끝나면 JSON 객체 하나만 출력하세요. 첫 문자는 '{{' 이어야 합니다."}],
+            "tools": [{"type": "web_search_20250305", "name": "web_search", "max_uses": 5}],
+        }, timeout=120)
+        if not ok:
+            return jsonify({"error": err}), 502
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
         if text.startswith("```"):
@@ -5102,9 +5189,8 @@ def api_ce_generate():
     if not chart:
         return jsonify({"error": "차트 내용을 입력하세요."}), 400
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        return jsonify({"error": "ANTHROPIC_API_KEY 환경변수가 설정되어 있지 않습니다."}), 400
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
 
     system = CE_VET_PROMPT if mode == "vet" else CE_GUARDIAN_PROMPT
     meta_lines = []
@@ -5124,24 +5210,14 @@ def api_ce_generate():
         user_msg += f"\n\n(첫 줄은 정확히 '{greeting}'으로, 둘째 줄은 '의뢰주신 {g}님 {p} 진료 경과 관련하여 연락 드립니다.'로 시작하세요.)"
 
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": "claude-sonnet-4-6",
-                "max_tokens": 4000,
-                "system": system,
-                "messages": [{"role": "user", "content": user_msg}],
-            },
-            timeout=90,
-        )
-        if r.status_code != 200:
-            return jsonify({"error": f"Claude API 오류 {r.status_code}: {r.text[:300]}"}), 500
-        body = r.json()
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 4000,
+            "system": system,
+            "messages": [{"role": "user", "content": user_msg}],
+        }, timeout=90)
+        if not ok:
+            return jsonify({"error": err}), 502
         text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
         text = "\n".join(text_parts).strip()
         # 마크다운 코드블록 제거
