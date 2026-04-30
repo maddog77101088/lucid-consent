@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="margin-bottom:14px;">
+  <a href="{{ url_for('menu_consents') }}" style="color:#6b7280; font-size:13px; text-decoration:none;">← 동의서 메뉴로</a>
+</div>
+<h1 style="margin:0 0 4px;">📄 진료 소견서 목록</h1>
+<p class="muted" style="margin:0 0 18px;">발급된 보험청구용 소견서. 환자명·진단명으로 검색.</p>
+
+<div style="margin-bottom:12px;">
+  <a href="{{ url_for('medical_opinion_new') }}" class="btn-primary" style="text-decoration:none; padding:8px 16px;">＋ 새 소견서 작성</a>
+</div>
+
+<table style="width:100%; border-collapse:collapse; background:#fff; border-radius:6px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.05);">
+  <thead style="background:#f9fafb;">
+    <tr>
+      <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb; font-size:13px;">환자</th>
+      <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb; font-size:13px;">진단명</th>
+      <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb; font-size:13px;">보호자 휴대폰</th>
+      <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb; font-size:13px;">카톡 발송</th>
+      <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb; font-size:13px;">작성일</th>
+      <th style="text-align:left; padding:10px 12px; border-bottom:1px solid #e5e7eb; font-size:13px;">동작</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr style="border-bottom:1px solid #f3f4f6;">
+      <td style="padding:10px 12px; font-size:13.5px;">{{ r.patient_name or '-' }}</td>
+      <td style="padding:10px 12px; font-size:13px; color:#374151;">{{ r.title or '-' }}</td>
+      <td style="padding:10px 12px; font-size:12.5px; color:#6b7280;">{{ r.guardian_phone or '-' }}</td>
+      <td style="padding:10px 12px; font-size:12px;">
+        {% if r.share_sent_at %}
+          <span style="background:#d1fae5; color:#047857; padding:2px 8px; border-radius:10px;">✓ 발송 {{ r.share_sent_at[:10] }}</span>
+        {% else %}
+          <span style="color:#9ca3af;">미발송</span>
+        {% endif %}
+      </td>
+      <td style="padding:10px 12px; font-size:12.5px; color:#6b7280;">{{ r.created_at[:16] if r.created_at else '' }}</td>
+      <td style="padding:10px 12px;">
+        <a href="{{ url_for('medical_opinion_print', doc_id=r.id) }}" target="_blank"
+           style="background:#2563eb; color:#fff; text-decoration:none; padding:5px 12px; border-radius:4px; font-size:12px;">🖨 PDF</a>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" style="padding:24px; text-align:center; color:#9ca3af; font-size:13px;">아직 발급된 소견서가 없습니다.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -57,6 +57,14 @@
       <p>미납 진료비 납입 약속서. 금액·납입기한(자동계산) 명시, 기한 경과 시 법적 절차 고지.</p>
     </div>
   </a>
+  <a class="card big-action" href="{{ url_for('medical_opinion_new') }}">
+    <div class="big-icon">📄</div>
+    <div>
+      <h2>진료 소견서 (보험청구용)</h2>
+      <div class="card-badges"></div>
+      <p>차트 paste + 환자 히스토리 → AI가 진단·치료 본문 자동 작성. 면허번호·도장 자동 삽입, 보호자 카톡 발송.</p>
+    </div>
+  </a>
 </div>
 
 <!-- 서명 관리 -->
@@ -86,6 +94,14 @@
         {% endif %}
       </div>
       <p>서명 완료 <strong>{{ signed_cnt or 0 }}건</strong> · 환자명·수의사로 검색, PDF 재출력, 보호자에게 카톡 사본 발송.</p>
+    </div>
+  </a>
+  <a class="card big-action" href="{{ url_for('medical_opinions_list') }}">
+    <div class="big-icon">📋</div>
+    <div>
+      <h2>소견서 목록</h2>
+      <div class="card-badges"></div>
+      <p>발급된 진료 소견서 통합 조회. PDF 재출력, 보호자 카톡 재발송.</p>
     </div>
   </a>
 </div>

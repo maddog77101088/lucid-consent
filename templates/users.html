@@ -39,6 +39,60 @@
   </table>
 </section>
 
+<section class="card" style="border-left:3px solid #6d28d9;">
+  <h2>📄 진료 소견서 — 수의사 면허번호 · 개인 도장 등록</h2>
+  <p class="muted" style="font-size:13px; margin:0 0 12px;">
+    각 수의사별로 면허번호와 도장(서명) 이미지를 한 번 등록하면 진료 소견서 발급 시 자동으로 삽입됩니다.<br>
+    도장 이미지는 <strong>투명 배경 PNG (200×200px 권장)</strong>으로 미리 만들어두세요.
+  </p>
+  <table class="data">
+    <thead>
+      <tr><th>이름</th><th>면허번호</th><th>현재 도장</th><th>새 도장 업로드</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>{{ u.display_name }}</td>
+        <td>
+          <form method="post" class="inline" id="vet-form-{{ u.id }}">
+            <input type="hidden" name="action" value="update_vet_info">
+            <input type="hidden" name="user_id" value="{{ u.id }}">
+            <input type="hidden" name="signature_image_b64" id="sig-b64-{{ u.id }}">
+            <input name="license_number" value="{{ u.license_number or '' }}" placeholder="예: 10444" style="width:120px;">
+        </td>
+        <td>
+          {% if u.signature_image %}
+          <img src="data:image/png;base64,{{ u.signature_image }}" alt="도장" style="max-width:60px; max-height:60px; border:1px dashed #ddd; border-radius:4px;">
+          {% else %}
+          <span class="muted" style="font-size:12px;">미등록</span>
+          {% endif %}
+        </td>
+        <td>
+          <input type="file" accept="image/png,image/jpeg" id="sig-file-{{ u.id }}"
+                 onchange="readSig({{ u.id }}, this)">
+        </td>
+        <td>
+          <button type="submit" form="vet-form-{{ u.id }}">저장</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<script>
+function readSig(uid, input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('sig-b64-' + uid).value = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+</script>
+
 <section class="card">
   <h2>새 사용자 추가</h2>
   <form method="post" class="form-stack">

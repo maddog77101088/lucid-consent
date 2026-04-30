@@ -1,0 +1,126 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+@media print {
+  .no-print { display:none !important; }
+  body { background:#fff !important; }
+  .mo-paper { box-shadow:none !important; margin:0 !important; padding:14mm 16mm !important; }
+}
+.mo-paper {
+  background:#fff; max-width:210mm; min-height:280mm;
+  margin:14px auto; padding:18mm 18mm; box-sizing:border-box;
+  box-shadow:0 2px 12px rgba(0,0,0,.08); color:#111;
+  font-family:"Malgun Gothic","Apple SD Gothic Neo",sans-serif; font-size:11pt; line-height:1.55;
+}
+.mo-title { text-align:center; font-size:22pt; letter-spacing:8pt; margin:0 0 4pt; font-weight:700; }
+.mo-hospital { text-align:center; font-size:10.5pt; color:#444; margin-bottom:18pt; }
+.mo-section { margin-top:14pt; }
+.mo-section h3 {
+  margin:0 0 6pt; padding:6pt 10pt; background:#f3f4f6; border-left:3pt solid #2563eb;
+  font-size:11.5pt; font-weight:700;
+}
+.mo-table { width:100%; border-collapse:collapse; margin-top:0; }
+.mo-table th, .mo-table td {
+  border:1pt solid #d1d5db; padding:6pt 8pt; vertical-align:middle; font-size:10.5pt;
+}
+.mo-table th { background:#f9fafb; text-align:left; width:22%; font-weight:600; color:#374151; }
+.mo-block { padding:10pt 12pt; border:1pt solid #d1d5db; border-radius:2pt; min-height:50pt; white-space:pre-wrap; line-height:1.65; }
+.mo-issue { margin-top:24pt; padding-top:14pt; border-top:1.5pt solid #111; }
+.mo-issue-row { display:flex; justify-content:space-between; align-items:flex-end; gap:24pt; }
+.mo-vet-info { flex:1; line-height:1.85; font-size:11pt; }
+.mo-vet-info .lbl { display:inline-block; width:84pt; color:#4b5563; }
+.mo-stamp { width:120pt; min-height:120pt; text-align:center; position:relative; }
+.mo-stamp img { max-width:90pt; max-height:90pt; opacity:0.92; }
+.mo-stamp .stamp-text { font-size:9pt; color:#888; }
+.mo-action-bar { max-width:210mm; margin:8px auto; display:flex; gap:8px; }
+</style>
+
+<div class="mo-action-bar no-print">
+  <button onclick="window.print()" class="btn-primary">🖨 인쇄 / PDF로 저장</button>
+  <a href="{{ url_for('medical_opinions_list') }}" class="btn-ghost" style="text-decoration:none;">← 소견서 목록</a>
+</div>
+
+<div class="mo-paper">
+  <h1 class="mo-title">진 료 소 견 서</h1>
+  <div class="mo-hospital">{{ hospital_name }}</div>
+
+  <!-- 보호자 -->
+  <div class="mo-section">
+    <h3>■ 보호자</h3>
+    <table class="mo-table">
+      <tr>
+        <th>ID</th><td>{{ d.guardian_id or '' }}</td>
+        <th>이름</th><td>{{ d.guardian_name or '' }}</td>
+      </tr>
+      <tr>
+        <th>전화</th><td>{{ d.guardian_phone or '' }}</td>
+        <th>휴대전화</th><td>{{ d.guardian_mobile or '' }}</td>
+      </tr>
+      <tr>
+        <th>주소</th><td colspan="3">{{ d.guardian_address or '' }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- 동물 -->
+  <div class="mo-section">
+    <h3>■ 동물(환자)</h3>
+    <table class="mo-table">
+      <tr>
+        <th>ID</th><td>{{ d.animal_id or '' }}</td>
+        <th>RFID</th><td>{{ d.rfid or '' }}</td>
+      </tr>
+      <tr>
+        <th>종 / 품종</th><td>{{ d.species or '' }} {% if d.breed %}/ {{ d.breed }}{% endif %}</td>
+        <th>이름</th><td>{{ d.patient_name or '' }}</td>
+      </tr>
+      <tr>
+        <th>나이</th><td>{{ d.age or '' }}</td>
+        <th>성별 / 피모색</th><td>{{ d.sex or '' }} {% if d.coat_color %}/ {{ d.coat_color }}{% endif %}</td>
+      </tr>
+      <tr>
+        <th>내원일</th><td>{{ d.visit_date or '' }}</td>
+        <th>진단일</th><td>{{ d.diagnosis_date or '' }}</td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- 진단내용 -->
+  <div class="mo-section">
+    <h3>■ 진단내용</h3>
+    <div style="margin-bottom:10pt;">
+      <div style="font-weight:600; margin-bottom:4pt; font-size:10.5pt; color:#374151;">진단</div>
+      <div class="mo-block" style="min-height:auto; padding:8pt 12pt;">{{ d.diagnosis_summary or '' }}</div>
+    </div>
+    <div style="margin-bottom:10pt;">
+      <div style="font-weight:600; margin-bottom:4pt; font-size:10.5pt; color:#374151;">진단 내용</div>
+      <div class="mo-block">{{ d.diagnosis_detail or '' }}</div>
+    </div>
+    <div>
+      <div style="font-weight:600; margin-bottom:4pt; font-size:10.5pt; color:#374151;">참고</div>
+      <div class="mo-block" style="min-height:30pt;">{{ d.reference_note or '' }}</div>
+    </div>
+  </div>
+
+  <!-- 발급 -->
+  <div class="mo-issue">
+    <div class="mo-issue-row">
+      <div class="mo-vet-info">
+        <div><span class="lbl">발행일</span>: {{ d.issue_date or '' }}</div>
+        <div><span class="lbl">수의사 면허 번호</span>: {{ d.vet_license or '' }}</div>
+        <div><span class="lbl">수의사 이름</span>: {{ d.vet_name or '' }}</div>
+        <div><span class="lbl">전화번호</span>: {{ d.vet_phone or hospital_phone }}</div>
+      </div>
+      <div class="mo-stamp">
+        {% if vet_signature %}
+          <img src="data:image/png;base64,{{ vet_signature }}" alt="수의사 도장">
+        {% elif hospital_stamp %}
+          <img src="data:image/png;base64,{{ hospital_stamp }}" alt="병원 직인">
+        {% else %}
+          <div class="stamp-text" style="margin-top:36pt;">(도장 미등록)</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

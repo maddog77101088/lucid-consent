@@ -180,6 +180,9 @@ def init_db():
         cur.execute("ALTER TABLE hospital_template ADD COLUMN kakao_auto_send_hour INTEGER DEFAULT 10")
     if "kakao_auto_draft" not in cols:
         cur.execute("ALTER TABLE hospital_template ADD COLUMN kakao_auto_draft INTEGER DEFAULT 0")
+    # 진료 소견서용 병원 직인 이미지 (base64 PNG)
+    if "stamp_image" not in cols:
+        cur.execute("ALTER TABLE hospital_template ADD COLUMN stamp_image TEXT DEFAULT ''")
     # 기존 row가 있고 URL이 비어있으면 기본값 주입
     cur.execute("UPDATE hospital_template SET youtube_url=? WHERE id=1 AND (youtube_url IS NULL OR youtube_url='')",
                 (DEFAULT_YOUTUBE_URL,))
@@ -190,6 +193,11 @@ def init_db():
         cur.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
     if "phone" not in ucols:
         cur.execute("ALTER TABLE users ADD COLUMN phone TEXT")
+    # 진료 소견서용: 수의사 면허번호 + 개인 도장(서명) 이미지
+    if "license_number" not in ucols:
+        cur.execute("ALTER TABLE users ADD COLUMN license_number TEXT")
+    if "signature_image" not in ucols:
+        cur.execute("ALTER TABLE users ADD COLUMN signature_image TEXT")
     # consent_records 마이그레이션: checked_boxes 컬럼 (보호자 체크 상태 JSON)
     cur.execute("PRAGMA table_info(consent_records)")
     cr_cols = [c[1] for c in cur.fetchall()]
@@ -4631,6 +4639,30 @@ def users():
             else:
                 db.execute("DELETE FROM users WHERE id=?", (uid,))
                 db.commit(); flash("삭제되었습니다.", "ok")
+        elif action == "update_vet_info":
+            # 진료 소견서용: 면허번호 + 도장 이미지 업데이트
+            uid = int(request.form["user_id"])
+            license_number = (request.form.get("license_number") or "").strip()
+            sig_image = request.form.get("signature_image_b64") or ""
+            # data:image/png;base64,XXX 형태면 base64만 추출
+            if sig_image.startswith("data:image/"):
+                try:
+                    _, sig_image = sig_image.split(",", 1)
+                except ValueError:
+                    sig_image = ""
+            # 빈 값이면 기존 도장 유지
+            if sig_image:
+                db.execute(
+                    "UPDATE users SET license_number=?, signature_image=? WHERE id=?",
+                    (license_number, sig_image, uid)
+                )
+            else:
+                db.execute(
+                    "UPDATE users SET license_number=? WHERE id=?",
+                    (license_number, uid)
+                )
+            db.commit()
+            flash("수의사 정보(면허번호/도장)가 업데이트되었습니다.", "ok")
         return redirect(url_for("users"))
     rows = db.execute("SELECT * FROM users ORDER BY role, display_name").fetchall()
     return render_template("users.html", users=rows)
@@ -5142,6 +5174,354 @@ CE_VET_PROMPT = """당신은 한국 동물병원의 수의사가 다른 의뢰 �
 - 혹시 FNA 진행 안하시는 쪽으로 결정하시게 되면 호스피스 관리 차원에서 PDS 처방 고려할 예정입니다.
 - 추가적으로 빈혈 수치 28.7%로 경도의 빈혈 확인되어 조혈촉진제(DPO), 철분제, 코발라민(비타민 B12) 주사 진행하였습니다.
 - 소중한 환자 의뢰해주셔서 감사합니다. 최선을 다해 진료 하도록 하겠습니다."""
+
+
+# ===== 진료 소견서 (보험청구용) =====
+
+MEDICAL_OPINION_PROMPT = """당신은 한국 동물병원의 수의사가 보호자의 보험 청구를 위해 작성하는 '진료 소견서'의 진단·치료 본문을 작성하는 전문가입니다.
+
+차트 paste 내용 + 환자 히스토리(과거 안내문/동의서/검사 기록)를 종합해 아래 3가지 섹션을 짧고 명확하게 작성하세요.
+출력은 반드시 JSON 객체 하나만, 코드블록·서두 설명 금지.
+
+**JSON 출력 형식**:
+{
+  "diagnosis_detail": "진단 내용 (3~6줄, 보험사가 보는 본문) — 진단 근거가 된 검사 소견·임상 증상·경과 핵심.",
+  "diagnosis_summary": "진단명 한 줄 (예: 좌측 신장 종양 의심, 만성 신장병 IRIS Stage 2, 췌장염 등) — 한국어 + 영문 병명 병기.",
+  "reference_note": "참고 사항 (1~3줄) — 향후 치료 계획·예후·재발 가능성·재청구 가능성 등 보험사가 참고할 정보."
+}
+
+**작성 원칙**:
+1. 차트에 없는 사실 절대 추가 금지. 검사 수치·병명은 paste 내용 그대로.
+2. 보험청구용이므로 의학 용어는 정확히 (Creatinine, BUN, ALT, AST 등), 한국어 병명 우선·영문 병명 괄호 병기.
+3. 환자 히스토리에 같은 진단 이력이 있으면 "본 진단은 [최초 진단일] 이후 지속적으로 추적 관찰 중인 만성 질환임" 등 경과 명시.
+4. 'diagnosis_summary'는 보험사 시스템에 그대로 입력 가능하도록 한 줄 60자 이내.
+5. 'reference_note'에는 보호자가 보험사에 제출 시 도움될 정보 (예: "재진 권고됨", "지속 치료 필요", "재발 가능성 있어 정기 검진 권장") 포함.
+6. 추측·과장 금지. 차트 근거가 약하면 "관찰됨", "의심됨" 같은 표현 사용.
+
+**예시 출력**:
+{
+  "diagnosis_detail": "내원 시 보호자는 환자의 식욕 저하·구토·다음다뇨를 주증상으로 호소함. 혈액 검사 상 BUN 75 mg/dL, Creatinine 3.8 mg/dL로 신기능 저하 확인되었으며 SDMA 24 μg/dL로 IRIS Stage 3 만성 신장병 진단됨. 복부 초음파 상 양측 신장 피질 위축 및 미만성 에코 증가 관찰되었고 신장 결석은 확인되지 않았음. 정맥 수액 요법, 저단백·저인 처방식, P-binder, ACE 억제제 처방 후 입원 5일간 BUN/Crea 점진적 호전되어 퇴원함.",
+  "diagnosis_summary": "만성 신장병 IRIS Stage 3 (Chronic Kidney Disease, CKD)",
+  "reference_note": "본 환자는 만성 진행성 질환으로 평생 관리가 필요하며, 1~2개월 간격 정기 검진(혈액·혈압·UPC) 및 처방식·약물 지속이 권장됨. 향후 단계 진행 시 추가 진료비 발생 가능."
+}"""
+
+
+@app.route("/medical-opinion/new", methods=["GET"])
+@login_required
+def medical_opinion_new():
+    """진료 소견서 작성 폼."""
+    db = get_db()
+    me = db.execute(
+        "SELECT id, display_name, phone, license_number, signature_image FROM users WHERE id=?",
+        (session.get("user_id"),)
+    ).fetchone()
+    return render_template(
+        "medical_opinion_new.html",
+        page_title="진료 소견서 (보험청구용)",
+        vet_name=session.get("display_name", ""),
+        vet_phone=(me["phone"] if me else "") or "",
+        vet_license=(me["license_number"] if me else "") or "",
+        vet_list=_get_vet_list(),
+        kakao_enabled=_kakao_medical_opinion_enabled(),
+    )
+
+
+def _kakao_medical_opinion_enabled():
+    """진료 소견서 보호자 카톡 발송 가능 여부."""
+    return _kakao_base_enabled() and bool(os.environ.get("KAKAO_TEMPLATE_ID_MEDICAL_OPINION", "").strip())
+
+
+def _send_kakao_medical_opinion(phone, patient_name, opinion_url, scheduled_at=None):
+    """진료 소견서 도착 알림톡 발송 (보호자용)."""
+    return _send_kakao_template(
+        phone=phone,
+        template_id=os.environ.get("KAKAO_TEMPLATE_ID_MEDICAL_OPINION", "").strip(),
+        variables={
+            "#{환자명}": patient_name or "환자",
+            "#{소견서URL}": opinion_url,
+        },
+        scheduled_at=scheduled_at,
+    )
+
+
+@app.route("/api/medical-opinion/generate", methods=["POST"])
+@login_required
+def api_medical_opinion_generate():
+    """차트 paste + 환자 히스토리 → AI 가 진단내용·진단·참고 3섹션 JSON 생성."""
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정"}), 400
+    data = request.get_json() or {}
+    chart = (data.get("chart") or "").strip()
+    patient = (data.get("patient_name") or "").strip()
+    if not chart:
+        return jsonify({"error": "차트 내용을 입력하세요."}), 400
+
+    # 환자 히스토리: 같은 환자명의 최근 안내문/소견서 (최근 3건)
+    db = get_db()
+    history_rows = db.execute(
+        """SELECT doc_type, title, body, created_at FROM patient_documents
+           WHERE patient_name=? ORDER BY created_at DESC LIMIT 3""",
+        (patient,)
+    ).fetchall() if patient else []
+
+    history_block = ""
+    if history_rows:
+        parts = []
+        for r in history_rows:
+            label = {"ce":"진료안내문","postop":"수술후안내문","imd":"내과퇴원안내문",
+                     "medical_opinion":"이전 소견서","vet":"리퍼병원보고서"}.get(r["doc_type"], r["doc_type"])
+            parts.append(f"[{label} · {r['created_at'][:10]}] {r['title'] or ''}\n{(r['body'] or '')[:400]}")
+        history_block = "\n\n[환자 히스토리 — 최근 진료 기록]\n" + "\n\n".join(parts)
+
+    user_msg = f"[현재 진료 차트 paste]\n{chart}{history_block}\n\n위 내용을 종합해 진료 소견서 본문 JSON 을 출력하세요."
+    try:
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 3000,
+            "system": MEDICAL_OPINION_PROMPT,
+            "messages": [{"role": "user", "content": user_msg}],
+        }, timeout=90)
+        if not ok:
+            return jsonify({"error": err}), 502
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip().rstrip("`").strip()
+        if not text.startswith("{"):
+            s = text.find("{"); e = text.rfind("}")
+            if s >= 0 and e > s:
+                text = text[s:e+1]
+        result = json.loads(text)
+        return jsonify({"ok": True, "data": result})
+    except json.JSONDecodeError as e:
+        return jsonify({"error": f"AI 응답 파싱 실패: {e}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"AI 요청 실패: {e}"}), 500
+
+
+@app.route("/api/medical-opinion/save", methods=["POST"])
+@login_required
+def api_medical_opinion_save():
+    """소견서 신규 저장 또는 update."""
+    data = request.get_json() or {}
+    doc_id = data.get("doc_id")
+    patient_name = (data.get("patient_name") or "").strip()
+    if not patient_name:
+        return jsonify({"ok": False, "error": "환자명 필수"}), 400
+
+    structured = {
+        "guardian_id":      (data.get("guardian_id") or "").strip(),
+        "guardian_name":    (data.get("guardian_name") or "").strip(),
+        "guardian_phone":   (data.get("guardian_phone") or "").strip(),
+        "guardian_mobile":  (data.get("guardian_mobile") or "").strip(),
+        "guardian_address": (data.get("guardian_address") or "").strip(),
+        "animal_id":        (data.get("animal_id") or "").strip(),
+        "rfid":             (data.get("rfid") or "").strip(),
+        "species":          (data.get("species") or "").strip(),
+        "breed":            (data.get("breed") or "").strip(),
+        "patient_name":     patient_name,
+        "age":              (data.get("age") or "").strip(),
+        "sex":              (data.get("sex") or "").strip(),
+        "coat_color":       (data.get("coat_color") or "").strip(),
+        "visit_date":       (data.get("visit_date") or "").strip(),
+        "diagnosis_date":   (data.get("diagnosis_date") or "").strip(),
+        "diagnosis_detail": (data.get("diagnosis_detail") or "").strip(),
+        "diagnosis_summary":(data.get("diagnosis_summary") or "").strip(),
+        "reference_note":   (data.get("reference_note") or "").strip(),
+        "issue_date":       (data.get("issue_date") or datetime.now().strftime("%Y-%m-%d")),
+        "vet_name":         (data.get("vet_name") or session.get("display_name", "")).strip(),
+        "vet_license":      (data.get("vet_license") or "").strip(),
+        "vet_phone":        (data.get("vet_phone") or HOSPITAL_PHONE).strip(),
+    }
+    body_text = (
+        f"[진단명] {structured['diagnosis_summary']}\n\n"
+        f"[진단 내용]\n{structured['diagnosis_detail']}\n\n"
+        f"[참고]\n{structured['reference_note']}"
+    )
+
+    db = get_db()
+    if doc_id:
+        try:
+            doc_id = int(doc_id)
+        except (ValueError, TypeError):
+            return jsonify({"ok": False, "error": "잘못된 doc_id"}), 400
+        db.execute(
+            """UPDATE patient_documents
+               SET title=?, body=?, structured_data=?, guardian_phone=?
+               WHERE id=? AND doc_type='medical_opinion'""",
+            (structured["diagnosis_summary"] or "진료 소견서", body_text,
+             json.dumps(structured, ensure_ascii=False),
+             structured["guardian_mobile"] or structured["guardian_phone"],
+             doc_id)
+        )
+        db.commit()
+        return jsonify({"ok": True, "doc_id": doc_id})
+    # 신규 저장
+    new_id = _save_patient_document(
+        "medical_opinion", patient_name,
+        species=structured["species"], age=structured["age"],
+        guardian_name=structured["guardian_name"],
+        diagnosis=structured["diagnosis_summary"],
+        title=structured["diagnosis_summary"] or "진료 소견서",
+        body=body_text,
+        tags=structured["diagnosis_summary"],
+        structured_data=structured,
+        guardian_phone=structured["guardian_mobile"] or structured["guardian_phone"],
+    )
+    return jsonify({"ok": True, "doc_id": new_id})
+
+
+@app.route("/medical-opinion/<int:doc_id>/print", methods=["GET"])
+@login_required
+def medical_opinion_print(doc_id):
+    """진료 소견서 인쇄 (브라우저 인쇄 → PDF)."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM patient_documents WHERE id=? AND doc_type='medical_opinion'",
+        (doc_id,)
+    ).fetchone()
+    if not row:
+        abort(404)
+    try:
+        d = json.loads(row["structured_data"]) if row["structured_data"] else {}
+    except (ValueError, TypeError):
+        d = {}
+    # 발급 수의사 도장 + 병원 직인 가져오기
+    vet_sig = ""
+    if d.get("vet_name"):
+        u = db.execute("SELECT signature_image FROM users WHERE display_name=?", (d.get("vet_name"),)).fetchone()
+        vet_sig = (u["signature_image"] if u else "") or ""
+    tpl = db.execute("SELECT stamp_image FROM hospital_template WHERE id=1").fetchone()
+    stamp = (tpl["stamp_image"] if tpl else "") or ""
+    return render_template(
+        "medical_opinion_print.html",
+        d=d,
+        vet_signature=vet_sig,
+        hospital_stamp=stamp,
+        hospital_name=HOSPITAL_NAME,
+        hospital_phone=HOSPITAL_PHONE,
+        doc_id=doc_id,
+    )
+
+
+@app.route("/api/medical-opinion/<int:doc_id>/send-kakao", methods=["POST"])
+@login_required
+def api_medical_opinion_send_kakao(doc_id):
+    """진료 소견서를 보호자에게 카카오 알림톡으로 발송."""
+    if not _kakao_medical_opinion_enabled():
+        return jsonify({"ok": False, "error": "카카오 발송 미설정 (KAKAO_TEMPLATE_ID_MEDICAL_OPINION)"}), 400
+    data = request.get_json() or {}
+    phone_override = (data.get("guardian_phone") or "").strip()
+    try:
+        delay_minutes = int(data.get("delay_minutes") or 0)
+    except (TypeError, ValueError):
+        delay_minutes = 0
+    if delay_minutes not in (0, 10, 30, 60):
+        delay_minutes = 0
+    scheduled_at = None
+    if delay_minutes > 0:
+        sched_dt = datetime.now() + timedelta(minutes=delay_minutes)
+        scheduled_at = sched_dt.strftime("%Y-%m-%dT%H:%M:%S+09:00")
+
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM patient_documents WHERE id=? AND doc_type='medical_opinion'",
+        (doc_id,)
+    ).fetchone()
+    if not row:
+        return jsonify({"ok": False, "error": "소견서를 찾을 수 없음"}), 404
+    phone = phone_override or row["guardian_phone"] or ""
+    if not phone:
+        return jsonify({"ok": False, "error": "보호자 휴대폰 번호 없음"}), 400
+
+    # 공유 토큰
+    token = row["share_token"]
+    if not token:
+        token = _make_survey_token()
+        db.execute("UPDATE patient_documents SET share_token=? WHERE id=?", (token, doc_id))
+        db.commit()
+
+    opinion_url = f"{_sign_base_url()}/medical-opinion/view/{token}"
+    ok, result = _send_kakao_medical_opinion(
+        phone=phone,
+        patient_name=row["patient_name"],
+        opinion_url=opinion_url,
+        scheduled_at=scheduled_at,
+    )
+    if not ok:
+        return jsonify({"ok": False, "error": result}), 500
+
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if scheduled_at:
+        db.execute(
+            "UPDATE patient_documents SET guardian_phone=COALESCE(NULLIF(?,''), guardian_phone) WHERE id=?",
+            (phone, doc_id)
+        )
+    else:
+        db.execute(
+            "UPDATE patient_documents SET share_sent_at=?, guardian_phone=COALESCE(NULLIF(?,''), guardian_phone) WHERE id=?",
+            (now_str, phone, doc_id)
+        )
+    db.commit()
+    return jsonify({
+        "ok": True,
+        "message_id": result,
+        "opinion_url": opinion_url,
+        "sent_at": now_str,
+        "scheduled_at": scheduled_at,
+        "delay_minutes": delay_minutes,
+    })
+
+
+@app.route("/medical-opinion/view/<token>", methods=["GET"])
+def medical_opinion_view(token):
+    """보호자 공개 소견서 페이지 (로그인 불필요, 토큰 기반)."""
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM patient_documents WHERE share_token=? AND doc_type='medical_opinion'",
+        (token,)
+    ).fetchone()
+    if not row:
+        abort(404)
+    try:
+        d = json.loads(row["structured_data"]) if row["structured_data"] else {}
+    except (ValueError, TypeError):
+        d = {}
+    vet_sig = ""
+    if d.get("vet_name"):
+        u = db.execute("SELECT signature_image FROM users WHERE display_name=?", (d.get("vet_name"),)).fetchone()
+        vet_sig = (u["signature_image"] if u else "") or ""
+    tpl = db.execute("SELECT stamp_image FROM hospital_template WHERE id=1").fetchone()
+    stamp = (tpl["stamp_image"] if tpl else "") or ""
+    return render_template(
+        "medical_opinion_print.html",
+        d=d,
+        vet_signature=vet_sig,
+        hospital_stamp=stamp,
+        hospital_name=HOSPITAL_NAME,
+        hospital_phone=HOSPITAL_PHONE,
+        doc_id=row["id"],
+        public_view=True,
+    )
+
+
+@app.route("/medical-opinions", methods=["GET"])
+@login_required
+def medical_opinions_list():
+    """발급된 진료 소견서 목록."""
+    db = get_db()
+    rows = db.execute(
+        """SELECT id, patient_name, title, body, guardian_phone, share_sent_at, created_at
+           FROM patient_documents
+           WHERE doc_type='medical_opinion'
+           ORDER BY created_at DESC LIMIT 200"""
+    ).fetchall()
+    return render_template("medical_opinions_list.html",
+                           rows=rows,
+                           kakao_enabled=_kakao_medical_opinion_enabled())
 
 
 @app.route("/ce/new", methods=["GET"])
