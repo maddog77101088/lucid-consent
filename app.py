@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from functools import wraps
 from flask import (
     Flask, render_template, render_template_string, request, redirect, url_for,
-    session, jsonify, g, flash, abort
+    session, jsonify, g, flash, abort, send_file
 )
 from werkzeug.security import generate_password_hash, check_password_hash
 from default_templates import DEFAULT_HEADER, DEFAULT_DISCLAIMER, DEFAULT_FOOTER
@@ -3619,6 +3619,209 @@ def api_referral_hospitals_delete(rh_id):
     db.execute("DELETE FROM referral_hospitals WHERE id=?", (rh_id,))
     db.commit()
     return jsonify({"ok": True})
+
+
+# ===== 리퍼병원 일괄 업로드 =====
+
+REFERRAL_BULK_COLUMNS = ["hospital_name", "district", "vet_name", "vet_phone", "general_phone", "notes"]
+REFERRAL_BULK_HEADERS_KR = {
+    "hospital_name": "병원명",
+    "district":      "지역구",
+    "vet_name":      "원장명",
+    "vet_phone":     "원장 휴대폰",
+    "general_phone": "병원 대표번호",
+    "notes":         "메모",
+}
+
+
+def _norm_referral_header(h):
+    """헤더 문자열을 영문 컬럼키로 정규화."""
+    if h is None:
+        return ""
+    s = str(h).strip().lower()
+    if not s:
+        return ""
+    # 영문 컬럼키 그대로
+    for k in REFERRAL_BULK_COLUMNS:
+        if s == k:
+            return k
+    # 한글 라벨
+    for k, kr in REFERRAL_BULK_HEADERS_KR.items():
+        if s == kr or s == kr.replace(" ", ""):
+            return k
+    # 별칭 — 자주 쓰일 수 있는 변형들
+    aliases = {
+        "병원":   "hospital_name", "병원이름": "hospital_name", "리퍼병원": "hospital_name",
+        "구":     "district",       "지역":     "district",     "주소":     "district",
+        "원장":   "vet_name",       "수의사":   "vet_name",
+        "휴대폰": "vet_phone",      "휴대전화": "vet_phone",    "원장폰":   "vet_phone", "원장연락처": "vet_phone", "핸드폰": "vet_phone", "원장핸드폰": "vet_phone",
+        "전화":   "general_phone",  "대표번호": "general_phone", "병원전화": "general_phone", "대표전화": "general_phone",
+        "비고":   "notes",          "기타":     "notes",
+    }
+    return aliases.get(s, "")
+
+
+def _parse_referral_upload(file_storage):
+    """업로드된 .xlsx / .csv 파일을 읽어 (rows, errors) 반환.
+    rows: list of dict (REFERRAL_BULK_COLUMNS 키), 빈 행 제외, 병원명 필수."""
+    fname = (file_storage.filename or "").lower()
+    raw_rows = []
+    if fname.endswith(".xlsx") or fname.endswith(".xlsm"):
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            return None, "openpyxl 미설치 (서버 재배포 필요)"
+        try:
+            wb = load_workbook(file_storage, data_only=True, read_only=True)
+            ws = wb.active
+            for row in ws.iter_rows(values_only=True):
+                raw_rows.append(list(row))
+        except Exception as e:
+            return None, f"엑셀 읽기 실패: {e}"
+    elif fname.endswith(".csv") or fname.endswith(".tsv") or fname.endswith(".txt"):
+        try:
+            import csv, io
+            data = file_storage.read()
+            # 인코딩 자동 감지: utf-8-sig → utf-8 → cp949
+            for enc in ("utf-8-sig", "utf-8", "cp949"):
+                try:
+                    text = data.decode(enc)
+                    break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                return None, "CSV 인코딩을 인식할 수 없습니다 (UTF-8 또는 CP949 권장)"
+            delimiter = "\t" if fname.endswith(".tsv") else ","
+            for row in csv.reader(io.StringIO(text), delimiter=delimiter):
+                raw_rows.append(row)
+        except Exception as e:
+            return None, f"CSV 읽기 실패: {e}"
+    else:
+        return None, "지원하는 파일 형식: .xlsx, .csv, .tsv"
+
+    if not raw_rows:
+        return None, "빈 파일입니다."
+
+    # 첫 행을 헤더로 시도 → 매핑 실패 시 hospital_name 단일 컬럼으로 추정
+    header = [_norm_referral_header(c) for c in raw_rows[0]]
+    if "hospital_name" not in header:
+        return None, "헤더 행에 '병원명'(hospital_name) 컬럼이 필요합니다."
+
+    parsed = []
+    for ridx, row in enumerate(raw_rows[1:], start=2):
+        if not row or all((c is None or str(c).strip() == "") for c in row):
+            continue
+        rec = {k: "" for k in REFERRAL_BULK_COLUMNS}
+        for cidx, key in enumerate(header):
+            if not key or cidx >= len(row):
+                continue
+            val = row[cidx]
+            rec[key] = "" if val is None else str(val).strip()
+        if not rec["hospital_name"]:
+            continue
+        parsed.append(rec)
+    return parsed, None
+
+
+@app.route("/referral-hospitals/template.xlsx", methods=["GET"])
+@login_required
+def referral_hospitals_template():
+    """리퍼병원 일괄 업로드 양식 .xlsx 다운로드."""
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        return "openpyxl 미설치", 500
+    import io
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "리퍼병원"
+    headers_kr = [REFERRAL_BULK_HEADERS_KR[k] for k in REFERRAL_BULK_COLUMNS]
+    ws.append(headers_kr)
+    # 예시 행 (사용자가 보고 어떤 형식인지 알 수 있게)
+    ws.append(["○○동물병원", "강북구", "홍길동", "010-1234-5678", "02-987-6543", "정형외과 의뢰 가능"])
+    ws.append(["△△동물의료센터", "노원구", "김원장", "", "02-123-4567", ""])
+    # 컬럼 너비
+    widths = [22, 10, 10, 16, 16, 28]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    bio = io.BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return send_file(
+        bio,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name="리퍼병원_업로드양식.xlsx",
+    )
+
+
+@app.route("/api/referral-hospitals/bulk-upload", methods=["POST"])
+@login_required
+def api_referral_hospitals_bulk_upload():
+    """리퍼병원 일괄 업로드: .xlsx/.csv 받아서 INSERT/UPDATE."""
+    if "file" not in request.files:
+        return jsonify({"ok": False, "error": "파일이 없습니다."}), 400
+    f = request.files["file"]
+    if not f or not f.filename:
+        return jsonify({"ok": False, "error": "파일을 선택해주세요."}), 400
+
+    # 중복 처리 모드: skip / overwrite (기본 skip)
+    mode = (request.form.get("mode") or "skip").strip().lower()
+    if mode not in ("skip", "overwrite"):
+        mode = "skip"
+
+    rows, err = _parse_referral_upload(f)
+    if err:
+        return jsonify({"ok": False, "error": err}), 400
+    if not rows:
+        return jsonify({"ok": False, "error": "처리할 행이 없습니다 (병원명이 비어있는 행만 있음)."}), 400
+
+    db = get_db()
+    inserted = 0
+    updated = 0
+    skipped = 0
+    errors = []
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    for idx, rec in enumerate(rows, start=2):  # 2행부터(1행은 헤더)
+        try:
+            existing = db.execute(
+                "SELECT id FROM referral_hospitals WHERE hospital_name=? AND IFNULL(district,'')=IFNULL(?, '')",
+                (rec["hospital_name"], rec["district"])
+            ).fetchone()
+            if existing:
+                if mode == "overwrite":
+                    db.execute(
+                        """UPDATE referral_hospitals
+                           SET vet_name=?, vet_phone=?, general_phone=?, notes=?, updated_at=?
+                           WHERE id=?""",
+                        (rec["vet_name"], rec["vet_phone"], rec["general_phone"],
+                         rec["notes"], now, existing["id"])
+                    )
+                    updated += 1
+                else:
+                    skipped += 1
+            else:
+                db.execute(
+                    """INSERT INTO referral_hospitals
+                       (hospital_name, district, vet_name, vet_phone, general_phone, notes)
+                       VALUES (?,?,?,?,?,?)""",
+                    (rec["hospital_name"], rec["district"], rec["vet_name"],
+                     rec["vet_phone"], rec["general_phone"], rec["notes"])
+                )
+                inserted += 1
+        except Exception as e:
+            errors.append(f"{idx}행 ({rec.get('hospital_name','?')}): {e}")
+
+    db.commit()
+    return jsonify({
+        "ok": True,
+        "inserted": inserted,
+        "updated": updated,
+        "skipped": skipped,
+        "errors": errors[:20],  # 너무 많으면 잘라냄
+        "total": len(rows),
+    })
 
 
 @app.route("/notices/<int:doc_id>", methods=["GET"])

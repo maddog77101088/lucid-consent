@@ -22,6 +22,48 @@
   </form>
   <button type="button" id="btn-new" style="background:#059669; color:#fff; border:0; padding:10px 18px;
                                  border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">+ 새 리퍼병원 등록</button>
+  <button type="button" id="btn-bulk" style="background:#7c3aed; color:#fff; border:0; padding:10px 18px;
+                                 border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">📤 일괄 업로드</button>
+</div>
+
+<!-- 일괄 업로드 모달 -->
+<div id="bulk-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:12px; padding:24px 28px; max-width:600px; width:92%; box-shadow:0 10px 40px rgba(0,0,0,.3);">
+    <h3 style="margin:0 0 14px; font-size:18px;">📤 리퍼병원 일괄 업로드</h3>
+    <p class="muted" style="font-size:13px; margin:0 0 14px; line-height:1.6;">
+      Excel(.xlsx) 또는 CSV(.csv) 파일을 업로드하여 여러 리퍼병원을 한 번에 등록할 수 있습니다.<br>
+      첫 행은 <strong>헤더(병원명, 지역구, 원장명, 원장 휴대폰, 병원 대표번호, 메모)</strong>여야 합니다.
+    </p>
+
+    <div style="background:#f3f4f6; padding:10px 14px; border-radius:6px; margin-bottom:14px;">
+      <a href="{{ url_for('referral_hospitals_template') }}"
+         style="color:#2563eb; text-decoration:none; font-size:13px; font-weight:600;">
+        📥 양식 다운로드 (.xlsx)
+      </a>
+      <span class="muted" style="font-size:12px; margin-left:8px;">예시 행이 포함된 양식</span>
+    </div>
+
+    <label style="display:block; font-size:13px; color:#374151; margin-bottom:6px; font-weight:600;">파일 선택</label>
+    <input type="file" id="bulk-file" accept=".xlsx,.xlsm,.csv,.tsv,.txt"
+           style="width:100%; padding:8px; font-size:13px; border:1.5px dashed #d1d5db; border-radius:6px; box-sizing:border-box; margin-bottom:14px;">
+
+    <label style="display:block; font-size:13px; color:#374151; margin-bottom:6px; font-weight:600;">중복(병원명+지역구) 처리</label>
+    <div style="display:flex; gap:14px; margin-bottom:18px; font-size:13.5px;">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="radio" name="bulk-mode" value="skip" checked> 건너뛰기 (기본 — 기존 데이터 유지)
+      </label>
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="radio" name="bulk-mode" value="overwrite"> 덮어쓰기 (원장명·연락처·메모 갱신)
+      </label>
+    </div>
+
+    <div id="bulk-result" style="display:none; padding:12px 14px; border-radius:6px; margin-bottom:14px; font-size:13px; line-height:1.7;"></div>
+
+    <div style="display:flex; justify-content:flex-end; gap:8px;">
+      <button type="button" id="btn-bulk-cancel" style="background:#fff; color:#6b7280; border:1px solid #d1d5db; padding:8px 16px; border-radius:6px; cursor:pointer;">취소</button>
+      <button type="button" id="btn-bulk-upload" style="background:#7c3aed; color:#fff; border:0; padding:8px 18px; border-radius:6px; font-weight:600; cursor:pointer;">📤 업로드 실행</button>
+    </div>
+  </div>
 </div>
 
 {% if not rows %}
@@ -189,6 +231,71 @@
       if (!r.ok || !j.ok) { alert('삭제 실패: ' + (j.error || '')); return; }
       location.reload();
     });
+  });
+})();
+
+// ===== 일괄 업로드 =====
+(function(){
+  const modal = document.getElementById('bulk-modal');
+  const fileInput = document.getElementById('bulk-file');
+  const resultBox = document.getElementById('bulk-result');
+  const btnUpload = document.getElementById('btn-bulk-upload');
+
+  function openBulk() {
+    fileInput.value = '';
+    resultBox.style.display = 'none';
+    resultBox.innerHTML = '';
+    btnUpload.disabled = false;
+    btnUpload.textContent = '📤 업로드 실행';
+    modal.style.display = 'flex';
+  }
+  function closeBulk() { modal.style.display = 'none'; }
+
+  document.getElementById('btn-bulk').addEventListener('click', openBulk);
+  document.getElementById('btn-bulk-cancel').addEventListener('click', closeBulk);
+  modal.addEventListener('click', (e) => { if (e.target === modal) closeBulk(); });
+
+  btnUpload.addEventListener('click', async () => {
+    const file = fileInput.files[0];
+    if (!file) { alert('파일을 선택해주세요.'); return; }
+    const mode = document.querySelector('input[name="bulk-mode"]:checked').value;
+
+    btnUpload.disabled = true;
+    btnUpload.textContent = '⏳ 업로드 중...';
+    resultBox.style.display = 'none';
+
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('mode', mode);
+      const r = await fetch('/api/referral-hospitals/bulk-upload', { method:'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok || !j.ok) throw new Error(j.error || '업로드 실패');
+
+      let html = `<div style="color:#047857; font-weight:600; margin-bottom:6px;">✅ 업로드 완료 (총 ${j.total}건 처리)</div>`;
+      html += `<div>➕ 신규 추가: <strong>${j.inserted}</strong>건</div>`;
+      html += `<div>♻️ 업데이트: <strong>${j.updated}</strong>건</div>`;
+      html += `<div>⏭ 건너뜀(중복): <strong>${j.skipped}</strong>건</div>`;
+      if (j.errors && j.errors.length) {
+        html += `<div style="margin-top:8px; color:#b91c1c;">⚠️ 오류 ${j.errors.length}건:</div>`;
+        html += `<ul style="margin:4px 0 0 18px; color:#991b1b; font-size:12px;">`;
+        for (const e of j.errors) html += `<li>${e}</li>`;
+        html += `</ul>`;
+      }
+      html += `<div style="margin-top:10px; font-size:12px; color:#6b7280;">잠시 후 페이지가 새로고침됩니다...</div>`;
+      resultBox.style.background = '#ecfdf5';
+      resultBox.style.color = '#065f46';
+      resultBox.innerHTML = html;
+      resultBox.style.display = 'block';
+      setTimeout(() => location.reload(), 1800);
+    } catch (e) {
+      resultBox.style.background = '#fef2f2';
+      resultBox.style.color = '#991b1b';
+      resultBox.innerHTML = `<div style="font-weight:600;">❌ ${e.message}</div>`;
+      resultBox.style.display = 'block';
+      btnUpload.disabled = false;
+      btnUpload.textContent = '📤 업로드 실행';
+    }
   });
 })();
 </script>
