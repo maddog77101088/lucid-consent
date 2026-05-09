@@ -3454,7 +3454,6 @@ def api_ce_save():
         referral_hospital_id = int(referral_hospital_id) if referral_hospital_id else None
     except (ValueError, TypeError):
         referral_hospital_id = None
-    patient_state = (data.get("patient_state") or "").strip()
 
     title = "리퍼병원 보고서" if mode == "vet" else "진료안내문"
     saved_doc_id = _save_patient_document(
@@ -5972,6 +5971,20 @@ def api_ce_generate():
         referral_hospital_id = int(referral_hospital_id) if referral_hospital_id else None
     except (ValueError, TypeError):
         referral_hospital_id = None
+    patient_state = (data.get("patient_state") or "").strip()
+    # IMD 스타일 구조화 입력 (모두 선택 — 미입력 시 차트 본문만 기반)
+    diagnosis_in = (data.get("diagnosis") or "").strip()
+    medications_in = (data.get("medications") or "").strip()
+    med_duration_in = (data.get("med_duration") or "").strip()
+    diet_in = (data.get("diet") or "").strip()
+    monitoring_items_in = data.get("monitoring_items") or []
+    if isinstance(monitoring_items_in, str):
+        monitoring_items_in = [monitoring_items_in]
+    followup1_date_in = (data.get("followup1_date") or "").strip()
+    followup1_purpose_in = (data.get("followup1_purpose") or "").strip()
+    followup2_date_in = (data.get("followup2_date") or "").strip()
+    followup2_purpose_in = (data.get("followup2_purpose") or "").strip()
+    special_notes_in = (data.get("special_notes") or "").strip()
     if not chart:
         return jsonify({"error": "차트 내용을 입력하세요."}), 400
 
@@ -5992,7 +6005,35 @@ def api_ce_generate():
         meta_lines.append(f"의뢰 원장님 성명: {ref_vet_name}")
     meta_block = ("\n".join(meta_lines) + "\n\n") if meta_lines else ""
 
-    user_msg = f"{meta_block}다음 차트 내용을 바탕으로 안내문을 작성해주세요.\n\n---\n{chart}\n---"
+    # 입력된 구조화 정보를 user_msg에 추가 (있는 것만 — 미입력은 무시)
+    extra_lines = []
+    if diagnosis_in:
+        extra_lines.append(f"- 진단명: {diagnosis_in}")
+    if medications_in:
+        med_str = f"- 처방 약물: {medications_in}"
+        if med_duration_in:
+            med_str += f" (복용 기간: {med_duration_in})"
+        extra_lines.append(med_str)
+    if diet_in:
+        extra_lines.append(f"- 처방식 / 식이 관리: {diet_in}")
+    if monitoring_items_in:
+        extra_lines.append(f"- 보호자가 집에서 모니터링할 항목: {', '.join(monitoring_items_in)}")
+    if followup1_date_in or followup1_purpose_in:
+        f1 = "- 1차 재진"
+        if followup1_date_in: f1 += f": {followup1_date_in}"
+        if followup1_purpose_in: f1 += f" ({followup1_purpose_in})"
+        extra_lines.append(f1)
+    if followup2_date_in or followup2_purpose_in:
+        f2 = "- 2차 재진"
+        if followup2_date_in: f2 += f": {followup2_date_in}"
+        if followup2_purpose_in: f2 += f" ({followup2_purpose_in})"
+        extra_lines.append(f2)
+    if special_notes_in:
+        extra_lines.append(f"- 이번 환자 특이사항: {special_notes_in}")
+    extra_block = ""
+    if extra_lines:
+        extra_block = "\n\n[이번 환자의 처방·관리 조건 — 이 항목들을 안내문에 자연스럽게 반영하세요]\n" + "\n".join(extra_lines)
+    user_msg = f"{meta_block}다음 차트 내용을 바탕으로 안내문을 작성해주세요.\n\n---\n{chart}\n---{extra_block}"
     if mode == "guardian" and patient_name:
         user_msg += f"\n\n(첫 줄은 '{patient_name} 보호자님.'으로 인사하고, 한 줄 띄운 뒤 본문을 '-' 글머리 줄글로 작성하세요.)"
     if mode == "vet":
