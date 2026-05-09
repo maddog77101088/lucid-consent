@@ -215,11 +215,6 @@ def init_db():
         cur.execute("ALTER TABLE consent_records ADD COLUMN share_sent_at TEXT")
     if "share_sent_by" not in cr_cols:
         cur.execute("ALTER TABLE consent_records ADD COLUMN share_sent_by INTEGER")
-    # 인쇄 트래킹: "동의서 미리보기 → 인쇄/PDF 저장" 클릭 시 마킹
-    if "printed_at" not in cr_cols:
-        cur.execute("ALTER TABLE consent_records ADD COLUMN printed_at TEXT")
-    if "printed_by" not in cr_cols:
-        cur.execute("ALTER TABLE consent_records ADD COLUMN printed_by INTEGER")
     # surgeries 마이그레이션: post_op_notes (수술후 기본 안내)
     cur.execute("PRAGMA table_info(surgeries)")
     sg_cols = [c[1] for c in cur.fetchall()]
@@ -1226,9 +1221,6 @@ def _render_consent_print_from_data(data, db, signature_b64=None, signer_name=No
 @app.route("/consent/preview", methods=["POST"])
 @login_required
 def consent_preview():
-    """수술/입원 동의서 미리보기 — DB 저장 없음(미리보기는 임시 검토용).
-    실제 DB 저장은 '인쇄/PDF 저장' 클릭 시 /api/consents/save-from-print 가
-    INSERT 하면서 printed_at 도 함께 기록한다."""
     db = get_db()
     data = {k: request.form.get(k, "") for k in CONSENT_FIELDS}
     data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
@@ -1261,9 +1253,7 @@ def _sign_base_url():
 @app.route("/consent/create-sign-link", methods=["POST"])
 @login_required
 def consent_create_sign_link():
-    """수술동의서 폼 데이터로 서명 토큰 생성 → QR/URL 반환 (AJAX).
-    consent_preview 단계에서 이미 저장된 레코드(preview_token)가 있으면
-    UPDATE 로 재사용하여 중복 행 생성을 방지."""
+    """수술동의서 폼 데이터로 서명 토큰 생성 → QR/URL 반환 (AJAX)."""
     db = get_db()
     # 기존 preview와 동일하게 폼 데이터 수집
     data = {k: request.form.get(k, "") for k in CONSENT_FIELDS}
@@ -1271,42 +1261,19 @@ def consent_create_sign_link():
     data["surgery_date"] = request.form.get("surgery_date") or datetime.now().strftime("%Y-%m-%d")
     data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
+    token = _make_sign_token()
     expires_at = (datetime.now() + timedelta(hours=SIGN_LINK_TTL_HOURS)).strftime("%Y-%m-%d %H:%M:%S")
 
-    # preview 단계 토큰이 있으면 그 행을 갱신
-    preview_token = (request.form.get("preview_token") or "").strip()
-    token = None
-    if preview_token:
-        existing = db.execute(
-            "SELECT id, signed_at, deleted_at FROM consent_records "
-            "WHERE token=? AND doc_type='surgery'",
-            (preview_token,)
-        ).fetchone()
-        if existing and not existing["signed_at"] and not existing["deleted_at"]:
-            db.execute(
-                """UPDATE consent_records
-                   SET form_data=?, patient_name=?, guardian_name=?, vet_name=?,
-                       expires_at=?
-                   WHERE id=?""",
-                (json.dumps(data, ensure_ascii=False),
-                 data.get("patient_name", ""), data.get("guardian_name", ""),
-                 data.get("vet_name", ""), expires_at, existing["id"])
-            )
-            db.commit()
-            token = preview_token
-
-    if token is None:
-        token = _make_sign_token()
-        db.execute(
-            """INSERT INTO consent_records
-               (token, doc_type, form_data, patient_name, guardian_name, vet_name,
-                expires_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (token, "surgery", json.dumps(data, ensure_ascii=False),
-             data.get("patient_name", ""), data.get("guardian_name", ""),
-             data.get("vet_name", ""), expires_at, session.get("user_id", 0))
-        )
-        db.commit()
+    db.execute(
+        """INSERT INTO consent_records
+           (token, doc_type, form_data, patient_name, guardian_name, vet_name,
+            expires_at, created_by)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (token, "surgery", json.dumps(data, ensure_ascii=False),
+         data.get("patient_name", ""), data.get("guardian_name", ""),
+         data.get("vet_name", ""), expires_at, session.get("user_id", 0))
+    )
+    db.commit()
 
     sign_url = f"{_sign_base_url()}/sign/{token}"
     return jsonify({
@@ -4900,73 +4867,6 @@ def api_consent_qr(cid):
         "qr_b64": _qr_base64(sign_url),
         "expires_at": row["expires_at"],
     })
-
-
-@app.route("/api/consents/save-from-print", methods=["POST"])
-@login_required
-def api_consent_save_from_print():
-    """consent_print.html '인쇄/PDF 저장' 버튼 클릭 시 호출되는 AJAX 엔드포인트.
-    수술/입원 동의서 폼 데이터를 받아 consent_records 에 INSERT 하면서
-    동시에 printed_at, printed_by 를 기록한다.
-
-    expires_at 을 과거로 두어 '/consents/pending' 서명 대기 리스트에 노이즈로
-    뜨지 않게 한다. 이후 보호자 '서명받기 QR' 흐름이 이어지면 create-sign-link
-    가 preview_token 으로 같은 행을 UPDATE 하여 expires_at 을 24시간 미래로
-    갱신하므로 중복 행이 생기지 않는다.
-
-    응답으로 token 을 반환하므로, 같은 화면에서 (1) 다시 인쇄할 때는 mark-printed
-    로 idempotent 갱신, (2) 서명받기 클릭 시 hidden preview_token 채움 가능."""
-    db = get_db()
-    data = {k: request.form.get(k, "") for k in CONSENT_FIELDS}
-    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
-    data["surgery_date"] = request.form.get("surgery_date") or datetime.now().strftime("%Y-%m-%d")
-    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    token = _make_sign_token()
-    expires_at_past = "2000-01-01 00:00:00"
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    user_id = session.get("user_id", 0)
-    try:
-        db.execute(
-            """INSERT INTO consent_records
-               (token, doc_type, form_data, patient_name, guardian_name, vet_name,
-                expires_at, created_by, printed_at, printed_by)
-               VALUES (?,?,?,?,?,?,?,?,?,?)""",
-            (token, "surgery", json.dumps(data, ensure_ascii=False),
-             data.get("patient_name", ""), data.get("guardian_name", ""),
-             data.get("vet_name", ""), expires_at_past, user_id,
-             now_str, user_id)
-        )
-        db.commit()
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)}), 500
-    return jsonify({"ok": True, "token": token, "printed_at": now_str})
-
-
-@app.route("/api/consents/<token>/mark-printed", methods=["POST"])
-@login_required
-def api_consent_mark_printed(token):
-    """consent_print.html '인쇄/PDF 저장' 버튼 클릭 시 호출.
-    해당 토큰의 consent_records 행에 printed_at, printed_by 를 기록한다.
-    이미 마킹돼 있어도 무해(idempotent: 최초 1회만 갱신)."""
-    db = get_db()
-    row = db.execute(
-        "SELECT id, printed_at, deleted_at FROM consent_records WHERE token=?",
-        (token,)
-    ).fetchone()
-    if not row:
-        return jsonify({"ok": False, "error": "동의서를 찾을 수 없습니다."}), 404
-    if row["deleted_at"]:
-        return jsonify({"ok": False, "error": "삭제된 동의서입니다."}), 410
-    if row["printed_at"]:
-        return jsonify({"ok": True, "already": True, "printed_at": row["printed_at"]})
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    db.execute(
-        "UPDATE consent_records SET printed_at=?, printed_by=? WHERE id=?",
-        (now_str, session.get("user_id", 0), row["id"])
-    )
-    db.commit()
-    return jsonify({"ok": True, "printed_at": now_str})
 
 
 @app.route("/api/consents/<int:cid>/cancel", methods=["POST"])
