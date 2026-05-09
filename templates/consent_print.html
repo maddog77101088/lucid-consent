@@ -18,20 +18,65 @@
     🔍 확장 모드 <span class="muted" style="font-size:11px;">(여백이 남을 때 켜면 행간·폰트·여백 키워서 읽기 편하게)</span>
   </label>
   <span class="muted">인쇄 대화상자에서 "PDF로 저장"을 선택하면 PDF로 저장됩니다.</span>
+  <span id="lucid-print-status" class="muted" style="margin-left:8px;"></span>
 </div>
 
+{% if show_sign_button %}
+{# 인쇄/PDF 저장 시 DB 저장(INSERT)용 hidden form — sign-data-form 과 동일한 필드 집합. #}
+<form id="print-save-form" style="display:none;" action="{{ url_for('api_consent_save_from_print') }}" method="post">
+  {% for k in sign_form_fields %}
+    {% if k == 'imaging_modalities' %}
+      {% if d.get(k) %}
+        {% for m in d[k].split(',') %}
+          <input type="hidden" name="imaging_modalities" value="{{ m.strip() }}">
+        {% endfor %}
+      {% endif %}
+    {% else %}
+      <input type="hidden" name="{{ k }}" value="{{ d.get(k, '') }}">
+    {% endif %}
+  {% endfor %}
+</form>
+{% endif %}
+
 <script>
-// 인쇄 / PDF 저장 클릭 시: 토큰이 있으면 mark-printed 로 DB 기록 후 window.print()
-// (네트워크 실패해도 인쇄는 막지 않음)
-function lucidPrintAndSave() {
-  var tk = {{ (d.token or '')|tojson }};
-  if (!tk) { window.print(); return; }
+// 인쇄 / PDF 저장 클릭 시: DB INSERT(첫 클릭) 또는 mark-printed(재클릭) → window.print()
+// 네트워크 실패해도 인쇄 자체는 막지 않음.
+window.__lucidPrintToken = '';
+async function lucidPrintAndSave() {
+  var statusEl = document.getElementById('lucid-print-status');
   try {
-    fetch('/api/consents/' + encodeURIComponent(tk) + '/mark-printed',
-          { method: 'POST', credentials: 'same-origin', keepalive: true })
-      .catch(function(){ /* 무시 */ })
-      .finally(function(){ window.print(); });
-  } catch (e) { window.print(); }
+    if (!window.__lucidPrintToken) {
+      var form = document.getElementById('print-save-form');
+      if (form) {
+        if (statusEl) statusEl.textContent = '저장 중…';
+        var fd = new FormData(form);
+        var r = await fetch(form.action, {
+          method: 'POST', body: fd, credentials: 'same-origin'
+        });
+        var j = await r.json().catch(function(){ return {}; });
+        if (j && j.ok && j.token) {
+          window.__lucidPrintToken = j.token;
+          // 이어서 '서명받기' 버튼이 눌리는 경우, create-sign-link 가 같은 행을
+          // UPDATE 하도록 hidden preview_token 도 함께 채워둔다.
+          var ptIn = document.getElementById('sign-data-preview-token');
+          if (ptIn) ptIn.value = j.token;
+          if (statusEl) statusEl.textContent = '✓ DB 저장 완료';
+        } else {
+          if (statusEl) statusEl.textContent = '⚠ DB 저장 실패: ' + ((j && j.error) || '응답 없음');
+        }
+      }
+    } else {
+      // 재인쇄: 이미 저장된 행에 printed_at 만 idempotent 갱신
+      try {
+        await fetch('/api/consents/' + encodeURIComponent(window.__lucidPrintToken) + '/mark-printed',
+                    { method: 'POST', credentials: 'same-origin' });
+      } catch (e) { /* 무시 */ }
+      if (statusEl) statusEl.textContent = '✓ 재인쇄 (DB 저장됨)';
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '⚠ 저장 오류: ' + e.message;
+  }
+  window.print();
 }
 </script>
 

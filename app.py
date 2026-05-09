@@ -1226,38 +1226,14 @@ def _render_consent_print_from_data(data, db, signature_b64=None, signer_name=No
 @app.route("/consent/preview", methods=["POST"])
 @login_required
 def consent_preview():
-    """수술/입원 동의서 미리보기 — 폼 데이터를 즉시 consent_records에 저장하여
-    인쇄/PDF 저장 시 DB에 흔적이 남도록 함. 발급된 토큰은 템플릿에 전달되어
-    '인쇄' 버튼 클릭 시 mark-printed AJAX, '서명받기' 클릭 시 동일 레코드 재사용에 활용."""
+    """수술/입원 동의서 미리보기 — DB 저장 없음(미리보기는 임시 검토용).
+    실제 DB 저장은 '인쇄/PDF 저장' 클릭 시 /api/consents/save-from-print 가
+    INSERT 하면서 printed_at 도 함께 기록한다."""
     db = get_db()
     data = {k: request.form.get(k, "") for k in CONSENT_FIELDS}
     data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
     data["surgery_date"] = request.form.get("surgery_date") or datetime.now().strftime("%Y-%m-%d")
     data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    # form_data JSON 은 token 없이 저장 (token 은 DB 컬럼에서 관리)
-    form_data_json = json.dumps(data, ensure_ascii=False)
-    token = _make_sign_token()
-    # 미리보기 단계에서는 expires_at 을 과거로 두어 "/consents/pending" 서명 대기
-    # 리스트에 노이즈로 뜨지 않게 함. create-sign-link UPDATE 시 24시간 미래로 갱신.
-    expires_at_past = "2000-01-01 00:00:00"
-    try:
-        db.execute(
-            """INSERT INTO consent_records
-               (token, doc_type, form_data, patient_name, guardian_name, vet_name,
-                expires_at, created_by)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (token, "surgery", form_data_json,
-             data.get("patient_name", ""), data.get("guardian_name", ""),
-             data.get("vet_name", ""), expires_at_past, session.get("user_id", 0))
-        )
-        db.commit()
-        # 템플릿에서 사용할 수 있도록 토큰을 data 에 주입 (form_data JSON 에는 미포함)
-        data["token"] = token
-    except Exception:
-        # DB 저장 실패해도 미리보기 자체는 막지 않음
-        pass
-
     return _render_consent_print_from_data(data, db, show_sign_button=True)
 
 
@@ -4924,6 +4900,47 @@ def api_consent_qr(cid):
         "qr_b64": _qr_base64(sign_url),
         "expires_at": row["expires_at"],
     })
+
+
+@app.route("/api/consents/save-from-print", methods=["POST"])
+@login_required
+def api_consent_save_from_print():
+    """consent_print.html '인쇄/PDF 저장' 버튼 클릭 시 호출되는 AJAX 엔드포인트.
+    수술/입원 동의서 폼 데이터를 받아 consent_records 에 INSERT 하면서
+    동시에 printed_at, printed_by 를 기록한다.
+
+    expires_at 을 과거로 두어 '/consents/pending' 서명 대기 리스트에 노이즈로
+    뜨지 않게 한다. 이후 보호자 '서명받기 QR' 흐름이 이어지면 create-sign-link
+    가 preview_token 으로 같은 행을 UPDATE 하여 expires_at 을 24시간 미래로
+    갱신하므로 중복 행이 생기지 않는다.
+
+    응답으로 token 을 반환하므로, 같은 화면에서 (1) 다시 인쇄할 때는 mark-printed
+    로 idempotent 갱신, (2) 서명받기 클릭 시 hidden preview_token 채움 가능."""
+    db = get_db()
+    data = {k: request.form.get(k, "") for k in CONSENT_FIELDS}
+    data["vet_name"] = request.form.get("vet_name") or session.get("display_name", "")
+    data["surgery_date"] = request.form.get("surgery_date") or datetime.now().strftime("%Y-%m-%d")
+    data["created_at"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    token = _make_sign_token()
+    expires_at_past = "2000-01-01 00:00:00"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user_id = session.get("user_id", 0)
+    try:
+        db.execute(
+            """INSERT INTO consent_records
+               (token, doc_type, form_data, patient_name, guardian_name, vet_name,
+                expires_at, created_by, printed_at, printed_by)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (token, "surgery", json.dumps(data, ensure_ascii=False),
+             data.get("patient_name", ""), data.get("guardian_name", ""),
+             data.get("vet_name", ""), expires_at_past, user_id,
+             now_str, user_id)
+        )
+        db.commit()
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+    return jsonify({"ok": True, "token": token, "printed_at": now_str})
 
 
 @app.route("/api/consents/<token>/mark-printed", methods=["POST"])
