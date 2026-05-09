@@ -336,6 +336,21 @@ def init_db():
     """)
     cur.execute("CREATE INDEX IF NOT EXISTS idx_rh_name ON referral_hospitals(hospital_name)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_rh_district ON referral_hospitals(district)")
+    # CE 수의사별 문체 커스터마이징 (mode별 1행 — guardian / vet)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS vet_ce_styles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            mode TEXT NOT NULL,
+            style_prompt TEXT,
+            sample_1 TEXT,
+            sample_2 TEXT,
+            sample_3 TEXT,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            UNIQUE (user_id, mode)
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_vcs_user ON vet_ce_styles(user_id)")
     con.commit()
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
@@ -562,6 +577,84 @@ def set_license():
                            current_license=(me["license_number"] if me else "") or "",
                            current_signature=(me["signature_image"] if me else "") or "",
                            forced=not session.get("license_number"))
+
+
+@app.route("/me/ce_style", methods=["GET", "POST"])
+@login_required
+def me_ce_style():
+    """수의사 본인의 CE 문체 스타일(지침 + 샘플) 등록·수정. mode 2종(guardian/vet)."""
+    user_id = session["user_id"]
+    db = get_db()
+    if request.method == "POST":
+        for mode in ("guardian", "vet"):
+            sp = (request.form.get(f"style_prompt_{mode}") or "").strip()
+            s1 = (request.form.get(f"sample_1_{mode}") or "").strip()
+            s2 = (request.form.get(f"sample_2_{mode}") or "").strip()
+            s3 = (request.form.get(f"sample_3_{mode}") or "").strip()
+            existing = db.execute(
+                "SELECT id FROM vet_ce_styles WHERE user_id=? AND mode=?",
+                (user_id, mode),
+            ).fetchone()
+            if existing:
+                db.execute(
+                    "UPDATE vet_ce_styles SET style_prompt=?, sample_1=?, sample_2=?, sample_3=?, updated_at=datetime('now','localtime') WHERE id=?",
+                    (sp, s1, s2, s3, existing["id"]),
+                )
+            elif sp or s1 or s2 or s3:
+                db.execute(
+                    "INSERT INTO vet_ce_styles (user_id, mode, style_prompt, sample_1, sample_2, sample_3) VALUES (?,?,?,?,?,?)",
+                    (user_id, mode, sp, s1, s2, s3),
+                )
+        db.commit()
+        flash("CE 문체 설정이 저장되었습니다.", "ok")
+        return redirect(url_for("me_ce_style"))
+    rows = {r["mode"]: r for r in db.execute(
+        "SELECT mode, style_prompt, sample_1, sample_2, sample_3 FROM vet_ce_styles WHERE user_id=?",
+        (user_id,),
+    ).fetchall()}
+    return render_template("me_ce_style.html",
+                           g_row=rows.get("guardian"),
+                           v_row=rows.get("vet"))
+
+
+@app.route("/api/ce/style/test", methods=["POST"])
+@login_required
+def api_ce_style_test():
+    """입력 중인 스타일/샘플로 즉시 생성해보는 미리보기 (저장 없음)."""
+    if requests is None:
+        return jsonify({"error": "'requests' 미설치."}), 500
+    data = request.get_json() or {}
+    mode = (data.get("mode") or "guardian").strip()
+    chart = (data.get("chart") or "").strip()
+    style_prompt = (data.get("style_prompt") or "").strip()
+    samples = [s.strip() for s in (data.get("samples") or []) if isinstance(s, str) and s.strip()]
+    if not chart:
+        return jsonify({"error": "테스트용 차트 내용을 입력하세요."}), 400
+    if not _ai_has_any_key():
+        return jsonify({"error": "AI API 키 미설정."}), 400
+    base_system = CE_VET_PROMPT if mode == "vet" else CE_GUARDIAN_PROMPT
+    style = {"style_prompt": style_prompt, "samples": samples} if (style_prompt or samples) else None
+    system = base_system + _build_ce_style_addon(style)
+    user_msg = f"다음 차트 내용을 바탕으로 안내문을 작성해주세요.\n\n---\n{chart}\n---"
+    try:
+        ok, body, err = _ai_messages_call({
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 2500,
+            "system": system,
+            "messages": [{"role": "user", "content": user_msg}],
+        }, timeout=90)
+        if not ok:
+            return jsonify({"error": err}), 502
+        text_parts = [b.get("text", "") for b in body.get("content", []) if b.get("type") == "text"]
+        text = "\n".join(text_parts).strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith(("text", "markdown", "md")):
+                text = text.split("\n", 1)[1] if "\n" in text else ""
+            text = text.strip().rstrip("`").strip()
+        return jsonify({"ok": True, "text": text})
+    except Exception as e:
+        return jsonify({"error": f"AI 요청 실패: {e}"}), 500
 
 
 @app.route("/me/password", methods=["GET","POST"])
@@ -5367,6 +5460,46 @@ def imaging_consent_preview():
 
 # ===================== CE 보호자안내 생성 =====================
 
+def _get_vet_ce_style(user_id, mode):
+    """수의사 본인의 CE 문체 스타일 조회. mode: 'guardian' or 'vet'. 미등록/빈값이면 None."""
+    if not user_id:
+        return None
+    try:
+        db = get_db()
+        row = db.execute(
+            "SELECT style_prompt, sample_1, sample_2, sample_3 FROM vet_ce_styles WHERE user_id=? AND mode=?",
+            (user_id, mode)
+        ).fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    sp = (row["style_prompt"] or "").strip() if row["style_prompt"] else ""
+    samples = []
+    for col in ("sample_1", "sample_2", "sample_3"):
+        v = row[col] if col in row.keys() else None
+        if v and v.strip():
+            samples.append(v.strip())
+    if not sp and not samples:
+        return None
+    return {"style_prompt": sp, "samples": samples}
+
+
+def _build_ce_style_addon(style):
+    """vet_ce_styles 결과를 system prompt 뒤에 붙일 문자열. 미등록 시 빈 문자열."""
+    if not style:
+        return ""
+    parts = ["", "=== 이 수의사의 개인 스타일 (위 공통 지침과 충돌하면 이쪽 우선) ==="]
+    if style.get("style_prompt"):
+        parts.append("[스타일 지침]")
+        parts.append(style["style_prompt"])
+    for i, s in enumerate(style.get("samples", []), 1):
+        parts.append(f"[과거 작성 샘플 {i}]")
+        parts.append(s)
+    parts.append("=== 위 스타일·샘플의 어조·문장 길이·서두/마무리 패턴을 반드시 반영하세요. 샘플의 환자명·보호자명·수치는 그대로 옮기지 말고 패턴만 참고하세요. ===")
+    return "\n" + "\n".join(parts)
+
+
 CE_GUARDIAN_PROMPT = """당신은 한국 동물병원 원장의 진료 경과를 보호자에게 설명하는 안내문을 작성하는 전문가입니다.
 아래 제공되는 차트 내용(수의사가 작성한 진료 기록/수치/처치)을 근거로,
 보호자가 이해하기 쉬운 "-" 글머리 기호 줄글 안내문을 작성하세요.
@@ -5827,6 +5960,10 @@ def api_ce_generate():
         return jsonify({"error": "AI API 키 미설정 (ANTHROPIC_API_KEY 또는 OPENAI_API_KEY)."}), 400
 
     system = CE_VET_PROMPT if mode == "vet" else CE_GUARDIAN_PROMPT
+    # 수의사 개인 스타일 주입 (등록되어 있으면)
+    vet_style = _get_vet_ce_style(session.get("user_id"), mode)
+    if vet_style:
+        system = system + _build_ce_style_addon(vet_style)
     meta_lines = []
     if guardian_name: meta_lines.append(f"보호자 성명: {guardian_name}")
     if patient_name:  meta_lines.append(f"환자 이름: {patient_name}")

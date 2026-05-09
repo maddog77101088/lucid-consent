@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width:920px; margin:24px auto;">
+
+  <div class="card" style="padding:24px 28px;">
+    <h1 style="margin:0 0 6px;">✍️ 내 CE 문체 등록</h1>
+    <p class="muted" style="margin:0 0 18px; line-height:1.55;">
+      CE(보호자안내문 / 의뢰병원용 보고서) 작성 시 본인 어조와 형식이 반영되도록 <b>스타일 지침</b>과 <b>과거에 직접 작성한 샘플</b>을 등록할 수 있습니다.<br>
+      등록한 내용은 본인이 로그인한 상태에서 CE를 생성할 때만 사용됩니다. 미등록 시 기본 프롬프트로 동작합니다.
+    </p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+        <div style="padding:8px 12px; border-radius:6px; margin-bottom:14px; font-size:13.5px;
+                    background:{% if cat == 'error' %}#fef2f2{% else %}#d1fae5{% endif %};
+                    color:{% if cat == 'error' %}#991b1b{% else %}#047857{% endif %};">
+          {{ msg }}
+        </div>
+      {% endfor %}
+    {% endwith %}
+
+    <!-- 탭 -->
+    <div style="display:flex; gap:0; margin-bottom:18px; border-bottom:2px solid #e5e7eb;">
+      <button type="button" class="ce-tab-btn active" data-tab="guardian"
+              style="padding:10px 20px; background:none; border:none; border-bottom:2px solid #2563eb; margin-bottom:-2px; font-size:14px; font-weight:600; color:#2563eb; cursor:pointer;">
+        👨‍👩‍👧 보호자용
+      </button>
+      <button type="button" class="ce-tab-btn" data-tab="vet"
+              style="padding:10px 20px; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; font-size:14px; font-weight:500; color:#6b7280; cursor:pointer;">
+        🏥 의뢰병원용
+      </button>
+    </div>
+
+    <form method="post" action="{{ url_for('me_ce_style') }}" id="ce-style-form">
+
+      <!-- 보호자용 탭 -->
+      <div class="ce-tab-pane" data-pane="guardian">
+        <div style="background:#f9fafb; padding:12px 14px; border-radius:6px; font-size:13px; color:#4b5563; margin-bottom:14px; line-height:1.5;">
+          💡 보호자에게 보낼 진료안내문(CE)의 본인 문체. 한글 약물명·정상 수치 병기·집 관리법 등의 패턴이 본인 스타일을 따라 생성됩니다.
+        </div>
+
+        <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+          스타일 지침 <span class="muted" style="font-weight:400;">(선택, 자유 입력)</span>
+        </label>
+        <textarea name="style_prompt_guardian" rows="4"
+                  placeholder="예: 친근한 어조로 ~요체 사용, 검사 수치마다 정상범위 괄호로 병기, 마지막은 항상 '궁금하신 점 있으시면 언제든 연락주세요' 로 마무리"
+                  style="width:100%; padding:10px 12px; font-size:14px; border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical; margin-bottom:18px;">{{ (g_row.style_prompt if g_row else "") or "" }}</textarea>
+
+        {% for n in [1, 2, 3] %}
+        <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+          과거 작성 샘플 #{{ n }} <span class="muted" style="font-weight:400;">(선택, 환자명·보호자명은 [환자]·[보호자] 같은 placeholder로 대체 권장)</span>
+        </label>
+        <textarea name="sample_{{ n }}_guardian" rows="6"
+                  placeholder="본인이 실제로 보호자에게 보냈던 CE 본문을 그대로 붙여넣으세요."
+                  style="width:100%; padding:10px 12px; font-size:13.5px; border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical; margin-bottom:14px;">{% if g_row %}{{ g_row['sample_' ~ n] or "" }}{% endif %}</textarea>
+        {% endfor %}
+      </div>
+
+      <!-- 의뢰병원용 탭 -->
+      <div class="ce-tab-pane" data-pane="vet" style="display:none;">
+        <div style="background:#f9fafb; padding:12px 14px; border-radius:6px; font-size:13px; color:#4b5563; margin-bottom:14px; line-height:1.5;">
+          💡 의뢰병원 원장님에게 보낼 보고서 본인 문체. 영문 약어 사용 정도·인사말 형식·마무리 패턴이 본인 스타일을 따라 생성됩니다.
+        </div>
+
+        <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+          스타일 지침 <span class="muted" style="font-weight:400;">(선택, 자유 입력)</span>
+        </label>
+        <textarea name="style_prompt_vet" rows="4"
+                  placeholder="예: 영문 약어 적극 사용(BUN·Crea·HCT 등), 짧은 단문 위주, 의뢰 감사 인사로 마무리"
+                  style="width:100%; padding:10px 12px; font-size:14px; border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical; margin-bottom:18px;">{{ (v_row.style_prompt if v_row else "") or "" }}</textarea>
+
+        {% for n in [1, 2, 3] %}
+        <label style="display:block; font-size:13px; font-weight:600; color:#374151; margin-bottom:6px;">
+          과거 작성 샘플 #{{ n }} <span class="muted" style="font-weight:400;">(선택, 환자명·원장명은 [환자]·[원장]으로 대체 권장)</span>
+        </label>
+        <textarea name="sample_{{ n }}_vet" rows="6"
+                  placeholder="본인이 실제로 의뢰병원에 보냈던 보고서 본문을 그대로 붙여넣으세요."
+                  style="width:100%; padding:10px 12px; font-size:13.5px; border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical; margin-bottom:14px;">{% if v_row %}{{ v_row['sample_' ~ n] or "" }}{% endif %}</textarea>
+        {% endfor %}
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:18px;">
+        <button type="submit"
+                style="flex:1; background:#2563eb; color:#fff; border:0; padding:12px; border-radius:6px; font-size:15px; font-weight:600; cursor:pointer;">
+          💾 저장
+        </button>
+        <button type="button" id="btn-test"
+                style="flex:1; background:#f3f4f6; color:#374151; border:1.5px solid #d1d5db; padding:12px; border-radius:6px; font-size:15px; font-weight:600; cursor:pointer;">
+          🧪 현재 입력한 스타일로 테스트 생성
+        </button>
+      </div>
+    </form>
+
+    <p style="margin-top:18px; text-align:center;">
+      <a href="{{ url_for('dashboard') }}" style="color:#6b7280; font-size:13px; text-decoration:none;">← 대시보드로</a>
+    </p>
+  </div>
+
+  <!-- 테스트 미리보기 모달 -->
+  <div id="test-modal" style="display:none; position:fixed; inset:0; background:rgba(17,24,39,0.5); z-index:1000; align-items:center; justify-content:center; padding:20px;">
+    <div style="background:#fff; border-radius:8px; max-width:760px; width:100%; max-height:90vh; overflow:auto; padding:24px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <h2 style="margin:0; font-size:18px;">🧪 스타일 테스트 결과</h2>
+        <button type="button" id="btn-test-close" style="background:none; border:0; font-size:22px; cursor:pointer; color:#6b7280;">✕</button>
+      </div>
+      <p class="muted" style="font-size:12.5px; margin:0 0 12px;">아직 저장되지 않은 입력 값으로 즉시 생성한 결과입니다. 마음에 드시면 닫기 → 💾 저장.</p>
+      <label style="display:block; font-size:13px; color:#374151; margin-bottom:6px;">테스트용 차트 내용</label>
+      <textarea id="test-chart" rows="6" placeholder="실제 차트 paste 또는 임의의 진료 메모를 붙여넣으세요."
+                style="width:100%; padding:10px 12px; font-size:13px; border:1.5px solid #d1d5db; border-radius:6px; box-sizing:border-box; font-family:inherit; resize:vertical; margin-bottom:10px;"></textarea>
+      <div style="display:flex; gap:8px; margin-bottom:14px;">
+        <button type="button" id="btn-test-run-g"
+                style="flex:1; background:#2563eb; color:#fff; border:0; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
+          👨‍👩‍👧 보호자용 생성
+        </button>
+        <button type="button" id="btn-test-run-v"
+                style="flex:1; background:#0d9488; color:#fff; border:0; padding:10px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer;">
+          🏥 의뢰병원용 생성
+        </button>
+      </div>
+      <div id="test-out" style="white-space:pre-wrap; font-size:13.5px; line-height:1.65; padding:14px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px; min-height:120px; color:#111827;">
+        결과가 여기에 표시됩니다.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  // 탭 전환
+  const tabs = document.querySelectorAll('.ce-tab-btn');
+  const panes = document.querySelectorAll('.ce-tab-pane');
+  tabs.forEach(t => t.addEventListener('click', function(){
+    const tgt = this.dataset.tab;
+    tabs.forEach(x => {
+      const active = x.dataset.tab === tgt;
+      x.style.borderBottomColor = active ? '#2563eb' : 'transparent';
+      x.style.color = active ? '#2563eb' : '#6b7280';
+      x.style.fontWeight = active ? '600' : '500';
+    });
+    panes.forEach(p => p.style.display = (p.dataset.pane === tgt ? 'block' : 'none'));
+  }));
+
+  // 테스트 모달 열기/닫기
+  const modal = document.getElementById('test-modal');
+  const out = document.getElementById('test-out');
+  document.getElementById('btn-test').addEventListener('click', () => {
+    modal.style.display = 'flex';
+    out.textContent = '결과가 여기에 표시됩니다.';
+  });
+  document.getElementById('btn-test-close').addEventListener('click', () => {
+    modal.style.display = 'none';
+  });
+  modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
+
+  function activeTab() {
+    const a = document.querySelector('.ce-tab-btn');
+    for (const t of tabs) {
+      if (t.style.color.includes('37, 99, 235') || t.style.color === 'rgb(37, 99, 235)' || t.style.borderBottomColor === 'rgb(37, 99, 235)') return t.dataset.tab;
+    }
+    return 'guardian';
+  }
+
+  async function runTest(mode) {
+    const chart = document.getElementById('test-chart').value.trim();
+    if (!chart) { alert('테스트용 차트 내용을 입력하세요.'); return; }
+    const sp = document.querySelector(`textarea[name="style_prompt_${mode}"]`).value.trim();
+    const samples = [];
+    for (let n = 1; n <= 3; n++) {
+      const v = document.querySelector(`textarea[name="sample_${n}_${mode}"]`).value.trim();
+      if (v) samples.push(v);
+    }
+    out.textContent = '⏳ 생성 중... (10~30초)';
+    try {
+      const r = await fetch('{{ url_for("api_ce_style_test") }}', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mode, chart, style_prompt: sp, samples})
+      });
+      const j = await r.json();
+      if (j.error) { out.textContent = '❌ ' + j.error; return; }
+      out.textContent = j.text || '(빈 응답)';
+    } catch (e) {
+      out.textContent = '❌ 요청 실패: ' + e;
+    }
+  }
+
+  document.getElementById('btn-test-run-g').addEventListener('click', () => runTest('guardian'));
+  document.getElementById('btn-test-run-v').addEventListener('click', () => runTest('vet'));
+})();
+</script>
+{% endblock %}
