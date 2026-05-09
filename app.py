@@ -635,6 +635,7 @@ def api_ce_style_test():
     base_system = CE_VET_PROMPT if mode == "vet" else CE_GUARDIAN_PROMPT
     style = {"style_prompt": style_prompt, "samples": samples} if (style_prompt or samples) else None
     system = base_system + _build_ce_style_addon(style)
+    system = system + _build_ce_tone_addon((data.get("patient_state") or "").strip())
     user_msg = f"다음 차트 내용을 바탕으로 안내문을 작성해주세요.\n\n---\n{chart}\n---"
     try:
         ok, body, err = _ai_messages_call({
@@ -3453,6 +3454,7 @@ def api_ce_save():
         referral_hospital_id = int(referral_hospital_id) if referral_hospital_id else None
     except (ValueError, TypeError):
         referral_hospital_id = None
+    patient_state = (data.get("patient_state") or "").strip()
 
     title = "리퍼병원 보고서" if mode == "vet" else "진료안내문"
     saved_doc_id = _save_patient_document(
@@ -5500,6 +5502,23 @@ def _build_ce_style_addon(style):
     return "\n" + "\n".join(parts)
 
 
+_CE_TONE_MAP = {
+    "good": "** 진료 당시 환자 상태 **: 호전 중 / 좋은 경과 — 안심되는 부드러운 톤으로 작성하세요. 회복이 잘 되고 있다는 점을 자연스럽게 전달하고, 일상 관리 가이드 위주로 안내. 보호자가 안도할 수 있도록 균형 있게.",
+    "caution": "** 진료 당시 환자 상태 **: 주의 필요 / 추가 검사 권유 — 신중한 톤으로 모니터링해야 할 항목을 구체적으로 안내하세요. 추가 검사·재진의 필요성을 명확히 전달하되 과도한 불안을 유발하지 않도록 균형 있게.",
+    "serious": "** 진료 당시 환자 상태 **: 심각 / 상태 악화 — 진지한 톤으로 응급 증상과 즉시 연락이 필요한 상황임을 명확히 전달하세요. 안심시키는 표현은 자제하고 정직하되 정서적으로 배려.",
+}
+
+
+def _build_ce_tone_addon(state):
+    """patient_state('good'/'caution'/'serious')을 system prompt 뒤에 붙일 톤 지침 문자열."""
+    if not state:
+        return ""
+    instruction = _CE_TONE_MAP.get(state, "")
+    if not instruction:
+        return ""
+    return "\n\n" + instruction
+
+
 CE_GUARDIAN_PROMPT = """당신은 한국 동물병원 원장의 진료 경과를 보호자에게 설명하는 안내문을 작성하는 전문가입니다.
 아래 제공되는 차트 내용(수의사가 작성한 진료 기록/수치/처치)을 근거로,
 보호자가 이해하기 쉬운 "-" 글머리 기호 줄글 안내문을 작성하세요.
@@ -5964,6 +5983,8 @@ def api_ce_generate():
     vet_style = _get_vet_ce_style(session.get("user_id"), mode)
     if vet_style:
         system = system + _build_ce_style_addon(vet_style)
+    # 진료 당시 환자 상태(톤 조절) 주입
+    system = system + _build_ce_tone_addon(patient_state)
     meta_lines = []
     if guardian_name: meta_lines.append(f"보호자 성명: {guardian_name}")
     if patient_name:  meta_lines.append(f"환자 이름: {patient_name}")

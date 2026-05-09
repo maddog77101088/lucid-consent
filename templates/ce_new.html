@@ -80,6 +80,20 @@
 <input type="hidden" id="ref-vet-name" value="">
 {% endif %}
 
+<!-- ①+ 진료 당시 환자 상태 (톤 조절) -->
+<section class="card" style="border-left:3px solid #f59e0b;">
+  <h2>🌡 진료 당시 환자 상태 <span class="muted" style="font-weight:normal;font-size:12px;">(AI 톤 조절 — 선택)</span></h2>
+  <label><span class="lbl" style="min-width:80px;">상태</span>
+    <select id="patient_state" style="flex:1; padding:8px 10px; border:1.5px solid #d1d5db; border-radius:6px; font-size:14px; background:#fff;">
+      <option value="">— 톤 조절 안 함 (기본) —</option>
+      <option value="good">✅ 좋은 경과 (호전 중 / 안심)</option>
+      <option value="caution">⚠️ 주의 필요 (추가 검사·관찰 권유)</option>
+      <option value="serious">🚨 심각 / 상태 악화</option>
+    </select>
+  </label>
+  <p class="muted" style="font-size:11.5px; margin:6px 0 0;">선택 시 AI가 해당 상황에 맞는 어조로 안내문을 작성합니다. 미선택 시 차트 내용으로 자동 판단.</p>
+</section>
+
 <!-- ② 차트 내용 -->
 <section class="card">
   <h2>② 차트 내용 붙여넣기 <span class="muted" style="font-weight:normal;font-size:12px;">(AI 생성 시 사용)</span></h2>
@@ -234,6 +248,7 @@ function gatherFormData(){
     vet_name: document.getElementById('vet_name').value.trim(),
     ref_vet_name: (document.getElementById('ref-vet-name')?.value || '').trim(),
     referral_hospital_id: document.getElementById('rh-id').value || null,
+    patient_state: (document.getElementById('patient_state')?.value || ''),
   };
 }
 
