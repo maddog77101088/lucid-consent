@@ -1654,6 +1654,7 @@ def api_postop_generate():
     followup_note = (data.get("followup_note") or "").strip()
     db_postop = (data.get("db_postop_notes") or "").strip()
     special_notes = (data.get("special_notes") or "").strip()
+    chart_text = (data.get("chart_text") or "").strip()
     hospitalization_days = (data.get("hospitalization_days") or "").strip()
     wound_disinfect = (data.get("wound_disinfect") or "").strip()
     wound_ointment = (data.get("wound_ointment") or "").strip()
@@ -1731,6 +1732,8 @@ def api_postop_generate():
         user_msg_parts += ["\n[이번 환자의 처방·관리 조건]", "\n".join(extra)]
     if db_postop:
         user_msg_parts += ["\n[병원 DB의 해당 수술 기본 주의사항]", db_postop]
+    if chart_text:
+        user_msg_parts += ["\n[차트 본문 (PMS365 등 — 보호자 안내문 작성 시 참고용. 전문 용어는 보호자가 이해할 수 있게 풀어쓸 것)]", chart_text]
     if special_notes:
         user_msg_parts += ["\n[이번 환자 특이사항]", special_notes]
     user_msg_parts.append("\n위 정보를 모두 반영하여 보호자용 퇴원 안내문을 작성해주세요.")
@@ -1867,6 +1870,7 @@ def api_imd_generate():
     discharge_status = (data.get("discharge_status") or "good").strip()
     db_discharge_notes = (data.get("db_discharge_notes") or "").strip()
     special_notes = (data.get("special_notes") or "").strip()
+    chart_text = (data.get("chart_text") or "").strip()
 
     if not patient or not diagnosis:
         return jsonify({"error": "환자명과 진단명은 필수입니다."}), 400
@@ -1907,6 +1911,8 @@ def api_imd_generate():
         user_msg_parts += ["\n[이번 환자의 처방·관리 조건]", "\n".join(extra)]
     if db_discharge_notes:
         user_msg_parts += ["\n[병원 DB의 해당 진단 기본 퇴원 안내]", db_discharge_notes]
+    if chart_text:
+        user_msg_parts += ["\n[차트 본문 (PMS365 등 — 보호자 안내문 작성 시 참고용. 전문 용어는 보호자가 이해할 수 있게 풀어쓸 것)]", chart_text]
     if special_notes:
         user_msg_parts += ["\n[이번 환자 특이사항]", special_notes]
     user_msg_parts.append("\n위 정보를 모두 반영하여 보호자용 내과 퇴원 안내문을 작성해주세요.")

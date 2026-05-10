@@ -177,6 +177,16 @@
     </label>
   </section>
 
+  <!-- ⑨-2 차트 내용 (선택) — AI 생성 시 참고 -->
+  <section class="card">
+    <h2>⑨-2 차트 내용 붙여넣기 <span class="muted" style="font-weight:normal;font-size:12px;">(선택 — AI 생성 시 참고)</span></h2>
+    <label><span class="lbl" style="display:block; margin-bottom:6px;">PMS365 차트 본문</span>
+      <textarea id="chart-text" rows="8"
+                placeholder="여기에 PMS365 차트 내용을 Ctrl+V로 붙여넣으세요 (입원 경과·혈액검사·처치 등). 비워둬도 무관 — 위 입력만으로 안내문 생성 가능."
+                style="width:100%; font-family:monospace; font-size:13px; line-height:1.5; padding:10px; border:1.5px solid #d1d5db; border-radius:5px; box-sizing:border-box; resize:vertical;"></textarea>
+    </label>
+  </section>
+
   <div style="display:flex; gap:8px; margin-top:12px;">
     <a class="btn-ghost" href="{{ url_for('dashboard') }}" style="flex:0 0 auto;">취소</a>
     <button type="button" id="btn-generate" class="btn-primary" style="flex:1; padding:12px; font-size:15px; font-weight:600;">
@@ -324,6 +334,7 @@ document.getElementById('btn-generate').addEventListener('click', async function
     discharge_status: document.getElementById('discharge_status').value,
     db_discharge_notes: document.getElementById('db_discharge_notes').value.trim(),
     special_notes: document.getElementById('special_notes').value.trim(),
+    chart_text: document.getElementById('chart-text').value.trim(),
   };
 
   try {
