@@ -3470,6 +3470,77 @@ def api_ce_save():
     return jsonify({"ok": True, "doc_id": saved_doc_id})
 
 
+@app.route("/api/postop/save", methods=["POST"])
+@login_required
+def api_postop_save():
+    """수술후 안내문 수동 입력 저장 (AI 생성 안 거치고 직접 입력한 경우).
+    필수: patient_name, body
+    선택: guardian_name, guardian_mobile, vet_name, surgery_name, diagnosis"""
+    data = request.get_json() or {}
+    patient_name = (data.get("patient_name") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not patient_name:
+        return jsonify({"ok": False, "error": "환자명을 입력해주세요."}), 400
+    if not body:
+        return jsonify({"ok": False, "error": "본문을 입력해주세요."}), 400
+
+    guardian_name = (data.get("guardian_name") or "").strip()
+    guardian_mobile = (data.get("guardian_mobile") or "").strip()
+    vet_name = (data.get("vet_name") or "").strip()
+    surgery_name = (data.get("surgery_name") or "").strip()
+    diagnosis_in = (data.get("diagnosis") or "").strip()
+
+    diagnosis_field = surgery_name + ((" / " + diagnosis_in) if diagnosis_in else "") if surgery_name else diagnosis_in
+
+    saved_doc_id = _save_patient_document(
+        "postop", patient_name,
+        guardian_name=guardian_name,
+        guardian_phone=guardian_mobile,
+        vet_name=vet_name,
+        diagnosis=diagnosis_field,
+        title="수술후 안내문",
+        body=body,
+        structured_data={"manual": True, "surgery_name": surgery_name, "diagnosis": diagnosis_in},
+    )
+    if not saved_doc_id:
+        return jsonify({"ok": False, "error": "저장 실패"}), 500
+    return jsonify({"ok": True, "doc_id": saved_doc_id})
+
+
+@app.route("/api/imd/save", methods=["POST"])
+@login_required
+def api_imd_save():
+    """내과 퇴원 안내문 수동 입력 저장 (AI 생성 안 거치고 직접 입력한 경우).
+    필수: patient_name, body
+    선택: guardian_name, guardian_mobile, vet_name, diagnosis"""
+    data = request.get_json() or {}
+    patient_name = (data.get("patient_name") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not patient_name:
+        return jsonify({"ok": False, "error": "환자명을 입력해주세요."}), 400
+    if not body:
+        return jsonify({"ok": False, "error": "본문을 입력해주세요."}), 400
+
+    guardian_name = (data.get("guardian_name") or "").strip()
+    guardian_mobile = (data.get("guardian_mobile") or "").strip()
+    vet_name = (data.get("vet_name") or "").strip()
+    diagnosis_in = (data.get("diagnosis") or "").strip()
+
+    saved_doc_id = _save_patient_document(
+        "imd", patient_name,
+        guardian_name=guardian_name,
+        guardian_phone=guardian_mobile,
+        vet_name=vet_name,
+        diagnosis=diagnosis_in,
+        title="내과 퇴원 안내문",
+        body=body,
+        structured_data={"manual": True, "diagnosis": diagnosis_in},
+    )
+    if not saved_doc_id:
+        return jsonify({"ok": False, "error": "저장 실패"}), 500
+    return jsonify({"ok": True, "doc_id": saved_doc_id})
+
+
 @app.route("/api/notices/<int:doc_id>/update", methods=["POST"])
 @login_required
 def api_notice_update(doc_id):
