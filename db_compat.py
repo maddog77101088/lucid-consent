@@ -72,6 +72,7 @@ class CursorWrapper:
             self._cur.execute(_PRAGMA_TABLE_INFO_SQL, (table_name,))
             return self
 
+        sql = _to_pg_schema(sql)
         sql = _to_pg_params(sql)
         self.lastrowid = None
         is_insert = bool(re.match(r'\s*INSERT\s+INTO\s+', sql, re.IGNORECASE))
