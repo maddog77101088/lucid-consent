@@ -1,15 +1,14 @@
 """
-db_compat.py — psycopg2 wrapper that mimics sqlite3's API.
+db_compat.py — psycopg3 wrapper that mimics sqlite3's API.
 Usage in app.py: import db_compat as sqlite3
 """
 import os
 import re
-import psycopg2
-import psycopg2.extras
+import psycopg
+from psycopg.rows import dict_row
 
-IntegrityError = psycopg2.IntegrityError
-OperationalError = psycopg2.OperationalError
-
+IntegrityError = psycopg.errors.IntegrityError
+OperationalError = psycopg.errors.OperationalError
 
 def _to_pg_schema(sql):
     """Convert SQLite DDL to PostgreSQL-compatible DDL."""
@@ -18,11 +17,9 @@ def _to_pg_schema(sql):
     sql = re.sub(r"datetime\('now'\)", "current_timestamp::text", sql, flags=re.IGNORECASE)
     return sql
 
-
 def _to_pg_params(sql):
-    """Replace ? placeholders with %s for psycopg2."""
+    """Replace ? placeholders with %s for psycopg."""
     return sql.replace('?', '%s')
-
 
 class Row:
     """Dict-like row supporting both row['col'] and row[0] access."""
@@ -49,7 +46,6 @@ class Row:
 
     def __len__(self):
         return len(self._data)
-
 
 class CursorWrapper:
     def __init__(self, raw_cur):
@@ -96,14 +92,13 @@ class CursorWrapper:
         for row in self._cur:
             yield Row(row)
 
-
 class ConnectionWrapper:
     def __init__(self, conn):
         self._conn = conn
-        self.row_factory = None  # accepted but ignored; always uses RealDictCursor
+        self.row_factory = None
 
     def cursor(self):
-        raw = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        raw = self._conn.cursor(row_factory=dict_row)
         return CursorWrapper(raw)
 
     def commit(self):
@@ -122,11 +117,10 @@ class ConnectionWrapper:
             self._conn.commit()
         self._conn.close()
 
-
 def connect(path=None):
     """Connect to PostgreSQL using DATABASE_URL. Ignores path (SQLite compat)."""
     url = os.environ.get('DATABASE_URL')
     if not url:
         raise RuntimeError('DATABASE_URL environment variable is not set')
-    conn = psycopg2.connect(url)
+    conn = psycopg.connect(url)
     return ConnectionWrapper(conn)
