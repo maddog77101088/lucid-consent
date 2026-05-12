@@ -355,7 +355,7 @@ def init_db():
     cur.execute("SELECT COUNT(*) FROM users")
     if cur.fetchone()[0] == 0:
         for u, d, r in [("admin","관리자","admin"),("seolwon","설원장","vet"),("nowon","노진희원장","vet")]:
-            cur.execute("INSERT INTO users (username,password_hash,display_name,role,must_change_password) VALUES (?,?,?,?,1)",
+            cur.execute("INSERT INTO users (username,password_hash,display_name,role,must_change_password) VALUES (%s,%s,%s,%s,true)",
                 (u, generate_password_hash("lucid1234"), d, r))
     cur.execute("SELECT COUNT(*) FROM hospital_template")
     if cur.fetchone()[0] == 0:
@@ -5037,7 +5037,7 @@ def users():
                 flash(msg, "error")
             else:
                 try:
-                    db.execute("INSERT INTO users (username,password_hash,display_name,role,must_change_password) VALUES (?,?,?,?,1)",
+                    db.execute("INSERT INTO users (username,password_hash,display_name,role,must_change_password) VALUES (%s,%s,%s,%s,true)",
                         (uname, generate_password_hash(pw), dname, request.form.get("role","vet")))
                     db.commit(); flash("사용자가 추가되었습니다. 첫 로그인 시 비밀번호를 변경하게 됩니다.", "ok")
                 except sqlite3.IntegrityError:
