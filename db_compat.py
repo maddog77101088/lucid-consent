@@ -27,6 +27,8 @@ def _to_pg_schema(sql):
     sql = re.sub(r'INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT',
                  'SERIAL PRIMARY KEY', sql, flags=re.IGNORECASE)
     sql = re.sub(r"datetime\('now'[^)]*\)", "current_timestamp::text", sql, flags=re.IGNORECASE)
+    # Convert datetime(column_ref) → column::timestamp (SQLite datetime() on column values)
+    sql = re.sub(r"datetime\(([^'\"()][^()]*)\)", r"\1::timestamp", sql, flags=re.IGNORECASE)
     return sql
 
 def _to_pg_params(sql):
