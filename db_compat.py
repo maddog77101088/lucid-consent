@@ -26,7 +26,7 @@ def _to_pg_schema(sql):
     """Convert SQLite DDL to PostgreSQL-compatible DDL."""
     sql = re.sub(r'INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT',
                  'SERIAL PRIMARY KEY', sql, flags=re.IGNORECASE)
-    sql = re.sub(r"datetime\('now'\)", "current_timestamp::text", sql, flags=re.IGNORECASE)
+    sql = re.sub(r"datetime\('now'[^)]*\)", "current_timestamp::text", sql, flags=re.IGNORECASE)
     return sql
 
 def _to_pg_params(sql):
