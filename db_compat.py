@@ -10,6 +10,18 @@ from psycopg.rows import dict_row
 IntegrityError = psycopg.errors.IntegrityError
 OperationalError = psycopg.errors.OperationalError
 
+_PRAGMA_TABLE_INFO_SQL = """
+    SELECT ordinal_position - 1 AS cid,
+           column_name          AS name,
+           data_type            AS type,
+           CASE WHEN is_nullable = 'NO' THEN 1 ELSE 0 END AS notnull,
+           column_default       AS dflt_value,
+           0                    AS pk
+    FROM information_schema.columns
+    WHERE table_name = %s AND table_schema = 'public'
+    ORDER BY ordinal_position
+"""
+
 def _to_pg_schema(sql):
     """Convert SQLite DDL to PostgreSQL-compatible DDL."""
     sql = re.sub(r'INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT',
@@ -53,6 +65,13 @@ class CursorWrapper:
         self.lastrowid = None
 
     def execute(self, sql, params=()):
+        # Handle PRAGMA table_info(X) -> PostgreSQL information_schema query
+        pragma_m = re.match(r'\s*PRAGMA\s+table_info\((\w+)\)\s*$', sql, re.IGNORECASE)
+        if pragma_m:
+            table_name = pragma_m.group(1)
+            self._cur.execute(_PRAGMA_TABLE_INFO_SQL, (table_name,))
+            return self
+
         sql = _to_pg_params(sql)
         self.lastrowid = None
         is_insert = bool(re.match(r'\s*INSERT\s+INTO\s+', sql, re.IGNORECASE))
@@ -65,6 +84,7 @@ class CursorWrapper:
                 self.lastrowid = vals[0] if vals else None
         else:
             self._cur.execute(sql, params if params else None)
+        return self
 
     def executemany(self, sql, params_list):
         self._cur.executemany(_to_pg_params(sql), params_list)
