@@ -23,12 +23,17 @@ _PRAGMA_TABLE_INFO_SQL = """
 """
 
 def _to_pg_schema(sql):
-    """Convert SQLite DDL to PostgreSQL-compatible DDL."""
+    """Convert SQLite DDL/DML to PostgreSQL-compatible SQL."""
+    # 1. AUTOINCREMENT → SERIAL
     sql = re.sub(r'INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT',
                  'SERIAL PRIMARY KEY', sql, flags=re.IGNORECASE)
-    sql = re.sub(r"datetime\('now'[^)]*\)", "current_timestamp::text", sql, flags=re.IGNORECASE)
-    # Convert datetime(column_ref) → column::timestamp (SQLite datetime() on column values)
+    # 2. DDL DEFAULT: datetime('now', ...) inside DEFAULT clause → current_timestamp::text
+    sql = re.sub(r"DEFAULT\s+\(?datetime\('[^']*'[^)]*\)\)?",
+                 "DEFAULT current_timestamp::text", sql, flags=re.IGNORECASE)
+    # 3. DML: datetime(column_ref) → column::timestamp
     sql = re.sub(r"datetime\(([^'\"()][^()]*)\)", r"\1::timestamp", sql, flags=re.IGNORECASE)
+    # 4. DML: remaining datetime('now', ...) in WHERE/expressions → NOW()
+    sql = re.sub(r"datetime\('now'[^)]*\)", "NOW()", sql, flags=re.IGNORECASE)
     return sql
 
 def _to_pg_params(sql):
