@@ -405,6 +405,27 @@ def init_db():
                  s.get("purpose_effect"), s.get("procedure"), s.get("complications"),
                  s.get("contrast_type"), s.get("sedation_note"), s.get("post_care"),
                  s.get("expected_duration"), s.get("estimated_cost"), s.get("notes")))
+    # ── 메신저 ──────────────────────────────────────────────────────────
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sender_id INTEGER NOT NULL,
+            recipient_id INTEGER NOT NULL,
+            content TEXT,
+            msg_type TEXT NOT NULL DEFAULT 'text',
+            file_path TEXT,
+            file_name TEXT,
+            file_mime TEXT,
+            is_read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+        )
+    """)
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_chat_sender ON chat_messages(sender_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_chat_recipient ON chat_messages(recipient_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_chat_created ON chat_messages(created_at)")
+    # 메신저 파일 저장 디렉터리 생성
+    _msg_upload_dir = os.path.join(os.path.dirname(DB_PATH), "messenger")
+    os.makedirs(_msg_upload_dir, exist_ok=True)
     con.commit()
     con.close()
 
@@ -6157,6 +6178,198 @@ def api_ce_generate():
 @app.cli.command("init-db")
 def init_db_cmd():
     init_db(); print("DB 초기화 완료:", DB_PATH)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🗨️  메신저 (내부 직원 전용)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+MESSENGER_UPLOAD_DIR = os.path.join(os.path.dirname(DB_PATH), "messenger")
+ALLOWED_EXTENSIONS = {
+    "image": {"jpg", "jpeg", "png", "gif", "webp", "bmp"},
+    "file": {"pdf", "doc", "docx", "xls", "xlsx", "txt", "zip"},
+}
+MAX_FILE_MB = 20
+
+
+def _allowed_file(filename):
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    all_exts = ALLOWED_EXTENSIONS["image"] | ALLOWED_EXTENSIONS["file"]
+    return ext in all_exts, ext
+
+
+@app.route("/messenger")
+@app.route("/messenger/<int:peer_id>")
+@login_required
+def messenger(peer_id=None):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT id, display_name, role FROM users WHERE id != ? ORDER BY display_name", (session["user_id"],))
+    users = [dict(r) for r in cur.fetchall()]
+    return render_template("messenger.html", users=users, peer_id=peer_id)
+
+
+@app.route("/api/messenger/conversations")
+@login_required
+def api_messenger_conversations():
+    """내가 참여한 대화 목록 (상대방별 마지막 메시지 + 미읽음 수)."""
+    me = session["user_id"]
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("""
+        SELECT u.id, u.display_name,
+               m.content, m.msg_type, m.file_name, m.created_at,
+               (SELECT COUNT(*) FROM chat_messages
+                WHERE sender_id = u.id AND recipient_id = ? AND is_read = 0) AS unread
+        FROM users u
+        JOIN chat_messages m ON m.id = (
+            SELECT id FROM chat_messages
+            WHERE (sender_id = u.id AND recipient_id = ?)
+               OR (sender_id = ? AND recipient_id = u.id)
+            ORDER BY created_at DESC LIMIT 1
+        )
+        WHERE u.id != ?
+        ORDER BY m.created_at DESC
+    """, (me, me, me, me))
+    rows = cur.fetchall()
+    result = []
+    for r in rows:
+        result.append({
+            "user_id": r["id"],
+            "display_name": r["display_name"],
+            "last_content": r["file_name"] if r["msg_type"] != "text" else r["content"],
+            "last_type": r["msg_type"],
+            "last_at": r["created_at"],
+            "unread": r["unread"],
+        })
+    return jsonify(result)
+
+
+@app.route("/api/messenger/messages/<int:peer_id>")
+@login_required
+def api_messenger_messages(peer_id):
+    """나와 peer_id 사이의 메시지 목록. ?since=<id> 로 새 메시지만 조회."""
+    me = session["user_id"]
+    since = request.args.get("since", 0, type=int)
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("""
+        SELECT id, sender_id, recipient_id, content, msg_type,
+               file_name, file_mime, is_read, created_at
+        FROM chat_messages
+        WHERE ((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?))
+          AND id > ?
+        ORDER BY id ASC
+        LIMIT 200
+    """, (me, peer_id, peer_id, me, since))
+    msgs = [dict(r) for r in cur.fetchall()]
+    return jsonify(msgs)
+
+
+@app.route("/api/messenger/send", methods=["POST"])
+@login_required
+def api_messenger_send():
+    """텍스트 메시지 전송."""
+    me = session["user_id"]
+    data = request.get_json(force=True)
+    recipient_id = int(data.get("recipient_id", 0))
+    content = (data.get("content") or "").strip()
+    if not recipient_id or not content:
+        return jsonify({"error": "필수 파라미터 누락"}), 400
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(
+        "INSERT INTO chat_messages (sender_id, recipient_id, content, msg_type) VALUES (?,?,?,?)",
+        (me, recipient_id, content, "text")
+    )
+    msg_id = cur.lastrowid
+    db.commit()
+    return jsonify({"ok": True, "id": msg_id})
+
+
+@app.route("/api/messenger/upload", methods=["POST"])
+@login_required
+def api_messenger_upload():
+    """파일/이미지 업로드 후 메시지 저장."""
+    me = session["user_id"]
+    recipient_id = request.form.get("recipient_id", type=int)
+    if not recipient_id:
+        return jsonify({"error": "recipient_id 누락"}), 400
+    f = request.files.get("file")
+    if not f or not f.filename:
+        return jsonify({"error": "파일 없음"}), 400
+    ok, ext = _allowed_file(f.filename)
+    if not ok:
+        return jsonify({"error": "허용되지 않는 파일 형식"}), 400
+    f.stream.seek(0, 2)
+    size_bytes = f.stream.tell()
+    f.stream.seek(0)
+    if size_bytes > MAX_FILE_MB * 1024 * 1024:
+        return jsonify({"error": f"파일 크기 {MAX_FILE_MB}MB 초과"}), 400
+    os.makedirs(MESSENGER_UPLOAD_DIR, exist_ok=True)
+    safe_name = secrets.token_hex(16) + "." + ext
+    save_path = os.path.join(MESSENGER_UPLOAD_DIR, safe_name)
+    f.save(save_path)
+    original_name = f.filename
+    mime = f.mimetype or "application/octet-stream"
+    msg_type = "image" if ext in ALLOWED_EXTENSIONS["image"] else "file"
+    db = get_db()
+    cur = db.cursor()
+    cur.execute(
+        "INSERT INTO chat_messages (sender_id, recipient_id, content, msg_type, file_path, file_name, file_mime) VALUES (?,?,?,?,?,?,?)",
+        (me, recipient_id, "", msg_type, safe_name, original_name, mime)
+    )
+    msg_id = cur.lastrowid
+    db.commit()
+    return jsonify({"ok": True, "id": msg_id, "file_name": original_name, "msg_type": msg_type})
+
+
+@app.route("/api/messenger/file/<int:msg_id>")
+@login_required
+def api_messenger_file(msg_id):
+    """업로드된 파일 다운로드/표시 (인증 필요)."""
+    me = session["user_id"]
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT sender_id, recipient_id, file_path, file_name, file_mime FROM chat_messages WHERE id=?", (msg_id,))
+    row = cur.fetchone()
+    if not row:
+        abort(404)
+    if row["sender_id"] != me and row["recipient_id"] != me:
+        abort(403)
+    file_path = os.path.join(MESSENGER_UPLOAD_DIR, row["file_path"])
+    if not os.path.exists(file_path):
+        abort(404)
+    return send_file(file_path,
+                     mimetype=row["file_mime"] or "application/octet-stream",
+                     download_name=row["file_name"],
+                     as_attachment=(row["file_mime"] or "").startswith("application"))
+
+
+@app.route("/api/messenger/read/<int:peer_id>", methods=["POST"])
+@login_required
+def api_messenger_read(peer_id):
+    """peer_id가 나에게 보낸 메시지를 모두 읽음 처리."""
+    me = session["user_id"]
+    db = get_db()
+    db.cursor().execute(
+        "UPDATE chat_messages SET is_read=1 WHERE sender_id=? AND recipient_id=? AND is_read=0",
+        (peer_id, me)
+    )
+    db.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/messenger/unread-count")
+@login_required
+def api_messenger_unread_count():
+    """전체 미읽음 메시지 수 (네비 뱃지용)."""
+    me = session["user_id"]
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT COUNT(*) FROM chat_messages WHERE recipient_id=? AND is_read=0", (me,))
+    count = cur.fetchone()[0]
+    return jsonify({"count": count})
 
 
 with app.app_context():

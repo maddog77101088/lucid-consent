@@ -11,11 +11,14 @@
 <header class="topbar no-print" style="display:flex; align-items:center; justify-content:space-between;">
   <div class="logo">
     <a href="{{ url_for('dashboard') }}">
-      <strong>🏠 {{ hospital_short }}{% if hospital_branch %} <span style="color:#fbbf24; font-size:13px; font-weight:500; margin-left:4px;">[{{ hospital_branch }}]</span>{% endif %}</strong>
+      <strong>LUCID {{ hospital_short }}{% if hospital_branch %} <span style="color:#fbbf24; font-size:13px; font-weight:500; margin-left:4px;">[{{ hospital_branch }}]</span>{% endif %}</strong>
     </a>
   </div>
   <div class="userbox" style="margin-left:auto; display:flex; align-items:center; gap:14px;">
     <span>{{ current_user.name }}{% if current_user.role == 'admin' %} (관리자){% endif %}</span>
+    <a href="{{ url_for('messenger') }}" style="position:relative; text-decoration:none; color:inherit;">
+      메신저<span id="nav-msg-badge" style="display:none; position:absolute; top:-7px; right:-12px; background:#ef4444; color:#fff; border-radius:999px; font-size:10px; font-weight:700; min-width:16px; height:16px; padding:0 3px; align-items:center; justify-content:center;"></span>
+    </a>
     <a href="{{ url_for('me_ce_style') }}">내 CE 문체</a>
     <a href="{{ url_for('change_password') }}">비밀번호 변경</a>
     <a href="{{ url_for('logout') }}">로그아웃</a>
@@ -33,5 +36,21 @@
 </main>
 
 {% block scripts %}{% endblock %}
+{% if current_user.id %}
+<script>
+(function() {
+  function refreshUnread() {
+    fetch("/api/messenger/unread-count").then(r => r.json()).then(d => {
+      var b = document.getElementById("nav-msg-badge");
+      if (!b) return;
+      if (d.count > 0) { b.textContent = d.count > 99 ? "99+" : d.count; b.style.display = "inline-flex"; }
+      else b.style.display = "none";
+    }).catch(function(){});
+  }
+  refreshUnread();
+  setInterval(refreshUnread, 10000);
+})();
+</script>
+{% endif %}
 </body>
 </html>

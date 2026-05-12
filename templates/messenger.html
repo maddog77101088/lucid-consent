@@ -1,0 +1,507 @@
+{% extends "base.html" %}
+{% block title %}메신저 — {{ hospital_short }}{% endblock %}
+
+{% block content %}
+<div id="messenger-wrap">
+  <!-- ── 좌측: 사용자 목록 ── -->
+  <div id="msg-sidebar">
+    <div id="msg-sidebar-header">
+      <span>💬 메신저</span>
+    </div>
+    <div id="msg-user-list">
+      {% for u in users %}
+      <div class="msg-user-item" data-uid="{{ u.id }}" data-name="{{ u.display_name }}" onclick="openChat({{ u.id }}, '{{ u.display_name }}')">
+        <div class="msg-avatar">{{ u.display_name[0] }}</div>
+        <div class="msg-user-info">
+          <span class="msg-user-name">{{ u.display_name }}</span>
+          <span class="msg-user-preview" id="preview-{{ u.id }}"></span>
+        </div>
+        <span class="msg-unread-badge" id="badge-{{ u.id }}" style="display:none"></span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- ── 우측: 채팅 영역 ── -->
+  <div id="msg-main">
+    <div id="msg-empty-state">
+      <div style="font-size:48px; margin-bottom:16px;">💬</div>
+      <div style="font-size:18px; color:#6b7280; font-weight:500;">대화를 시작하세요</div>
+      <div style="font-size:14px; color:#9ca3af; margin-top:8px;">왼쪽 목록에서 대화 상대를 선택하세요</div>
+    </div>
+
+    <div id="msg-chat-panel" style="display:none; flex-direction:column; height:100%;">
+      <!-- 채팅 헤더 -->
+      <div id="msg-chat-header">
+        <div class="msg-avatar" id="chat-avatar"></div>
+        <div>
+          <div id="chat-peer-name" style="font-weight:600; font-size:15px;"></div>
+          <div id="chat-status" style="font-size:12px; color:#9ca3af;"></div>
+        </div>
+      </div>
+
+      <!-- 메시지 목록 -->
+      <div id="msg-chat-body"></div>
+
+      <!-- 입력 영역 -->
+      <div id="msg-input-area">
+        <label for="msg-file-input" id="msg-attach-btn" title="파일/사진 첨부">📎</label>
+        <input type="file" id="msg-file-input" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" style="display:none">
+        <div id="msg-attach-preview" style="display:none">
+          <span id="msg-attach-name"></span>
+          <button onclick="clearAttach()" style="background:none;border:none;cursor:pointer;color:#ef4444;font-size:16px;">✕</button>
+        </div>
+        <textarea id="msg-text-input" placeholder="메시지를 입력하세요 (Shift+Enter: 줄바꿈, Enter: 전송)"></textarea>
+        <button id="msg-send-btn" onclick="sendMessage()">전송</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+/* ── 레이아웃 ── */
+#messenger-wrap {
+  display: flex;
+  height: calc(100vh - 60px);
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+  margin: 0 -16px;
+}
+#msg-sidebar {
+  width: 280px;
+  min-width: 220px;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  background: #f9fafb;
+}
+#msg-sidebar-header {
+  padding: 18px 16px 14px;
+  font-weight: 700;
+  font-size: 16px;
+  border-bottom: 1px solid #e5e7eb;
+  color: #111827;
+}
+#msg-user-list { overflow-y: auto; flex: 1; }
+.msg-user-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f3f4f6;
+  transition: background .15s;
+  position: relative;
+}
+.msg-user-item:hover { background: #f3f4f6; }
+.msg-user-item.active { background: #eff6ff; }
+.msg-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: #6366f1;
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 15px;
+  flex-shrink: 0;
+}
+.msg-user-info { flex: 1; overflow: hidden; }
+.msg-user-name { display: block; font-weight: 600; font-size: 14px; color: #111827; }
+.msg-user-preview {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+.msg-unread-badge {
+  background: #ef4444;
+  color: #fff;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  display: flex; align-items: center; justify-content: center;
+}
+/* ── 메인 ── */
+#msg-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#msg-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+#msg-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #fff;
+}
+#chat-avatar {
+  width: 42px; height: 42px;
+  background: #8b5cf6;
+  font-size: 17px;
+}
+#msg-chat-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #f9fafb;
+}
+/* ── 말풍선 ── */
+.msg-bubble-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 70%;
+}
+.msg-bubble-wrap.mine {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.msg-bubble-wrap.theirs { align-self: flex-start; }
+.msg-bubble {
+  padding: 10px 14px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.55;
+  word-break: break-word;
+  max-width: 100%;
+}
+.mine .msg-bubble {
+  background: #6366f1;
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.theirs .msg-bubble {
+  background: #fff;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+  border-bottom-left-radius: 4px;
+}
+.msg-meta {
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+  padding-bottom: 2px;
+}
+.msg-read-check { color: #818cf8; font-size: 11px; }
+/* 날짜 구분선 */
+.msg-date-divider {
+  text-align: center;
+  font-size: 12px;
+  color: #9ca3af;
+  margin: 12px 0 6px;
+}
+/* 이미지 메시지 */
+.msg-image { max-width: 220px; max-height: 220px; border-radius: 10px; cursor: pointer; display: block; }
+/* 파일 메시지 */
+.msg-file-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  font-size: 13px;
+}
+.theirs .msg-file-chip { background: #f3f4f6; color: #374151; }
+/* ── 입력창 ── */
+#msg-input-area {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+#msg-attach-btn {
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px;
+  user-select: none;
+}
+#msg-attach-preview {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 13px; color: #374151;
+  background: #f3f4f6; padding: 4px 10px; border-radius: 8px;
+  max-width: 180px; overflow: hidden;
+}
+#msg-attach-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+#msg-text-input {
+  flex: 1;
+  border: 1px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 10px 16px;
+  font-size: 14px;
+  resize: none;
+  min-height: 42px;
+  max-height: 120px;
+  outline: none;
+  font-family: inherit;
+  line-height: 1.4;
+}
+#msg-text-input:focus { border-color: #6366f1; }
+#msg-send-btn {
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s;
+}
+#msg-send-btn:hover { background: #4f46e5; }
+/* ── 모바일 ── */
+@media(max-width:640px){
+  #messenger-wrap { flex-direction: column; border-radius: 0; margin: 0 -12px; }
+  #msg-sidebar { width: 100%; max-height: 220px; border-right: none; border-bottom: 1px solid #e5e7eb; }
+}
+</style>
+
+<script>
+let currentPeerId = null;
+let currentPeerName = "";
+let lastMsgId = 0;
+let pollTimer = null;
+let attachedFile = null;
+let notifGranted = false;
+let sidebarData = {};  // user_id -> {last_content, unread}
+
+// ── 알림 권한 요청 ──
+if ("Notification" in window) {
+  Notification.requestPermission().then(p => { notifGranted = p === "granted"; });
+}
+
+// ── 초기 로드 ──
+document.addEventListener("DOMContentLoaded", () => {
+  loadConversations();
+  setInterval(loadConversations, 5000);  // 사이드바 5초 갱신
+  {% if peer_id %}
+  // URL에 peer_id 있으면 바로 오픈
+  const item = document.querySelector(`[data-uid="{{ peer_id }}"]`);
+  if (item) openChat({{ peer_id }}, item.dataset.name);
+  {% endif %}
+});
+
+// ── 사이드바 대화 목록 갱신 ──
+async function loadConversations() {
+  const res = await fetch("/api/messenger/conversations");
+  if (!res.ok) return;
+  const list = await res.json();
+  let totalUnread = 0;
+  list.forEach(c => {
+    sidebarData[c.user_id] = c;
+    // 미리보기
+    const pEl = document.getElementById("preview-" + c.user_id);
+    if (pEl) pEl.textContent = c.last_type === "text" ? (c.last_content || "") : ("📎 " + (c.last_content || "파일"));
+    // 뱃지
+    const bEl = document.getElementById("badge-" + c.user_id);
+    if (bEl) {
+      if (c.unread > 0) { bEl.textContent = c.unread > 99 ? "99+" : c.unread; bEl.style.display = "flex"; }
+      else { bEl.style.display = "none"; }
+    }
+    totalUnread += c.unread;
+  });
+  // 네비 뱃지 업데이트
+  const navBadge = document.getElementById("nav-msg-badge");
+  if (navBadge) {
+    if (totalUnread > 0) { navBadge.textContent = totalUnread > 99 ? "99+" : totalUnread; navBadge.style.display = "inline-flex"; }
+    else navBadge.style.display = "none";
+  }
+}
+
+// ── 채팅 열기 ──
+function openChat(uid, name) {
+  currentPeerId = uid;
+  currentPeerName = name;
+  lastMsgId = 0;
+  if (pollTimer) clearInterval(pollTimer);
+
+  // 사이드바 active
+  document.querySelectorAll(".msg-user-item").forEach(el => el.classList.remove("active"));
+  const item = document.querySelector(`[data-uid="${uid}"]`);
+  if (item) item.classList.add("active");
+
+  // 패널 표시
+  document.getElementById("msg-empty-state").style.display = "none";
+  const panel = document.getElementById("msg-chat-panel");
+  panel.style.display = "flex";
+
+  // 헤더
+  document.getElementById("chat-peer-name").textContent = name;
+  document.getElementById("chat-avatar").textContent = name[0];
+  document.getElementById("chat-status").textContent = "";
+
+  // 메시지 초기 로드
+  document.getElementById("msg-chat-body").innerHTML = "";
+  loadMessages(true);
+  pollTimer = setInterval(() => loadMessages(false), 3000);
+}
+
+// ── 메시지 로드 ──
+async function loadMessages(initial) {
+  if (!currentPeerId) return;
+  const res = await fetch(`/api/messenger/messages/${currentPeerId}?since=${lastMsgId}`);
+  if (!res.ok) return;
+  const msgs = await res.json();
+  if (!msgs.length) return;
+
+  const myId = {{ session.get('user_id') }};
+  const body = document.getElementById("msg-chat-body");
+  let prevDate = body.dataset.lastDate || "";
+  const isBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 60;
+
+  msgs.forEach(m => {
+    const d = (m.created_at || "").slice(0, 10);
+    if (d !== prevDate) {
+      const divider = document.createElement("div");
+      divider.className = "msg-date-divider";
+      divider.textContent = d;
+      body.appendChild(divider);
+      prevDate = d;
+    }
+    body.appendChild(buildBubble(m, myId));
+    lastMsgId = Math.max(lastMsgId, m.id);
+  });
+  body.dataset.lastDate = prevDate;
+
+  if (initial || isBottom) body.scrollTop = body.scrollHeight;
+
+  // 읽음 처리
+  await fetch(`/api/messenger/read/${currentPeerId}`, {method:"POST"});
+  // 뱃지 즉시 제거
+  const bEl = document.getElementById("badge-" + currentPeerId);
+  if (bEl) bEl.style.display = "none";
+
+  // 새 메시지 브라우저 알림 (탭이 백그라운드일 때)
+  if (!initial && !document.hasFocus() && notifGranted) {
+    const newFromPeer = msgs.filter(m => m.sender_id !== myId);
+    if (newFromPeer.length) {
+      const last = newFromPeer[newFromPeer.length - 1];
+      new Notification(`💬 ${currentPeerName}`, {
+        body: last.msg_type === "text" ? last.content : "📎 파일",
+        icon: "/static/favicon.ico",
+      });
+    }
+  }
+}
+
+// ── 말풍선 생성 ──
+function buildBubble(m, myId) {
+  const isMine = m.sender_id === myId;
+  const wrap = document.createElement("div");
+  wrap.className = "msg-bubble-wrap " + (isMine ? "mine" : "theirs");
+
+  let inner = "";
+  if (m.msg_type === "image") {
+    inner = `<img class="msg-image" src="/api/messenger/file/${m.id}" alt="${esc(m.file_name)}" onclick="window.open(this.src)">`;
+  } else if (m.msg_type === "file") {
+    inner = `<a class="msg-file-chip" href="/api/messenger/file/${m.id}" download="${esc(m.file_name)}">📄 ${esc(m.file_name)}</a>`;
+  } else {
+    inner = esc(m.content).replace(/\n/g, "<br>");
+  }
+
+  const time = (m.created_at || "").slice(11, 16);
+  const readMark = isMine ? `<span class="msg-read-check">${m.is_read ? "✓✓" : "✓"}</span>` : "";
+
+  wrap.innerHTML = `
+    <div class="msg-bubble">${inner}</div>
+    <div class="msg-meta">${readMark} ${time}</div>
+  `;
+  return wrap;
+}
+
+// ── 메시지 전송 ──
+async function sendMessage() {
+  if (!currentPeerId) return;
+  if (attachedFile) {
+    await sendFile();
+    return;
+  }
+  const ta = document.getElementById("msg-text-input");
+  const content = ta.value.trim();
+  if (!content) return;
+  ta.value = "";
+  ta.style.height = "";
+  const res = await fetch("/api/messenger/send", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({recipient_id: currentPeerId, content}),
+  });
+  if (res.ok) loadMessages(false);
+}
+
+// ── 파일 전송 ──
+async function sendFile() {
+  if (!attachedFile || !currentPeerId) return;
+  const fd = new FormData();
+  fd.append("file", attachedFile);
+  fd.append("recipient_id", currentPeerId);
+  const res = await fetch("/api/messenger/upload", {method:"POST", body: fd});
+  if (res.ok) {
+    clearAttach();
+    loadMessages(false);
+  } else {
+    const err = await res.json();
+    alert(err.error || "전송 실패");
+  }
+}
+
+// ── 파일 첨부 UI ──
+document.getElementById("msg-file-input").addEventListener("change", function() {
+  if (this.files[0]) {
+    attachedFile = this.files[0];
+    document.getElementById("msg-attach-name").textContent = attachedFile.name;
+    document.getElementById("msg-attach-preview").style.display = "flex";
+    document.getElementById("msg-text-input").placeholder = "파일 첨부됨 — 전송 버튼을 누르세요";
+  }
+});
+
+function clearAttach() {
+  attachedFile = null;
+  document.getElementById("msg-file-input").value = "";
+  document.getElementById("msg-attach-preview").style.display = "none";
+  document.getElementById("msg-text-input").placeholder = "메시지를 입력하세요 (Shift+Enter: 줄바꿈, Enter: 전송)";
+}
+
+// ── Enter 키 전송 ──
+document.getElementById("msg-text-input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+  // 자동 높이
+  setTimeout(() => {
+    e.target.style.height = "";
+    e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+  }, 0);
+});
+
+// ── HTML 이스케이프 ──
+function esc(s) {
+  return (s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+</script>
+{% endblock %}
