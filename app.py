@@ -3,7 +3,7 @@ import os
 import json
 import base64
 import secrets
-import sqlite3
+import db_compat as sqlite3
 import hmac
 import hashlib
 import re as _re_phone
