@@ -122,6 +122,9 @@ class ConnectionWrapper:
         raw = self._conn.cursor(row_factory=dict_row)
         return CursorWrapper(raw)
 
+    def execute(self, sql, params=()):
+        return self.cursor().execute(sql, params)
+
     def commit(self):
         self._conn.commit()
 
