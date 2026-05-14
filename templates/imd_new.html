@@ -138,8 +138,9 @@
   <section class="card" style="border-left:3px solid #0891b2;">
     <h2>⑦ 입원 기간 & 퇴원 당시 상태</h2>
     <label><span class="lbl">입원 일수</span><input id="hospitalization_days" type="number" min="0" max="60" value="3" placeholder="3"></label>
-    <label><span class="lbl">퇴원 당시 상태 <span class="muted" style="font-size:11px;">(톤 조절)</span></span>
-      <select id="discharge_status">
+    <label><span class="lbl">퇴원 당시 상태 <span class="muted" style="font-size:11px;">(AI 톤 조절 — 선택)</span></span>
+      <select id="discharge_status" style="border:1.5px solid #d1d5db; border-radius:6px; padding:8px 10px; font-size:14px; background:#fff;">
+        <option value="">— 톤 조절 안 함 (기본) —</option>
         <option value="good">✅ 좋은 경과로 퇴원 (회복 순조로움)</option>
         <option value="delayed">⚠️ 회복이 지연 중 퇴원 (주의 깊은 관찰 필요)</option>
         <option value="worsening">🚨 상태 악화 중 퇴원 (적극적 관찰 필요)</option>
