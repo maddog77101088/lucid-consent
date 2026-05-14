@@ -1681,7 +1681,7 @@ def api_postop_generate():
     wound_ointment = (data.get("wound_ointment") or "").strip()
     wound_ointment_name = (data.get("wound_ointment_name") or "").strip()
     wound_bandage = (data.get("wound_bandage") or "").strip()
-    discharge_status = (data.get("discharge_status") or "good").strip()
+    discharge_status = (data.get("discharge_status") or "").strip()
 
     if not patient or not surgery_name:
         return jsonify({"error": "환자명과 수술명은 필수입니다."}), 400
@@ -1888,7 +1888,7 @@ def api_imd_generate():
     followup2_date = (data.get("followup2_date") or "").strip()
     followup2_purpose = (data.get("followup2_purpose") or "").strip()
     hospitalization_days = (data.get("hospitalization_days") or "").strip()
-    discharge_status = (data.get("discharge_status") or "good").strip()
+    discharge_status = (data.get("discharge_status") or "").strip()
     db_discharge_notes = (data.get("db_discharge_notes") or "").strip()
     special_notes = (data.get("special_notes") or "").strip()
     chart_text = (data.get("chart_text") or "").strip()
@@ -6380,3 +6380,4 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     debug = os.environ.get("FLASK_DEBUG", "1") == "1"
     app.run(host="0.0.0.0", port=port, debug=debug)
+        
