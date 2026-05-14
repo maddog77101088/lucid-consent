@@ -4132,7 +4132,7 @@ def referrals_list():
            FROM patient_documents pd
            JOIN referral_hospitals rh ON rh.id = pd.referral_hospital_id
            WHERE pd.doc_type='ce'
-           GROUP BY pd.referral_hospital_id
+           GROUP BY rh.id, rh.hospital_name, rh.district
            ORDER BY cnt DESC LIMIT 5"""
     ).fetchall()
     return render_template("referrals_list.html",
